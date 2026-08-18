@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tube Shipment Loading Calculator</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="rtcoGate" class="rtco-gate">
+  <div class="rtco-gate-box">
+    <img src="logo.png" alt="RetubeCo, Inc." class="rtco-gate-logo">
+    <h2>Enter Password</h2>
+    <input type="password" id="rtcoGatePw" placeholder="Password" autocomplete="off">
+    <label class="rtco-gate-show">
+      <input type="checkbox" id="rtcoGateShow"> Show password
+    </label>
+    <button id="rtcoGateBtn" type="button" class="btn-secondary">Continue</button>
+    <p id="rtcoGateErr" class="rtco-gate-err hidden">Incorrect password.</p>
+  </div>
+</div>
+<script>
+(() => {
+  const PASSWORD = "Pondus";
+  const GATE_KEY = "tubeTruckLoadingCalc.rtcoGateOk";
+  const screen = document.getElementById("rtcoGate");
+  const input = document.getElementById("rtcoGatePw");
+  const errorMsg = document.getElementById("rtcoGateErr");
+
+  if (localStorage.getItem(GATE_KEY) === "1") {
+    screen.classList.add("hidden");
+  } else {
+    input.focus();
+  }
+
+  function checkPassword() {
+    if (input.value === PASSWORD) {
+      localStorage.setItem(GATE_KEY, "1");
+      screen.classList.add("hidden");
+    } else {
+      errorMsg.classList.remove("hidden");
+      input.value = "";
+      input.focus();
+    }
+  }
+
+  document.getElementById("rtcoGateBtn").addEventListener("pointerup", checkPassword);
+  document.getElementById("rtcoGateBtn").addEventListener("click", checkPassword);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") checkPassword(); });
+
+  document.getElementById("rtcoGateShow").addEventListener("change", (e) => {
+    input.type = e.target.checked ? "text" : "password";
+  });
+})();
+</script>
+
+<header class="app-header">
+  <img src="logo.png" alt="RetubeCo, Inc. &mdash; Condenser &amp; Heat Exchanger Solutions" class="app-logo">
+  <div>
+    <h1>Semi Truck Loading Calculator</h1>
+    <p class="subtitle">Plan tube shipments so every crate is forklift-safe on site and the trailer never overloads or over-stacks.</p>
+  </div>
+</header>
+
+<main>
+
+  <!-- ===================== TRUCK & SITE CONSTRAINTS ===================== -->
+  <section class="panel" id="panel-truck">
+    <h2>Truck &amp; Site Constraints</h2>
+    <div class="field-grid">
+      <label>Trailer preset
+        <select id="trailerPreset">
+          <option value="dryvan53">53' Dry Van (standard)</option>
+          <option value="flatbed48">48' Flatbed</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <label>Interior length (in)
+        <input type="number" id="trailerLength" value="636" min="1">
+      </label>
+      <label>Interior width (in)
+        <input type="number" id="trailerWidth" value="100" min="1">
+      </label>
+      <label>Interior height (in)
+        <input type="number" id="trailerHeight" value="110" min="1">
+      </label>
+      <label>Max payload (lbs)
+        <input type="number" id="maxPayload" value="45000" min="1">
+      </label>
+      <label>Forklift capacity (lbs)
+        <input type="number" id="forkliftCapacity" value="5000" min="1">
+      </label>
+      <label>Forklift max lift height (in)
+        <input type="number" id="forkliftLiftHeight" value="130" min="1">
+      </label>
+      <label>Trailer bed height off ground (in)
+        <input type="number" id="bedHeight" value="50" min="0">
+      </label>
+      <label>Max stack height (in)
+        <input type="number" id="maxStackHeight" value="96" min="1">
+      </label>
+      <label>Max crates per stack (count)
+        <input type="number" id="maxStackCount" value="2" min="1">
+      </label>
+    </div>
+    <p class="note">Whichever stacking limit is most restrictive &mdash; max stack height, max crates per stack, or how high the forklift's forks can reach to get under the top crate &mdash; is applied. DOT axle-weight distribution isn't calculated here &mdash; even under total payload, keep heavier crates centered over the trailer's axles and spread weight front-to-back, not all at the nose or tail.</p>
+  </section>
+
+  <!-- ===================== TUBE GROUPS ===================== -->
+  <section class="panel" id="panel-groups">
+    <h2>Tube Groups</h2>
+    <p class="note">Add one group per tube size/material. Each group is packed into its own crates, then all crates are loaded onto trucks together.</p>
+    <div id="groupsContainer"></div>
+    <button class="btn-secondary" id="addGroupBtn">+ Add Tube Type</button>
+  </section>
+
+  <!-- ===================== GENERIC / MISC CRATES ===================== -->
+  <section class="panel" id="panel-generic">
+    <h2>Generic / Miscellaneous Crates</h2>
+    <p class="note">Anything else riding on the same truck that isn't a tube bundle &mdash; tools, spare parts, hardware, blocking. Enter its weight directly; it's checked against the forklift and folded into the same loading plan.</p>
+    <div id="genericContainer"></div>
+    <button class="btn-secondary" id="addGenericBtn">+ Add Generic Crate</button>
+  </section>
+
+  <!-- ===================== RESULTS ===================== -->
+  <section class="panel" id="panel-results">
+    <div class="panel-header-row">
+      <h2>Loading Plan</h2>
+      <button class="btn-secondary" id="downloadReportBtn">Download Report (.txt)</button>
+    </div>
+    <div id="warningsBox" class="warnings hidden"></div>
+    <div id="summaryBox" class="summary"></div>
+    <div id="trucksContainer"></div>
+  </section>
+
+</main>
+
+<footer>
+  <p>All figures are estimates for planning purposes &mdash; verify against actual crate builds, scale weights, and DOT/carrier requirements before shipping.</p>
+</footer>
+
+<template id="groupTemplate">
+  <div class="group-card">
+    <div class="group-card-header">
+      <input type="text" class="g-name" value="Tube Group">
+      <button class="btn-remove" title="Remove group">&times;</button>
+    </div>
+    <div class="field-grid">
+      <label>Material
+        <select class="g-material">
+          <option value="0.2836">Carbon Steel</option>
+          <option value="0.2890">Stainless Steel 304/316</option>
+          <option value="0.3232">Copper</option>
+          <option value="0.3080">Admiralty Brass</option>
+          <option value="0.3216">90/10 Cupronickel</option>
+          <option value="0.3230">70/30 Cupronickel</option>
+          <option value="0.1630">Titanium Gr. 2</option>
+          <option value="0.3010">Aluminum Brass</option>
+          <option value="custom">Custom density&hellip;</option>
+        </select>
+      </label>
+      <label class="g-density-wrap hidden">Density (lb/in&sup3;)
+        <input type="number" class="g-density" value="0.284" step="0.001" min="0">
+      </label>
+      <label>Tube OD (in)
+        <input type="number" class="g-od" value="0.75" step="0.001" min="0.001">
+      </label>
+      <label>Wall thickness (in)
+        <input type="number" class="g-wall" value="0.065" step="0.001" min="0.001">
+      </label>
+      <label>Tube length (ft)
+        <input type="number" class="g-length" value="20" step="0.1" min="0.1">
+      </label>
+      <label>Quantity (tubes)
+        <input type="number" class="g-qty" value="200" step="1" min="1">
+      </label>
+    </div>
+
+    <div class="computed-row">
+      <span>Weight/tube: <b class="g-out-wpt">&mdash;</b> lbs</span>
+      <span>Group total weight: <b class="g-out-total">&mdash;</b> lbs</span>
+    </div>
+
+    <h4>Crate Packing</h4>
+    <div class="field-grid">
+      <label>Crate length (in)
+        <input type="number" class="g-cratel" value="252" step="1" min="1">
+      </label>
+      <label>Crate width (in)
+        <input type="number" class="g-cratew" value="40" step="1" min="1">
+      </label>
+      <label>Crate height (in)
+        <input type="number" class="g-crateh" value="36" step="1" min="1">
+      </label>
+      <label>Tubes per crate
+        <input type="number" class="g-tubespercrate" value="50" step="1" min="1">
+      </label>
+      <label>Crate tare weight (lbs)
+        <input type="number" class="g-tare" value="150" step="1" min="0">
+      </label>
+    </div>
+
+    <h4>Crate Construction</h4>
+    <label class="checkbox-inline">
+      <input type="checkbox" class="g-auto-tare" checked>
+      Calculate tare weight from 4×8 plywood + 2×6 framing (built from crate L×W×H above)
+    </label>
+
+    <div class="materials-panel">
+      <div class="checkbox-row">
+        <label><input type="checkbox" class="g-face-bottom" checked> Bottom (deck)</label>
+        <label><input type="checkbox" class="g-face-sides" checked> Long sides (both)</label>
+        <label><input type="checkbox" class="g-face-ends" checked> Ends (both)</label>
+        <label><input type="checkbox" class="g-face-top"> Top (lid)</label>
+      </div>
+      <div class="field-grid">
+        <label>Plywood thickness
+          <select class="g-ply-thickness">
+            <option value="1.28">1/2" (&asymp;1.3 lb/sqft)</option>
+            <option value="1.7" selected>5/8" (&asymp;1.7 lb/sqft)</option>
+            <option value="2.1">3/4" (&asymp;2.1 lb/sqft)</option>
+            <option value="custom">Custom lb/sqft&hellip;</option>
+          </select>
+        </label>
+        <label class="g-ply-custom-wrap hidden">Plywood (lb/sqft)
+          <input type="number" class="g-ply-custom" value="2.1" step="0.05" min="0">
+        </label>
+        <label>2×6 weight (lb/linear ft)
+          <input type="number" class="g-2x6-lbft" value="1.7" step="0.05" min="0">
+        </label>
+        <label>Cut waste (%)
+          <input type="number" class="g-waste" value="10" step="1" min="0">
+        </label>
+        <label>Hardware allowance (%)
+          <input type="number" class="g-hardware" value="5" step="1" min="0">
+        </label>
+      </div>
+      <div class="computed-row">
+        <span>Plywood: <b class="g-out-ply">&mdash;</b></span>
+        <span>2&times;6 framing: <b class="g-out-2x6">&mdash;</b></span>
+        <span>Calculated crate weight: <b class="g-out-calcwt">&mdash;</b> lbs</span>
+      </div>
+    </div>
+
+    <button class="btn-link g-autofit">Auto-set max tubes/crate for forklift limit</button>
+
+    <div class="computed-row">
+      <span>Crate dimensions (L×W×H): <b class="g-out-dims">&mdash;</b></span>
+      <span>Crates needed: <b class="g-out-crates">&mdash;</b></span>
+      <span>Full crate weight: <b class="g-out-cratewt">&mdash;</b> lbs</span>
+      <span class="g-out-forklift-badge badge">&mdash;</span>
+    </div>
+  </div>
+</template>
+
+<template id="genericTemplate">
+  <div class="group-card">
+    <div class="group-card-header">
+      <input type="text" class="ge-name" value="Misc Crate">
+      <button class="btn-remove" title="Remove crate">&times;</button>
+    </div>
+    <div class="field-grid">
+      <label>Weight per crate (lbs)
+        <input type="number" class="ge-weight" value="300" step="1" min="0">
+      </label>
+      <label>Quantity (crates)
+        <input type="number" class="ge-qty" value="1" step="1" min="1">
+      </label>
+      <label>Crate length (in)
+        <input type="number" class="ge-cratel" value="48" step="1" min="1">
+      </label>
+      <label>Crate width (in)
+        <input type="number" class="ge-cratew" value="40" step="1" min="1">
+      </label>
+      <label>Crate height (in)
+        <input type="number" class="ge-crateh" value="36" step="1" min="1">
+      </label>
+    </div>
+    <div class="computed-row">
+      <span>Total weight: <b class="ge-out-total">&mdash;</b> lbs</span>
+      <span class="ge-out-forklift-badge badge">&mdash;</span>
+    </div>
+  </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
