@@ -33,6 +33,52 @@
   const fmt = (n, digits = 0) =>
     Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits }) : "—";
 
+  // Accepts 20', 20' 6", 20'6", 20-6, 20 6, 246, 246", 246in — returns total inches.
+  // A bare number is treated as inches (keeps old plain-inch values working).
+  function parseFeetInches(str) {
+    if (str == null) return NaN;
+    const s = String(str).trim();
+    if (s === "") return NaN;
+    if (/^-?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+
+    const feetMatch = s.match(/(-?\d+(?:\.\d+)?)\s*(?:'|ft|feet)/i);
+    if (feetMatch) {
+      const feet = parseFloat(feetMatch[1]);
+      const rest = s.slice(feetMatch.index + feetMatch[0].length).trim();
+      const inchMatch = rest.match(/^(-?\d+(?:\.\d+)?)/);
+      const inches = inchMatch ? parseFloat(inchMatch[1]) : 0;
+      return feet * 12 + inches;
+    }
+
+    const inchOnly = s.match(/^(-?\d+(?:\.\d+)?)\s*(?:"|in|inch|inches)$/i);
+    if (inchOnly) return parseFloat(inchOnly[1]);
+
+    const shorthand = s.match(/^(-?\d+(?:\.\d+)?)[\s-](\d+(?:\.\d+)?)$/);
+    if (shorthand) return parseFloat(shorthand[1]) * 12 + parseFloat(shorthand[2]);
+
+    const fallbackNum = parseFloat(s);
+    return Number.isFinite(fallbackNum) ? fallbackNum : NaN;
+  }
+
+  function lenIn(el, fallback = 0) {
+    const v = parseFeetInches(el.value);
+    return Number.isFinite(v) ? v : fallback;
+  }
+
+  // Formats total inches as e.g. 20' 6" / 20' / 6" for display.
+  function formatFeetInches(totalInches) {
+    if (!Number.isFinite(totalInches)) return "";
+    const neg = totalInches < 0;
+    const t = Math.abs(totalInches);
+    let feet = Math.floor(t / 12 + 1e-9);
+    let inches = Math.round((t - feet * 12) * 100) / 100;
+    if (inches >= 12) { feet += 1; inches -= 12; }
+    let out = "";
+    if (feet > 0) out += feet + "'";
+    if (inches > 0 || feet === 0) out += (out ? " " : "") + inches + '"';
+    return (neg ? "-" : "") + out;
+  }
+
   // ---------- group card management ----------
   function addGroup(initial) {
     const id = ++groupSeq;
@@ -61,6 +107,10 @@
       if (initial.lb2x6 !== undefined) node.querySelector(".g-2x6-lbft").value = initial.lb2x6;
       if (initial.waste !== undefined) node.querySelector(".g-waste").value = initial.waste;
       if (initial.hardware !== undefined) node.querySelector(".g-hardware").value = initial.hardware;
+      if (initial.autoCrateDims !== undefined) node.querySelector(".g-auto-cratedims").checked = initial.autoCrateDims;
+      if (initial.tubeGap !== undefined) node.querySelector(".g-tubegap").value = initial.tubeGap;
+      if (initial.wallClearance !== undefined) node.querySelector(".g-wallclear").value = initial.wallClearance;
+      if (initial.endClearance !== undefined) node.querySelector(".g-endclear").value = initial.endClearance;
     }
 
     // wire events
@@ -88,7 +138,7 @@
 
     const applyAutoTareState = () => {
       const on = node.querySelector(".g-auto-tare").checked;
-      node.querySelector(".materials-panel").classList.toggle("hidden", !on);
+      node.querySelector(".g-tare-panel").classList.toggle("hidden", !on);
       const tareInput = node.querySelector(".g-tare");
       if (on) tareInput.setAttribute("readonly", "readonly");
       else tareInput.removeAttribute("readonly");
@@ -99,6 +149,21 @@
     });
     applyAutoTareState();
 
+    const applyAutoCrateDimsState = () => {
+      const on = node.querySelector(".g-auto-cratedims").checked;
+      node.querySelector(".g-cratedims-panel").classList.toggle("hidden", !on);
+      ["g-cratel", "g-cratew", "g-crateh"].forEach((cls) => {
+        const el = node.querySelector("." + cls);
+        if (on) el.setAttribute("readonly", "readonly");
+        else el.removeAttribute("readonly");
+      });
+    };
+    node.querySelector(".g-auto-cratedims").addEventListener("change", () => {
+      applyAutoCrateDimsState();
+      recalcAll();
+    });
+    applyAutoCrateDimsState();
+
     node.querySelector(".g-ply-thickness").addEventListener("change", (e) => {
       node.querySelector(".g-ply-custom-wrap").classList.toggle("hidden", e.target.value !== "custom");
       recalcAll();
@@ -107,11 +172,30 @@
 
     node.querySelector(".g-autofit").addEventListener("click", () => {
       const forkliftCapacity = num(document.getElementById("forkliftCapacity"));
-      const tare = num(node.querySelector(".g-tare"));
       const wpt = weightPerTube(node);
-      if (wpt > 0) {
-        const maxTubes = Math.max(1, Math.floor((forkliftCapacity - tare) / wpt));
-        node.querySelector(".g-tubespercrate").value = maxTubes;
+      if (wpt <= 0) { recalcAll(); return; }
+
+      const autoOn = node.querySelector(".g-auto-cratedims").checked;
+      if (!autoOn) {
+        const tare = num(node.querySelector(".g-tare"));
+        node.querySelector(".g-tubespercrate").value = Math.max(1, Math.floor((forkliftCapacity - tare) / wpt));
+      } else {
+        // tare depends on crate size, which depends on tubes/crate — search down until it fits
+        const od = num(node.querySelector(".g-od"));
+        const lengthFt = num(node.querySelector(".g-length"));
+        const gap = num(node.querySelector(".g-tubegap"));
+        const wallClearance = num(node.querySelector(".g-wallclear"));
+        const endClearance = num(node.querySelector(".g-endclear"));
+        const autoTareOn = node.querySelector(".g-auto-tare").checked;
+        const manualTare = num(node.querySelector(".g-tare"));
+
+        let n = Math.max(1, Math.round(num(node.querySelector(".g-tubespercrate"), 1)));
+        for (; n > 1; n--) {
+          const dims = computeAutoCrateDims(od, lengthFt, n, gap, wallClearance, endClearance);
+          const tare = autoTareOn ? calcCrateMaterials(node, dims.crateL, dims.crateW, dims.crateH).total : manualTare;
+          if (tare + n * wpt <= forkliftCapacity) break;
+        }
+        node.querySelector(".g-tubespercrate").value = n;
       }
       recalcAll();
     });
@@ -171,6 +255,37 @@
     const area = (Math.PI / 4) * (od * od - id * id);
     const lengthIn = lengthFt * 12;
     return area * lengthIn * density;
+  }
+
+  // Find the rows x cols grid (as close to square as possible, no wasted slots beyond
+  // rounding up) for packing n round tubes into a bundle.
+  function bestGrid(n) {
+    n = Math.max(1, Math.round(n));
+    let best = { rows: 1, cols: n };
+    let bestSlots = Infinity;
+    for (let r = 1; r <= n; r++) {
+      const c = Math.ceil(n / r);
+      const slots = r * c;
+      if (slots < bestSlots || (slots === bestSlots && Math.abs(r - c) < Math.abs(best.rows - best.cols))) {
+        bestSlots = slots;
+        best = { rows: r, cols: c };
+      }
+    }
+    return best;
+  }
+
+  // Derive crate outer dimensions from the tube's own size: a grid of tubes (each on
+  // OD + a small gap for blocking/banding) plus a clearance margin for the crate walls,
+  // and tube length plus end clearance for blocking.
+  function computeAutoCrateDims(od, lengthFt, tubesPerCrate, gap, wallClearance, endClearance) {
+    const { rows, cols } = bestGrid(tubesPerCrate);
+    const pitch = od + gap;
+    return {
+      crateL: lengthFt * 12 + 2 * endClearance,
+      crateW: cols * pitch + 2 * wallClearance,
+      crateH: rows * pitch + 2 * wallClearance,
+      rows, cols,
+    };
   }
 
   // 4x8 plywood sheathing + 2x6 framing, built up from crate outer dimensions
@@ -233,9 +348,9 @@
   presetSelect.addEventListener("change", () => {
     const preset = TRAILER_PRESETS[presetSelect.value];
     if (preset) {
-      document.getElementById("trailerLength").value = preset.l;
-      document.getElementById("trailerWidth").value = preset.w;
-      document.getElementById("trailerHeight").value = preset.h;
+      document.getElementById("trailerLength").value = formatFeetInches(preset.l);
+      document.getElementById("trailerWidth").value = formatFeetInches(preset.w);
+      document.getElementById("trailerHeight").value = formatFeetInches(preset.h);
     }
     recalcAll();
   });
@@ -248,18 +363,18 @@
   function recalcAll() {
     const warnings = [];
 
-    const trailerLength = num(document.getElementById("trailerLength"));
-    const trailerWidth = num(document.getElementById("trailerWidth"));
-    const trailerHeight = num(document.getElementById("trailerHeight"));
+    const trailerLength = lenIn(document.getElementById("trailerLength"));
+    const trailerWidth = lenIn(document.getElementById("trailerWidth"));
+    const trailerHeight = lenIn(document.getElementById("trailerHeight"));
     const maxPayload = num(document.getElementById("maxPayload"));
     const forkliftCapacity = num(document.getElementById("forkliftCapacity"));
-    const forkliftLiftHeight = num(document.getElementById("forkliftLiftHeight"));
-    const bedHeight = num(document.getElementById("bedHeight"));
-    const maxStackHeight = num(document.getElementById("maxStackHeight"));
+    const forkliftLiftHeight = lenIn(document.getElementById("forkliftLiftHeight"));
+    const bedHeight = lenIn(document.getElementById("bedHeight"));
+    const maxStackHeight = lenIn(document.getElementById("maxStackHeight"));
     const maxStackCount = Math.max(1, Math.round(num(document.getElementById("maxStackCount"), 1)));
 
     if (bedHeight > forkliftLiftHeight) {
-      warnings.push(`The forklift's max lift height (${fmt(forkliftLiftHeight, 0)}") is below the trailer bed height (${fmt(bedHeight, 0)}") — it can't reach the trailer floor at all.`);
+      warnings.push(`The forklift's max lift height (${formatFeetInches(forkliftLiftHeight)}) is below the trailer bed height (${formatFeetInches(bedHeight)}) — it can't reach the trailer floor at all.`);
     }
 
     const groupCards = Array.from(groupsContainer.querySelectorAll(".group-card"));
@@ -271,10 +386,27 @@
       const wall = num(card.querySelector(".g-wall"));
       const lengthFt = num(card.querySelector(".g-length"));
       const qty = Math.max(0, Math.round(num(card.querySelector(".g-qty"))));
-      const crateL = num(card.querySelector(".g-cratel"));
-      const crateW = num(card.querySelector(".g-cratew"));
-      const crateH = num(card.querySelector(".g-crateh"));
       const tubesPerCrate = Math.max(1, Math.round(num(card.querySelector(".g-tubespercrate"), 1)));
+
+      const autoCrateDims = card.querySelector(".g-auto-cratedims").checked;
+      let bundleInfo = null;
+      if (autoCrateDims) {
+        const gap = num(card.querySelector(".g-tubegap"));
+        const wallClearance = num(card.querySelector(".g-wallclear"));
+        const endClearance = num(card.querySelector(".g-endclear"));
+        const dims = computeAutoCrateDims(od, lengthFt, tubesPerCrate, gap, wallClearance, endClearance);
+        card.querySelector(".g-cratel").value = formatFeetInches(dims.crateL);
+        card.querySelector(".g-cratew").value = formatFeetInches(dims.crateW);
+        card.querySelector(".g-crateh").value = formatFeetInches(dims.crateH);
+        bundleInfo = dims;
+      }
+      card.querySelector(".g-out-bundle").textContent = bundleInfo
+        ? `${bundleInfo.rows} row(s) × ${bundleInfo.cols} col(s) = ${bundleInfo.rows * bundleInfo.cols} slots for ${tubesPerCrate} tubes`
+        : "manual crate dimensions";
+
+      const crateL = lenIn(card.querySelector(".g-cratel"));
+      const crateW = lenIn(card.querySelector(".g-cratew"));
+      const crateH = lenIn(card.querySelector(".g-crateh"));
 
       const mat = calcCrateMaterials(card, crateL, crateW, crateH);
       const autoTare = card.querySelector(".g-auto-tare").checked;
@@ -301,7 +433,7 @@
       const cratesNeeded = qty > 0 ? Math.ceil(qty / tubesPerCrate) : 0;
       const fullCrateWeight = tare + tubesPerCrate * wpt;
 
-      card.querySelector(".g-out-dims").textContent = (crateL > 0 && crateW > 0 && crateH > 0) ? `${fmt(crateL, 0)}" × ${fmt(crateW, 0)}" × ${fmt(crateH, 0)}"` : "—";
+      card.querySelector(".g-out-dims").textContent = (crateL > 0 && crateW > 0 && crateH > 0) ? `${formatFeetInches(crateL)} × ${formatFeetInches(crateW)} × ${formatFeetInches(crateH)}` : "—";
       card.querySelector(".g-out-crates").textContent = cratesNeeded || "—";
       card.querySelector(".g-out-cratewt").textContent = fullCrateWeight > 0 ? fmt(fullCrateWeight, 0) : "—";
 
@@ -324,13 +456,13 @@
       const fitsWidthNormal = crateW <= trailerWidth;
       const fitsWidthRotated = crateL <= trailerWidth;
       if (!fitsWidthNormal && !fitsWidthRotated) {
-        warnings.push(`"${name}": crate footprint (${crateL}" x ${crateW}") does not fit within the trailer width (${trailerWidth}") in either orientation.`);
+        warnings.push(`"${name}": crate footprint (${formatFeetInches(crateL)} x ${formatFeetInches(crateW)}) does not fit within the trailer width (${formatFeetInches(trailerWidth)}) in either orientation.`);
       }
       if (crateH > trailerHeight) {
-        warnings.push(`"${name}": a single crate (${crateH}" tall) is taller than the trailer's interior height (${trailerHeight}").`);
+        warnings.push(`"${name}": a single crate (${formatFeetInches(crateH)} tall) is taller than the trailer's interior height (${formatFeetInches(trailerHeight)}).`);
       }
       if (crateH > maxStackHeight) {
-        warnings.push(`"${name}": a single crate (${crateH}" tall) already exceeds the max stack height limit (${maxStackHeight}").`);
+        warnings.push(`"${name}": a single crate (${formatFeetInches(crateH)} tall) already exceeds the max stack height limit (${formatFeetInches(maxStackHeight)}).`);
       }
 
       if (cratesNeeded > 0 && id > 0) {
@@ -357,9 +489,9 @@
       const name = card.querySelector(".ge-name").value || `Misc Crate ${idx + 1}`;
       const weight = num(card.querySelector(".ge-weight"));
       const qty = Math.max(0, Math.round(num(card.querySelector(".ge-qty"), 1)));
-      const crateL = num(card.querySelector(".ge-cratel"));
-      const crateW = num(card.querySelector(".ge-cratew"));
-      const crateH = num(card.querySelector(".ge-crateh"));
+      const crateL = lenIn(card.querySelector(".ge-cratel"));
+      const crateW = lenIn(card.querySelector(".ge-cratew"));
+      const crateH = lenIn(card.querySelector(".ge-crateh"));
 
       const totalWeight = weight * qty;
       card.querySelector(".ge-out-total").textContent = totalWeight > 0 ? fmt(totalWeight, 0) : "—";
@@ -382,13 +514,13 @@
       const fitsWidthNormal = crateW <= trailerWidth;
       const fitsWidthRotated = crateL <= trailerWidth;
       if (!fitsWidthNormal && !fitsWidthRotated) {
-        warnings.push(`"${name}": crate footprint (${crateL}" x ${crateW}") does not fit within the trailer width (${trailerWidth}") in either orientation.`);
+        warnings.push(`"${name}": crate footprint (${formatFeetInches(crateL)} x ${formatFeetInches(crateW)}) does not fit within the trailer width (${formatFeetInches(trailerWidth)}) in either orientation.`);
       }
       if (crateH > trailerHeight) {
-        warnings.push(`"${name}": a single crate (${crateH}" tall) is taller than the trailer's interior height (${trailerHeight}").`);
+        warnings.push(`"${name}": a single crate (${formatFeetInches(crateH)} tall) is taller than the trailer's interior height (${formatFeetInches(trailerHeight)}).`);
       }
       if (crateH > maxStackHeight) {
-        warnings.push(`"${name}": a single crate (${crateH}" tall) already exceeds the max stack height limit (${maxStackHeight}").`);
+        warnings.push(`"${name}": a single crate (${formatFeetInches(crateH)} tall) already exceeds the max stack height limit (${formatFeetInches(maxStackHeight)}).`);
       }
 
       if (qty > 0 && weight > 0 && crateL > 0 && crateW > 0 && crateH > 0) {
@@ -434,7 +566,7 @@
       const stackLevels = Math.min(stackLevelsByHeight, maxStackCount, stackLevelsByForklift);
 
       if (stackLevelsByForklift < stackLevelsByHeight && stackLevelsByForklift < maxStackCount) {
-        warnings.push(`"${g.name}": limited to ${stackLevels} crate(s) high because the forklift can only reach ${fmt(forkliftLiftHeight, 0)}" to get its forks under the top crate (needs ${fmt(bedHeight + (Math.min(stackLevelsByHeight, maxStackCount) - 1) * g.crateH, 0)}" for the un-limited stack).`);
+        warnings.push(`"${g.name}": limited to ${stackLevels} crate(s) high because the forklift can only reach ${formatFeetInches(forkliftLiftHeight)} to get its forks under the top crate (needs ${formatFeetInches(bedHeight + (Math.min(stackLevelsByHeight, maxStackCount) - 1) * g.crateH)} for the un-limited stack).`);
       }
 
       for (let i = 0; i < g.crateWeights.length; i += stackLevels) {
@@ -595,7 +727,7 @@
         <div class="truck-meta">
           <span>Weight: <b class="${overWeight ? "over" : ""}">${fmt(truck.weight, 0)} lbs</b> / ${fmt(constraints.maxPayload, 0)} lbs payload</span>
           <span>Stacks: <b>${truck.items.length}</b></span>
-          <span>Tallest stack: <b>${fmt(maxHeightUsed, 0)}"</b></span>
+          <span>Tallest stack: <b>${formatFeetInches(maxHeightUsed)}</b></span>
         </div>
       `;
 
@@ -615,7 +747,7 @@
       const sideLabel = document.createElement("p");
       sideLabel.className = "note";
       sideLabel.style.marginTop = "14px";
-      sideLabel.innerHTML = `Side view (tallest stack shown: <b>${escapeHtml(tallest.groupName)}</b>, ${tallest.levels}× crates, ${fmt(tallest.height, 0)}" tall) &mdash; forklift needs to reach <b class="${overReach ? "over" : ""}">${fmt(tallest.forkliftReachNeeded, 0)}"</b> to get forks under the top crate:`;
+      sideLabel.innerHTML = `Side view (tallest stack shown: <b>${escapeHtml(tallest.groupName)}</b>, ${tallest.levels}× crates, ${formatFeetInches(tallest.height)} tall) &mdash; forklift needs to reach <b class="${overReach ? "over" : ""}">${formatFeetInches(tallest.forkliftReachNeeded)}</b> to get forks under the top crate:`;
       block.appendChild(sideLabel);
 
       const sideWrap = document.createElement("div");
@@ -653,7 +785,7 @@
         <g>
           <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"
                 fill="${it.color}" fill-opacity="0.75" stroke="#1f2430" stroke-width="1">
-            <title>${escapeHtml(it.groupName)} crate: ${fmt(it.l, 0)}" × ${fmt(it.w, 0)}" × ${fmt(it.crateH, 0)}" each, ${it.levels} high (stack height ${fmt(it.height, 0)}"), ${fmt(it.weight, 0)} lbs</title>
+            <title>${escapeHtml(it.groupName)} crate: ${formatFeetInches(it.l)} × ${formatFeetInches(it.w)} × ${formatFeetInches(it.crateH)} each, ${it.levels} high (stack height ${formatFeetInches(it.height)}), ${fmt(it.weight, 0)} lbs</title>
           </rect>
           <text x="${(x + w / 2).toFixed(1)}" y="${(y + h / 2 - 4).toFixed(1)}" font-size="10" text-anchor="middle" fill="#fff" font-weight="600">${escapeHtml(it.groupName)}</text>
           <text x="${(x + w / 2).toFixed(1)}" y="${(y + h / 2 + 9).toFixed(1)}" font-size="9" text-anchor="middle" fill="#fff">${it.levels}× · ${fmt(it.weight, 0)} lbs</text>
@@ -711,11 +843,11 @@
 
       <!-- forklift max reach reference line -->
       <line x1="0" y1="${forkliftLineY.toFixed(1)}" x2="${svgW}" y2="${forkliftLineY.toFixed(1)}" stroke="#9a6700" stroke-width="1" stroke-dasharray="5,4"/>
-      <text x="4" y="${(forkliftLineY - 4).toFixed(1)}" font-size="9" fill="#9a6700">Forklift max reach ${fmt(forkliftLiftHeight, 0)}"</text>
+      <text x="4" y="${(forkliftLineY - 4).toFixed(1)}" font-size="9" fill="#9a6700">Forklift max reach ${formatFeetInches(forkliftLiftHeight)}</text>
 
       <!-- max stack height reference line (within trailer span only) -->
       <line x1="${trailerX}" y1="${maxStackLineY.toFixed(1)}" x2="${trailerX + trailerW}" y2="${maxStackLineY.toFixed(1)}" stroke="#c2703d" stroke-width="1" stroke-dasharray="3,3"/>
-      <text x="${trailerX + trailerW + 4}" y="${(maxStackLineY + 3).toFixed(1)}" font-size="9" fill="#c2703d">Max stack ${fmt(maxStackHeight, 0)}"</text>
+      <text x="${trailerX + trailerW + 4}" y="${(maxStackLineY + 3).toFixed(1)}" font-size="9" fill="#c2703d">Max stack ${formatFeetInches(maxStackHeight)}</text>
 
       <!-- trailer chassis/undercarriage -->
       <rect x="${trailerX + 8}" y="${bedY.toFixed(1)}" width="${trailerW - 16}" height="${(wheelY - bedY).toFixed(1)}" fill="#d8dce1"/>
@@ -725,19 +857,19 @@
       <!-- trailer cargo box outline -->
       <rect x="${trailerX}" y="${trailerTopY.toFixed(1)}" width="${trailerW}" height="${(bedY - trailerTopY).toFixed(1)}" fill="none" stroke="#5b6472" stroke-width="2"/>
       <line x1="${trailerX}" y1="${bedY.toFixed(1)}" x2="${trailerX + trailerW}" y2="${bedY.toFixed(1)}" stroke="#5b6472" stroke-width="2"/>
-      <text x="${trailerX + 4}" y="${(trailerTopY - 6).toFixed(1)}" font-size="9" fill="var(--text-dim, #5b6472)">Trailer interior ${fmt(trailerHeight, 0)}" tall</text>
+      <text x="${trailerX + 4}" y="${(trailerTopY - 6).toFixed(1)}" font-size="9" fill="var(--text-dim, #5b6472)">Trailer interior ${formatFeetInches(trailerHeight)} tall</text>
 
       <!-- crate stack -->
       ${stackRects}
       <text x="${(crateX + crateW / 2).toFixed(1)}" y="${stackLabelY.toFixed(1)}" font-size="10" text-anchor="middle" fill="#fff" font-weight="600">${escapeHtml(tallest.groupName)}</text>
-      <text x="${trailerX + trailerW + 4}" y="${(toY(bedHeight + tallest.height) + 10).toFixed(1)}" font-size="9" fill="var(--text-dim, #5b6472)">Stack: ${tallest.levels}× = ${fmt(tallest.height, 0)}" tall</text>
+      <text x="${trailerX + trailerW + 4}" y="${(toY(bedHeight + tallest.height) + 10).toFixed(1)}" font-size="9" fill="var(--text-dim, #5b6472)">Stack: ${tallest.levels}× = ${formatFeetInches(tallest.height)} tall</text>
 
       <!-- forklift reach-needed marker, no vehicle graphic -->
       <line x1="0" y1="${forkY.toFixed(1)}" x2="${trailerX}" y2="${forkY.toFixed(1)}" stroke="${forkColor}" stroke-width="2" stroke-dasharray="2,3"/>
-      <text x="4" y="${(forkY - 6).toFixed(1)}" font-size="9" fill="${forkColor}" font-weight="600">Reach needed: ${fmt(reachNeeded, 0)}"</text>
+      <text x="4" y="${(forkY - 6).toFixed(1)}" font-size="9" fill="${forkColor}" font-weight="600">Reach needed: ${formatFeetInches(reachNeeded)}</text>
 
       <!-- bed height dimension -->
-      <text x="${trailerX + 12}" y="${(groundY + 14).toFixed(1)}" font-size="9" fill="var(--text-dim, #5b6472)">Bed height ${fmt(bedHeight, 0)}" off ground</text>
+      <text x="${trailerX + 12}" y="${(groundY + 14).toFixed(1)}" font-size="9" fill="var(--text-dim, #5b6472)">Bed height ${formatFeetInches(bedHeight)} off ground</text>
     </svg>`;
   }
 
@@ -784,6 +916,10 @@
         lb2x6: card.querySelector(".g-2x6-lbft").value,
         waste: card.querySelector(".g-waste").value,
         hardware: card.querySelector(".g-hardware").value,
+        autoCrateDims: card.querySelector(".g-auto-cratedims").checked,
+        tubeGap: card.querySelector(".g-tubegap").value,
+        wallClearance: card.querySelector(".g-wallclear").value,
+        endClearance: card.querySelector(".g-endclear").value,
       })),
       generic: Array.from(genericContainer.querySelectorAll(".group-card")).map((card) => ({
         name: card.querySelector(".ge-name").value,
@@ -957,7 +1093,7 @@
 
     const truckSections = data.trucks.length ? data.trucks.map((t) => `
       <h3>Truck ${t.index}</h3>
-      <p class="truck-meta">Weight: <b>${fmt(t.weight, 0)} lbs</b> / ${fmt(data.maxPayload, 0)} lbs payload &nbsp;&bull;&nbsp; Stacks: <b>${t.items.length}</b> &nbsp;&bull;&nbsp; Tallest stack: <b>${fmt(t.maxHeightUsed, 0)}"</b></p>
+      <p class="truck-meta">Weight: <b>${fmt(t.weight, 0)} lbs</b> / ${fmt(data.maxPayload, 0)} lbs payload &nbsp;&bull;&nbsp; Stacks: <b>${t.items.length}</b> &nbsp;&bull;&nbsp; Tallest stack: <b>${formatFeetInches(t.maxHeightUsed)}</b></p>
       <table>
         <thead><tr><th>Item</th><th>Crates High</th><th>Stack Height</th><th>Stack Weight</th><th>Footprint</th></tr></thead>
         <tbody>
@@ -965,9 +1101,9 @@
             <tr>
               <td>${esc(it.groupName)}</td>
               <td>${it.levels}</td>
-              <td>${fmt(it.height, 0)}"</td>
+              <td>${formatFeetInches(it.height)}</td>
               <td>${fmt(it.weight, 0)} lbs</td>
-              <td>${fmt(it.l, 0)}" x ${fmt(it.w, 0)}"</td>
+              <td>${formatFeetInches(it.l)} x ${formatFeetInches(it.w)}</td>
             </tr>`).join("")}
         </tbody>
       </table>`).join("") : `<p class="empty-row">No trucks planned yet — add a tube group or crate with a quantity above zero.</p>`;

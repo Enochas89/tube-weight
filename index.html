@@ -75,14 +75,14 @@
           <option value="custom">Custom</option>
         </select>
       </label>
-      <label>Interior length (in)
-        <input type="number" id="trailerLength" value="636" min="1">
+      <label>Interior length (ft/in)
+        <input type="text" id="trailerLength" value="53'" placeholder="e.g. 53' or 636">
       </label>
-      <label>Interior width (in)
-        <input type="number" id="trailerWidth" value="100" min="1">
+      <label>Interior width (ft/in)
+        <input type="text" id="trailerWidth" value="8' 4&quot;" placeholder="e.g. 8' 4&quot;">
       </label>
-      <label>Interior height (in)
-        <input type="number" id="trailerHeight" value="110" min="1">
+      <label>Interior height (ft/in)
+        <input type="text" id="trailerHeight" value="9' 2&quot;" placeholder="e.g. 9' 2&quot;">
       </label>
       <label>Max payload (lbs)
         <input type="number" id="maxPayload" value="45000" min="1">
@@ -90,14 +90,14 @@
       <label>Forklift capacity (lbs)
         <input type="number" id="forkliftCapacity" value="5000" min="1">
       </label>
-      <label>Forklift max lift height (in)
-        <input type="number" id="forkliftLiftHeight" value="130" min="1">
+      <label>Forklift max lift height (ft/in)
+        <input type="text" id="forkliftLiftHeight" value="10' 10&quot;" placeholder="e.g. 10' 10&quot;">
       </label>
-      <label>Trailer bed height off ground (in)
-        <input type="number" id="bedHeight" value="50" min="0">
+      <label>Trailer bed height off ground (ft/in)
+        <input type="text" id="bedHeight" value="4' 2&quot;" placeholder="e.g. 4' 2&quot;">
       </label>
-      <label>Max stack height (in)
-        <input type="number" id="maxStackHeight" value="96" min="1">
+      <label>Max stack height (ft/in)
+        <input type="text" id="maxStackHeight" value="8'" placeholder="e.g. 8' or 96">
       </label>
       <label>Max crates per stack (count)
         <input type="number" id="maxStackCount" value="2" min="1">
@@ -186,21 +186,42 @@
 
     <h4>Crate Packing</h4>
     <div class="field-grid">
-      <label>Crate length (in)
-        <input type="number" class="g-cratel" value="252" step="1" min="1">
-      </label>
-      <label>Crate width (in)
-        <input type="number" class="g-cratew" value="40" step="1" min="1">
-      </label>
-      <label>Crate height (in)
-        <input type="number" class="g-crateh" value="36" step="1" min="1">
-      </label>
       <label>Tubes per crate
         <input type="number" class="g-tubespercrate" value="50" step="1" min="1">
+      </label>
+      <label>Crate length (ft/in)
+        <input type="text" class="g-cratel" value="21'" placeholder="e.g. 21' or 252">
+      </label>
+      <label>Crate width (ft/in)
+        <input type="text" class="g-cratew" value="3' 4&quot;" placeholder="e.g. 3' 4&quot;">
+      </label>
+      <label>Crate height (ft/in)
+        <input type="text" class="g-crateh" value="3'" placeholder="e.g. 3'">
       </label>
       <label>Crate tare weight (lbs)
         <input type="number" class="g-tare" value="150" step="1" min="0">
       </label>
+    </div>
+
+    <label class="checkbox-inline">
+      <input type="checkbox" class="g-auto-cratedims" checked>
+      Auto-size crate (L/W/H above) from tube OD, length &amp; tubes/crate
+    </label>
+    <div class="materials-panel g-cratedims-panel">
+      <div class="field-grid">
+        <label>Tube-to-tube gap (in)
+          <input type="number" class="g-tubegap" value="0.25" step="0.05" min="0">
+        </label>
+        <label>Crate wall clearance (in)
+          <input type="number" class="g-wallclear" value="2" step="0.5" min="0">
+        </label>
+        <label>End clearance (in)
+          <input type="number" class="g-endclear" value="4" step="0.5" min="0">
+        </label>
+      </div>
+      <div class="computed-row">
+        <span>Bundle layout: <b class="g-out-bundle">&mdash;</b></span>
+      </div>
     </div>
 
     <h4>Crate Construction</h4>
@@ -209,7 +230,7 @@
       Calculate tare weight from 4×8 plywood + 2×6 framing (built from crate L×W×H above)
     </label>
 
-    <div class="materials-panel">
+    <div class="materials-panel g-tare-panel">
       <div class="checkbox-row">
         <label><input type="checkbox" class="g-face-bottom" checked> Bottom (deck)</label>
         <label><input type="checkbox" class="g-face-sides" checked> Long sides (both)</label>
@@ -269,14 +290,14 @@
       <label>Quantity (crates)
         <input type="number" class="ge-qty" value="1" step="1" min="1">
       </label>
-      <label>Crate length (in)
-        <input type="number" class="ge-cratel" value="48" step="1" min="1">
+      <label>Crate length (ft/in)
+        <input type="text" class="ge-cratel" value="4'" placeholder="e.g. 4' or 48">
       </label>
-      <label>Crate width (in)
-        <input type="number" class="ge-cratew" value="40" step="1" min="1">
+      <label>Crate width (ft/in)
+        <input type="text" class="ge-cratew" value="3' 4&quot;" placeholder="e.g. 3' 4&quot;">
       </label>
-      <label>Crate height (in)
-        <input type="number" class="ge-crateh" value="36" step="1" min="1">
+      <label>Crate height (ft/in)
+        <input type="text" class="ge-crateh" value="3'" placeholder="e.g. 3'">
       </label>
     </div>
     <div class="computed-row">
