@@ -359,6 +359,10 @@
     document.getElementById(id).addEventListener("input", recalcAll);
   });
 
+  ["jobNumber", "jobClient", "jobAddress", "jobPreparedBy", "jobDate"].forEach((id) => {
+    document.getElementById(id).addEventListener("input", saveState);
+  });
+
   // ---------- core calculation ----------
   function recalcAll() {
     const warnings = [];
@@ -837,17 +841,40 @@
     const svgW = trailerX + trailerW + 40;
     const svgH = groundY + 20;
 
+    // Left-side and right-side label groups can land on nearly the same height when the
+    // values they annotate are close (e.g. reach needed almost equal to forklift max
+    // reach) — dodge them apart vertically so the text never overlaps.
+    function dodgeLabels(items, minGap) {
+      const sorted = items.slice().sort((a, b) => a.y - b.y);
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i].y - sorted[i - 1].y < minGap) sorted[i].y = sorted[i - 1].y + minGap;
+      }
+      return sorted;
+    }
+
+    const leftLabels = dodgeLabels([
+      { y: trailerTopY - 6, text: `Trailer interior ${formatFeetInches(trailerHeight)} tall`, color: "var(--text-dim, #5b6472)", weight: "400" },
+      { y: forkliftLineY - 4, text: `Forklift max reach ${formatFeetInches(forkliftLiftHeight)}`, color: "#9a6700", weight: "400" },
+      { y: forkY - 6, text: `Reach needed: ${formatFeetInches(reachNeeded)}`, color: forkColor, weight: "600" },
+    ], 12);
+
+    const rightLabels = dodgeLabels([
+      { y: maxStackLineY + 3, text: `Max stack ${formatFeetInches(maxStackHeight)}`, color: "#c2703d", weight: "400" },
+      { y: toY(bedHeight + tallest.height) + 10, text: `Stack: ${tallest.levels}× = ${formatFeetInches(tallest.height)} tall`, color: "var(--text-dim, #5b6472)", weight: "400" },
+    ], 12);
+
+    const leftLabelSvg = leftLabels.map((l) => `<text x="4" y="${l.y.toFixed(1)}" font-size="9" fill="${l.color}" font-weight="${l.weight}">${escapeHtml(l.text)}</text>`).join("\n      ");
+    const rightLabelSvg = rightLabels.map((l) => `<text x="${trailerX + trailerW + 4}" y="${l.y.toFixed(1)}" font-size="9" fill="${l.color}" font-weight="${l.weight}">${escapeHtml(l.text)}</text>`).join("\n      ");
+
     return `<svg viewBox="0 0 ${svgW} ${svgH}" width="100%" height="${Math.min(340, svgH)}" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
       <!-- ground -->
       <line x1="0" y1="${groundY}" x2="${svgW}" y2="${groundY}" stroke="#5b6472" stroke-width="2"/>
 
       <!-- forklift max reach reference line -->
       <line x1="0" y1="${forkliftLineY.toFixed(1)}" x2="${svgW}" y2="${forkliftLineY.toFixed(1)}" stroke="#9a6700" stroke-width="1" stroke-dasharray="5,4"/>
-      <text x="4" y="${(forkliftLineY - 4).toFixed(1)}" font-size="9" fill="#9a6700">Forklift max reach ${formatFeetInches(forkliftLiftHeight)}</text>
 
       <!-- max stack height reference line (within trailer span only) -->
       <line x1="${trailerX}" y1="${maxStackLineY.toFixed(1)}" x2="${trailerX + trailerW}" y2="${maxStackLineY.toFixed(1)}" stroke="#c2703d" stroke-width="1" stroke-dasharray="3,3"/>
-      <text x="${trailerX + trailerW + 4}" y="${(maxStackLineY + 3).toFixed(1)}" font-size="9" fill="#c2703d">Max stack ${formatFeetInches(maxStackHeight)}</text>
 
       <!-- trailer chassis/undercarriage -->
       <rect x="${trailerX + 8}" y="${bedY.toFixed(1)}" width="${trailerW - 16}" height="${(wheelY - bedY).toFixed(1)}" fill="#d8dce1"/>
@@ -857,16 +884,19 @@
       <!-- trailer cargo box outline -->
       <rect x="${trailerX}" y="${trailerTopY.toFixed(1)}" width="${trailerW}" height="${(bedY - trailerTopY).toFixed(1)}" fill="none" stroke="#5b6472" stroke-width="2"/>
       <line x1="${trailerX}" y1="${bedY.toFixed(1)}" x2="${trailerX + trailerW}" y2="${bedY.toFixed(1)}" stroke="#5b6472" stroke-width="2"/>
-      <text x="${trailerX + 4}" y="${(trailerTopY - 6).toFixed(1)}" font-size="9" fill="var(--text-dim, #5b6472)">Trailer interior ${formatFeetInches(trailerHeight)} tall</text>
 
       <!-- crate stack -->
       ${stackRects}
       <text x="${(crateX + crateW / 2).toFixed(1)}" y="${stackLabelY.toFixed(1)}" font-size="10" text-anchor="middle" fill="#fff" font-weight="600">${escapeHtml(tallest.groupName)}</text>
-      <text x="${trailerX + trailerW + 4}" y="${(toY(bedHeight + tallest.height) + 10).toFixed(1)}" font-size="9" fill="var(--text-dim, #5b6472)">Stack: ${tallest.levels}× = ${formatFeetInches(tallest.height)} tall</text>
 
       <!-- forklift reach-needed marker, no vehicle graphic -->
       <line x1="0" y1="${forkY.toFixed(1)}" x2="${trailerX}" y2="${forkY.toFixed(1)}" stroke="${forkColor}" stroke-width="2" stroke-dasharray="2,3"/>
-      <text x="4" y="${(forkY - 6).toFixed(1)}" font-size="9" fill="${forkColor}" font-weight="600">Reach needed: ${formatFeetInches(reachNeeded)}</text>
+
+      <!-- left-side labels (dodged apart to avoid overlap) -->
+      ${leftLabelSvg}
+
+      <!-- right-side labels (dodged apart to avoid overlap) -->
+      ${rightLabelSvg}
 
       <!-- bed height dimension -->
       <text x="${trailerX + 12}" y="${(groundY + 14).toFixed(1)}" font-size="9" fill="var(--text-dim, #5b6472)">Bed height ${formatFeetInches(bedHeight)} off ground</text>
@@ -882,6 +912,13 @@
   // ---------- persistence ----------
   function saveState() {
     const state = {
+      job: {
+        number: document.getElementById("jobNumber").value,
+        client: document.getElementById("jobClient").value,
+        address: document.getElementById("jobAddress").value,
+        preparedBy: document.getElementById("jobPreparedBy").value,
+        date: document.getElementById("jobDate").value,
+      },
       truck: {
         preset: presetSelect.value,
         length: document.getElementById("trailerLength").value,
@@ -940,6 +977,17 @@
     try {
       state = JSON.parse(localStorage.getItem(STORAGE_KEY));
     } catch (e) { /* ignore */ }
+
+    if (state?.job) {
+      document.getElementById("jobNumber").value = state.job.number ?? "";
+      document.getElementById("jobClient").value = state.job.client ?? "";
+      document.getElementById("jobAddress").value = state.job.address ?? "";
+      document.getElementById("jobPreparedBy").value = state.job.preparedBy ?? "";
+      document.getElementById("jobDate").value = state.job.date ?? "";
+    }
+    if (!document.getElementById("jobDate").value) {
+      document.getElementById("jobDate").value = new Date().toISOString().slice(0, 10);
+    }
 
     if (state?.truck) {
       presetSelect.value = state.truck.preset ?? "dryvan53";
@@ -1022,6 +1070,13 @@
   function gatherReportData() {
     return {
       generated: new Date().toLocaleString(),
+      job: {
+        number: document.getElementById("jobNumber").value,
+        client: document.getElementById("jobClient").value,
+        address: document.getElementById("jobAddress").value,
+        preparedBy: document.getElementById("jobPreparedBy").value,
+        date: document.getElementById("jobDate").value,
+      },
       constraints: {
         trailer: presetSelect.options[presetSelect.selectedIndex].text,
         length: document.getElementById("trailerLength").value,
@@ -1166,13 +1221,22 @@
     </div>
   </div>
   <main>
+    <h2>Job Information</h2>
+    <div class="constraints-grid">
+      <div><b>Job #:</b> ${esc(data.job.number) || "&mdash;"}</div>
+      <div><b>Date:</b> ${esc(data.job.date) || "&mdash;"}</div>
+      <div><b>Client:</b> ${esc(data.job.client) || "&mdash;"}</div>
+      <div><b>Prepared by:</b> ${esc(data.job.preparedBy) || "&mdash;"}</div>
+      <div style="grid-column: 1 / -1;"><b>Job site address:</b> ${esc(data.job.address) || "&mdash;"}</div>
+    </div>
+
     <h2>Truck &amp; Site Constraints</h2>
     <div class="constraints-grid">
-      <div><b>Trailer:</b> ${esc(data.constraints.trailer)} &mdash; ${esc(data.constraints.length)}" L x ${esc(data.constraints.width)}" W x ${esc(data.constraints.height)}" H interior</div>
+      <div><b>Trailer:</b> ${esc(data.constraints.trailer)} &mdash; ${esc(data.constraints.length)} L x ${esc(data.constraints.width)} W x ${esc(data.constraints.height)} H interior</div>
       <div><b>Max payload:</b> ${esc(data.constraints.maxPayload)} lbs</div>
-      <div><b>Forklift:</b> ${esc(data.constraints.forkliftCapacity)} lb capacity, ${esc(data.constraints.forkliftLiftHeight)}" max lift height</div>
-      <div><b>Trailer bed height:</b> ${esc(data.constraints.bedHeight)}" off ground</div>
-      <div><b>Max stack:</b> ${esc(data.constraints.maxStackHeight)}" or ${esc(data.constraints.maxStackCount)} crate(s) high, whichever is more restrictive</div>
+      <div><b>Forklift:</b> ${esc(data.constraints.forkliftCapacity)} lb capacity, ${esc(data.constraints.forkliftLiftHeight)} max lift height</div>
+      <div><b>Trailer bed height:</b> ${esc(data.constraints.bedHeight)} off ground</div>
+      <div><b>Max stack:</b> ${esc(data.constraints.maxStackHeight)} or ${esc(data.constraints.maxStackCount)} crate(s) high, whichever is more restrictive</div>
     </div>
 
     <h2>Tube Groups</h2>
@@ -1208,6 +1272,14 @@
   function buildReportCsv(data) {
     let out = "";
     out += csvRow(["Tube Shipment Loading Plan", data.generated]);
+    out += "\r\n";
+
+    out += csvRow(["JOB INFORMATION"]);
+    out += csvRow(["Job Number", data.job.number]);
+    out += csvRow(["Client", data.job.client]);
+    out += csvRow(["Job Site Address", data.job.address]);
+    out += csvRow(["Prepared By", data.job.preparedBy]);
+    out += csvRow(["Date", data.job.date]);
     out += "\r\n";
 
     out += csvRow(["TUBE GROUPS"]);

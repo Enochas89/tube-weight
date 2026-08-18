@@ -56,13 +56,39 @@
 
 <header class="app-header">
   <img src="logo.png" alt="RetubeCo, Inc. &mdash; Condenser &amp; Heat Exchanger Solutions" class="app-logo">
-  <div>
+  <div class="app-header-text">
     <h1>Semi Truck Loading Calculator</h1>
     <p class="subtitle">Plan tube shipments so every crate is forklift-safe on site and the trailer never overloads or over-stacks.</p>
+  </div>
+  <div class="powered-by">
+    <span class="powered-by-label">Powered by</span>
+    <img src="erogn-logo.png" alt="Erogn Tools &mdash; Software Tools for Real Work" class="erogn-logo">
   </div>
 </header>
 
 <main>
+
+  <!-- ===================== JOB INFORMATION ===================== -->
+  <section class="panel" id="panel-job">
+    <h2>Job Information</h2>
+    <div class="field-grid">
+      <label>Job number
+        <input type="text" id="jobNumber" placeholder="e.g. 2026-0142">
+      </label>
+      <label>Client
+        <input type="text" id="jobClient" placeholder="Client / company name">
+      </label>
+      <label>Job site address
+        <input type="text" id="jobAddress" placeholder="Street, city, state">
+      </label>
+      <label>Prepared by
+        <input type="text" id="jobPreparedBy" placeholder="Your name">
+      </label>
+      <label>Date
+        <input type="date" id="jobDate">
+      </label>
+    </div>
+  </section>
 
   <!-- ===================== TRUCK & SITE CONSTRAINTS ===================== -->
   <section class="panel" id="panel-truck">
