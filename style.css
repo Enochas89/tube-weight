@@ -363,6 +363,20 @@ input[readonly] {
 .truck-block .truck-meta b { color: var(--text); }
 .truck-block .truck-meta .over { color: var(--bad); font-weight: 700; }
 
+.pallet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-bottom: 4px;
+}
+.pallet-table th, .pallet-table td {
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  text-align: left;
+}
+.pallet-table th { background: var(--accent-dim); font-weight: 700; }
+.pallet-table tfoot td { font-weight: 700; background: #fafbfc; }
+
 .floor-diagram {
   border: 1px solid var(--border);
   border-radius: 6px;

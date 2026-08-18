@@ -617,6 +617,7 @@
           height: chunk.length * g.crateH,
           weight: chunk.reduce((a, b) => a + b, 0),
           crateCount: chunk.length,
+          crateWeightsInStack: chunk.slice(),
           forkliftReachNeeded: bedHeight + (chunk.length - 1) * g.crateH,
         });
       }
@@ -679,6 +680,16 @@
 
     trucks.forEach((t) => centerTruckItems(t, constraints.trailerWidth, constraints.trailerLength));
 
+    // Number every individual pallet/crate sequentially across the whole shipment, for
+    // physical labeling — not per-truck, so a pallet's number is stable regardless of
+    // which truck it lands on.
+    let palletCounter = 0;
+    trucks.forEach((t) => {
+      t.items.forEach((col) => {
+        col.palletNumbers = col.crateWeightsInStack.map(() => ++palletCounter);
+      });
+    });
+
     return trucks;
   }
 
@@ -706,6 +717,27 @@
     const maxY = Math.max(...truck.items.map((it) => it.y + it.l));
     const offsetY = (trailerLength - (maxY - minY)) / 2 - minY;
     truck.items.forEach((it) => { it.y += offsetY; });
+  }
+
+  // Expands a truck's stacks into one row per individual pallet/crate, sorted by
+  // pallet number, for per-pallet breakdowns in the UI and exports.
+  function flattenPallets(truck) {
+    const pallets = [];
+    truck.items.forEach((col) => {
+      col.crateWeightsInStack.forEach((w, idx) => {
+        pallets.push({
+          number: col.palletNumbers[idx],
+          groupName: col.groupName,
+          color: col.color,
+          weight: w,
+          levelPosition: `${idx + 1} of ${col.levels}`,
+          l: col.l,
+          w: col.w,
+        });
+      });
+    });
+    pallets.sort((a, b) => a.number - b.number);
+    return pallets;
   }
 
   // ---------- rendering ----------
@@ -759,6 +791,15 @@
       const maxHeightUsed = Math.max(...truck.items.map((it) => it.height));
       const crateCount = truck.items.reduce((a, it) => a + it.levels, 0);
 
+      const pallets = flattenPallets(truck);
+      const palletRows = pallets.map((p) => `
+        <tr>
+          <td>${p.number}</td>
+          <td>${escapeHtml(p.groupName)}</td>
+          <td>${p.levelPosition}</td>
+          <td>${fmt(p.weight, 0)} lbs</td>
+        </tr>`).join("");
+
       block.innerHTML = `
         <h3>Truck ${i + 1}</h3>
         <div class="truck-meta">
@@ -766,6 +807,11 @@
           <span>Crates: <b>${crateCount}</b> in <b>${truck.items.length}</b> stack(s)</span>
           <span>Tallest stack: <b>${formatFeetInches(maxHeightUsed)}</b></span>
         </div>
+        <table class="pallet-table">
+          <thead><tr><th>Pallet #</th><th>Item</th><th>Stack Position</th><th>Weight</th></tr></thead>
+          <tbody>${palletRows}</tbody>
+          <tfoot><tr><td colspan="3">Truck ${i + 1} total</td><td>${fmt(truck.weight, 0)} lbs</td></tr></tfoot>
+        </table>
       `;
 
       const topLabel = document.createElement("p");
@@ -1136,6 +1182,7 @@
         items: truck.items.map((it) => ({
           groupName: it.groupName, levels: it.levels, height: it.height, weight: it.weight, l: it.l, w: it.w,
         })),
+        pallets: flattenPallets(truck),
       })),
       maxPayload: lastConstraints.maxPayload,
       warnings: lastWarnings,
@@ -1182,19 +1229,20 @@
 
     const truckSections = data.trucks.length ? data.trucks.map((t) => `
       <h3>Truck ${t.index}</h3>
-      <p class="truck-meta">Weight: <b>${fmt(t.weight, 0)} lbs</b> / ${fmt(data.maxPayload, 0)} lbs payload &nbsp;&bull;&nbsp; Crates: <b>${t.items.reduce((a, it) => a + it.levels, 0)}</b> in <b>${t.items.length}</b> stack(s) &nbsp;&bull;&nbsp; Tallest stack: <b>${formatFeetInches(t.maxHeightUsed)}</b></p>
+      <p class="truck-meta">Weight: <b>${fmt(t.weight, 0)} lbs</b> / ${fmt(data.maxPayload, 0)} lbs payload &nbsp;&bull;&nbsp; Pallets: <b>${t.pallets.length}</b> in <b>${t.items.length}</b> stack(s) &nbsp;&bull;&nbsp; Tallest stack: <b>${formatFeetInches(t.maxHeightUsed)}</b></p>
       <table>
-        <thead><tr><th>Item</th><th>Crates High</th><th>Stack Height</th><th>Stack Weight</th><th>Footprint</th></tr></thead>
+        <thead><tr><th>Pallet #</th><th>Item</th><th>Stack Position</th><th>Weight</th><th>Footprint</th></tr></thead>
         <tbody>
-          ${t.items.map((it) => `
+          ${t.pallets.map((p) => `
             <tr>
-              <td>${esc(it.groupName)}</td>
-              <td>${it.levels}</td>
-              <td>${formatFeetInches(it.height)}</td>
-              <td>${fmt(it.weight, 0)} lbs</td>
-              <td>${formatFeetInches(it.l)} x ${formatFeetInches(it.w)}</td>
+              <td>${p.number}</td>
+              <td>${esc(p.groupName)}</td>
+              <td>${esc(p.levelPosition)}</td>
+              <td>${fmt(p.weight, 0)} lbs</td>
+              <td>${formatFeetInches(p.l)} x ${formatFeetInches(p.w)}</td>
             </tr>`).join("")}
         </tbody>
+        <tfoot><tr><td colspan="3">Truck ${t.index} total</td><td colspan="2">${fmt(t.weight, 0)} lbs</td></tr></tfoot>
       </table>`).join("") : `<p class="empty-row">No trucks planned yet — add a tube group or crate with a quantity above zero.</p>`;
 
     const warningsSection = data.warnings.length ? `
@@ -1222,6 +1270,7 @@
   table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 4px; }
   th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
   th { background: var(--accent-dim); font-weight: 700; }
+  tfoot td { font-weight: 700; background: #fafbfc; }
   .status-ok { color: var(--ok); font-weight: 600; }
   .status-bad { color: var(--bad); font-weight: 600; }
   .empty-row { color: var(--text-dim); font-style: italic; }
@@ -1336,14 +1385,16 @@
     data.summary.forEach((s) => out += csvRow([s.label, s.value]));
     out += "\r\n";
 
-    out += csvRow(["TRUCK LOADING"]);
-    out += csvRow(["Truck", "Truck Weight (lbs)", "Item", "Crates High", "Stack Height (in)", "Stack Weight (lbs)", "Footprint L (in)", "Footprint W (in)"]);
+    out += csvRow(["TRUCK LOADING — PER PALLET"]);
     data.trucks.forEach((t) => {
-      t.items.forEach((it) => {
-        out += csvRow([`Truck ${t.index}`, fmt(t.weight, 0), it.groupName, it.levels, fmt(it.height, 0), fmt(it.weight, 0), fmt(it.l, 0), fmt(it.w, 0)]);
+      out += csvRow([`TRUCK ${t.index}`, `Weight: ${fmt(t.weight, 0)} lbs`, `Pallets: ${t.pallets.length}`, `Stacks: ${t.items.length}`]);
+      out += csvRow(["Pallet #", "Item", "Stack Position", "Weight (lbs)", "Footprint L (in)", "Footprint W (in)"]);
+      t.pallets.forEach((p) => {
+        out += csvRow([p.number, p.groupName, p.levelPosition, fmt(p.weight, 0), fmt(p.l, 0), fmt(p.w, 0)]);
       });
+      out += csvRow([`Truck ${t.index} total`, "", "", fmt(t.weight, 0)]);
+      out += "\r\n";
     });
-    out += "\r\n";
 
     out += csvRow(["WARNINGS"]);
     if (data.warnings.length) {
