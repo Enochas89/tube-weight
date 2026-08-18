@@ -111,6 +111,7 @@
       if (initial.tubeGap !== undefined) node.querySelector(".g-tubegap").value = initial.tubeGap;
       if (initial.wallClearance !== undefined) node.querySelector(".g-wallclear").value = initial.wallClearance;
       if (initial.endClearance !== undefined) node.querySelector(".g-endclear").value = initial.endClearance;
+      if (initial.autoTubes !== undefined) node.querySelector(".g-auto-tubes").checked = initial.autoTubes;
     }
 
     // wire events
@@ -170,33 +171,24 @@
     });
     node.querySelector(".g-ply-custom-wrap").classList.toggle("hidden", node.querySelector(".g-ply-thickness").value !== "custom");
 
+    const applyAutoTubesState = () => {
+      const on = node.querySelector(".g-auto-tubes").checked;
+      const tubesInput = node.querySelector(".g-tubespercrate");
+      if (on) tubesInput.setAttribute("readonly", "readonly");
+      else tubesInput.removeAttribute("readonly");
+      node.querySelector(".g-autofit").classList.toggle("hidden", on);
+    };
+    node.querySelector(".g-auto-tubes").addEventListener("change", () => {
+      applyAutoTubesState();
+      recalcAll();
+    });
+    applyAutoTubesState();
+
     node.querySelector(".g-autofit").addEventListener("click", () => {
       const forkliftCapacity = num(document.getElementById("forkliftCapacity"));
       const wpt = weightPerTube(node);
-      if (wpt <= 0) { recalcAll(); return; }
-
-      const autoOn = node.querySelector(".g-auto-cratedims").checked;
-      if (!autoOn) {
-        const tare = num(node.querySelector(".g-tare"));
-        node.querySelector(".g-tubespercrate").value = Math.max(1, Math.floor((forkliftCapacity - tare) / wpt));
-      } else {
-        // tare depends on crate size, which depends on tubes/crate — search down until it fits
-        const od = num(node.querySelector(".g-od"));
-        const lengthFt = num(node.querySelector(".g-length"));
-        const gap = num(node.querySelector(".g-tubegap"));
-        const wallClearance = num(node.querySelector(".g-wallclear"));
-        const endClearance = num(node.querySelector(".g-endclear"));
-        const autoTareOn = node.querySelector(".g-auto-tare").checked;
-        const manualTare = num(node.querySelector(".g-tare"));
-
-        let n = Math.max(1, Math.round(num(node.querySelector(".g-tubespercrate"), 1)));
-        for (; n > 1; n--) {
-          const dims = computeAutoCrateDims(od, lengthFt, n, gap, wallClearance, endClearance);
-          const tare = autoTareOn ? calcCrateMaterials(node, dims.crateL, dims.crateW, dims.crateH).total : manualTare;
-          if (tare + n * wpt <= forkliftCapacity) break;
-        }
-        node.querySelector(".g-tubespercrate").value = n;
-      }
+      const qty = num(node.querySelector(".g-qty"), 1);
+      node.querySelector(".g-tubespercrate").value = autoMaxTubesPerCrate(node, wpt, forkliftCapacity, qty);
       recalcAll();
     });
 
@@ -286,6 +278,41 @@
       crateH: rows * pitch + 2 * wallClearance,
       rows, cols,
     };
+  }
+
+  // Finds the largest tubes-per-crate count whose full crate weight (tare + tubes) still
+  // fits the forklift's capacity. Tare depends on crate size, which depends on the tube
+  // count itself when auto-sizing is on, so this searches rather than solving directly.
+  function autoMaxTubesPerCrate(node, wpt, forkliftCapacity, qty) {
+    if (wpt <= 0) return 1;
+    const autoCrateDims = node.querySelector(".g-auto-cratedims").checked;
+    const autoTare = node.querySelector(".g-auto-tare").checked;
+    const manualTare = num(node.querySelector(".g-tare"));
+
+    let cw, ch, cl;
+    if (!autoCrateDims) {
+      cl = lenIn(node.querySelector(".g-cratel"));
+      cw = lenIn(node.querySelector(".g-cratew"));
+      ch = lenIn(node.querySelector(".g-crateh"));
+    }
+
+    const upperBound = Math.max(1, Math.min(Math.round(qty) || 1, 2000));
+    for (let n = upperBound; n >= 1; n--) {
+      let tare;
+      if (autoCrateDims) {
+        const od = num(node.querySelector(".g-od"));
+        const lengthFt = num(node.querySelector(".g-length"));
+        const gap = num(node.querySelector(".g-tubegap"));
+        const wallClearance = num(node.querySelector(".g-wallclear"));
+        const endClearance = num(node.querySelector(".g-endclear"));
+        const dims = computeAutoCrateDims(od, lengthFt, n, gap, wallClearance, endClearance);
+        tare = autoTare ? calcCrateMaterials(node, dims.crateL, dims.crateW, dims.crateH).total : manualTare;
+      } else {
+        tare = autoTare ? calcCrateMaterials(node, cl, cw, ch).total : manualTare;
+      }
+      if (tare + n * wpt <= forkliftCapacity) return n;
+    }
+    return 1;
   }
 
   // 4x8 plywood sheathing + 2x6 framing, built up from crate outer dimensions
@@ -390,6 +417,12 @@
       const wall = num(card.querySelector(".g-wall"));
       const lengthFt = num(card.querySelector(".g-length"));
       const qty = Math.max(0, Math.round(num(card.querySelector(".g-qty"))));
+      const wpt = weightPerTube(card);
+
+      const autoTubes = card.querySelector(".g-auto-tubes").checked;
+      if (autoTubes && wpt > 0 && qty > 0) {
+        card.querySelector(".g-tubespercrate").value = autoMaxTubesPerCrate(card, wpt, forkliftCapacity, qty);
+      }
       const tubesPerCrate = Math.max(1, Math.round(num(card.querySelector(".g-tubespercrate"), 1)));
 
       const autoCrateDims = card.querySelector(".g-auto-cratedims").checked;
@@ -424,7 +457,6 @@
       const tare = num(card.querySelector(".g-tare"));
 
       const id = od - 2 * wall;
-      const wpt = weightPerTube(card);
       const totalWeight = wpt * qty;
 
       card.querySelector(".g-out-wpt").textContent = wpt > 0 ? fmt(wpt, 2) : "—";
@@ -725,12 +757,13 @@
 
       const overWeight = truck.weight > constraints.maxPayload;
       const maxHeightUsed = Math.max(...truck.items.map((it) => it.height));
+      const crateCount = truck.items.reduce((a, it) => a + it.levels, 0);
 
       block.innerHTML = `
         <h3>Truck ${i + 1}</h3>
         <div class="truck-meta">
           <span>Weight: <b class="${overWeight ? "over" : ""}">${fmt(truck.weight, 0)} lbs</b> / ${fmt(constraints.maxPayload, 0)} lbs payload</span>
-          <span>Stacks: <b>${truck.items.length}</b></span>
+          <span>Crates: <b>${crateCount}</b> in <b>${truck.items.length}</b> stack(s)</span>
           <span>Tallest stack: <b>${formatFeetInches(maxHeightUsed)}</b></span>
         </div>
       `;
@@ -957,6 +990,7 @@
         tubeGap: card.querySelector(".g-tubegap").value,
         wallClearance: card.querySelector(".g-wallclear").value,
         endClearance: card.querySelector(".g-endclear").value,
+        autoTubes: card.querySelector(".g-auto-tubes").checked,
       })),
       generic: Array.from(genericContainer.querySelectorAll(".group-card")).map((card) => ({
         name: card.querySelector(".ge-name").value,
@@ -1148,7 +1182,7 @@
 
     const truckSections = data.trucks.length ? data.trucks.map((t) => `
       <h3>Truck ${t.index}</h3>
-      <p class="truck-meta">Weight: <b>${fmt(t.weight, 0)} lbs</b> / ${fmt(data.maxPayload, 0)} lbs payload &nbsp;&bull;&nbsp; Stacks: <b>${t.items.length}</b> &nbsp;&bull;&nbsp; Tallest stack: <b>${formatFeetInches(t.maxHeightUsed)}</b></p>
+      <p class="truck-meta">Weight: <b>${fmt(t.weight, 0)} lbs</b> / ${fmt(data.maxPayload, 0)} lbs payload &nbsp;&bull;&nbsp; Crates: <b>${t.items.reduce((a, it) => a + it.levels, 0)}</b> in <b>${t.items.length}</b> stack(s) &nbsp;&bull;&nbsp; Tallest stack: <b>${formatFeetInches(t.maxHeightUsed)}</b></p>
       <table>
         <thead><tr><th>Item</th><th>Crates High</th><th>Stack Height</th><th>Stack Weight</th><th>Footprint</th></tr></thead>
         <tbody>
