@@ -123,6 +123,7 @@ main {
 }
 .panel-header-row h2 { border-bottom: none; padding-bottom: 0; margin: 0; }
 .panel-header-row .btn-secondary { margin-top: 0; white-space: nowrap; }
+.report-btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
 
 .field-grid {
   display: grid;

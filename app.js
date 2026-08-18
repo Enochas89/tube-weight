@@ -841,83 +841,305 @@
     }
   }
 
-  // ---------- report download ----------
-  function buildReportText() {
-    const lines = [];
-    lines.push("BOILER / CONDENSER TUBE — SEMI TRUCK LOADING PLAN");
-    lines.push(`Generated: ${new Date().toLocaleString()}`);
-    lines.push("");
+  // ---------- report data ----------
+  const LOGO_B64 = "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";
 
-    lines.push("TRUCK & SITE CONSTRAINTS");
-    lines.push(`  Trailer: ${presetSelect.options[presetSelect.selectedIndex].text} — ${document.getElementById("trailerLength").value}" L x ${document.getElementById("trailerWidth").value}" W x ${document.getElementById("trailerHeight").value}" H interior`);
-    lines.push(`  Max payload: ${document.getElementById("maxPayload").value} lbs`);
-    lines.push(`  Forklift: ${document.getElementById("forkliftCapacity").value} lb capacity, ${document.getElementById("forkliftLiftHeight").value}" max lift height`);
-    lines.push(`  Trailer bed height: ${document.getElementById("bedHeight").value}" off ground`);
-    lines.push(`  Max stack: ${document.getElementById("maxStackHeight").value}" or ${document.getElementById("maxStackCount").value} crate(s) high, whichever is more restrictive`);
-    lines.push("");
-
-    const groupCards = Array.from(groupsContainer.querySelectorAll(".group-card"));
-    lines.push("TUBE GROUPS");
-    if (groupCards.length === 0) lines.push("  (none)");
-    groupCards.forEach((card, i) => {
-      const matSelect = card.querySelector(".g-material");
-      const matLabel = matSelect.value === "custom"
-        ? `custom density ${card.querySelector(".g-density").value} lb/in³`
-        : matSelect.options[matSelect.selectedIndex].text;
-      lines.push(`  ${i + 1}. ${card.querySelector(".g-name").value} — ${matLabel}, ${card.querySelector(".g-od").value}" OD x ${card.querySelector(".g-wall").value}" wall x ${card.querySelector(".g-length").value} ft, qty ${card.querySelector(".g-qty").value}`);
-      lines.push(`     Weight/tube: ${card.querySelector(".g-out-wpt").textContent} lbs | Group total: ${card.querySelector(".g-out-total").textContent} lbs`);
-      lines.push(`     Crate: ${card.querySelector(".g-out-dims").textContent}, tare ${card.querySelector(".g-tare").value} lbs${card.querySelector(".g-auto-tare").checked ? " (calculated from plywood + 2x6)" : ""}, ${card.querySelector(".g-tubespercrate").value} tubes/crate`);
-      lines.push(`     Crates needed: ${card.querySelector(".g-out-crates").textContent} | Full crate weight: ${card.querySelector(".g-out-cratewt").textContent} lbs [${card.querySelector(".g-out-forklift-badge").textContent}]`);
-    });
-    lines.push("");
-
-    const genericCards = Array.from(genericContainer.querySelectorAll(".group-card"));
-    if (genericCards.length > 0) {
-      lines.push("GENERIC / MISC CRATES");
-      genericCards.forEach((card, i) => {
-        lines.push(`  ${i + 1}. ${card.querySelector(".ge-name").value} — ${card.querySelector(".ge-weight").value} lbs each x ${card.querySelector(".ge-qty").value} = ${card.querySelector(".ge-out-total").textContent} lbs, ${card.querySelector(".ge-cratel").value}"x${card.querySelector(".ge-cratew").value}"x${card.querySelector(".ge-crateh").value}" [${card.querySelector(".ge-out-forklift-badge").textContent}]`);
-      });
-      lines.push("");
-    }
-
-    lines.push("SUMMARY");
-    document.querySelectorAll("#summaryBox .stat").forEach((s) => {
-      lines.push(`  ${s.querySelector(".label").textContent}: ${s.querySelector(".value").textContent}`);
-    });
-    lines.push("");
-
-    lastLayout.forEach((truck, i) => {
-      const maxHeightUsed = truck.items.length ? Math.max(...truck.items.map((it) => it.height)) : 0;
-      lines.push(`TRUCK ${i + 1}`);
-      lines.push(`  Weight: ${fmt(truck.weight, 0)} lbs / ${fmt(lastConstraints.maxPayload, 0)} lbs payload`);
-      lines.push(`  Stacks: ${truck.items.length}, tallest stack: ${fmt(maxHeightUsed, 0)}"`);
-      truck.items.forEach((it) => {
-        lines.push(`    - ${it.groupName}: ${it.levels}x crate(s) high = ${fmt(it.height, 0)}" tall, ${fmt(it.weight, 0)} lbs, footprint ${fmt(it.l, 0)}"x${fmt(it.w, 0)}"`);
-      });
-      lines.push("");
-    });
-
-    if (lastWarnings.length > 0) {
-      lines.push(`WARNINGS (${lastWarnings.length})`);
-      lastWarnings.forEach((w) => lines.push(`  - ${w}`));
-    } else {
-      lines.push("WARNINGS: none");
-    }
-
-    return lines.join("\n");
+  function currentGroupData(card) {
+    const matSelect = card.querySelector(".g-material");
+    const matLabel = matSelect.value === "custom"
+      ? `Custom (${card.querySelector(".g-density").value} lb/in³)`
+      : matSelect.options[matSelect.selectedIndex].text;
+    return {
+      name: card.querySelector(".g-name").value,
+      material: matLabel,
+      od: card.querySelector(".g-od").value,
+      wall: card.querySelector(".g-wall").value,
+      length: card.querySelector(".g-length").value,
+      qty: card.querySelector(".g-qty").value,
+      weightPerTube: card.querySelector(".g-out-wpt").textContent,
+      groupTotal: card.querySelector(".g-out-total").textContent,
+      crateDims: card.querySelector(".g-out-dims").textContent,
+      tare: card.querySelector(".g-tare").value,
+      autoTare: card.querySelector(".g-auto-tare").checked,
+      tubesPerCrate: card.querySelector(".g-tubespercrate").value,
+      cratesNeeded: card.querySelector(".g-out-crates").textContent,
+      fullCrateWeight: card.querySelector(".g-out-cratewt").textContent,
+      forkliftStatus: card.querySelector(".g-out-forklift-badge").textContent,
+      forkliftOver: card.querySelector(".g-out-forklift-badge").classList.contains("bad"),
+    };
   }
 
-  document.getElementById("downloadReportBtn").addEventListener("click", () => {
-    const text = buildReportText();
-    const blob = new Blob([text], { type: "text/plain" });
+  function currentGenericData(card) {
+    return {
+      name: card.querySelector(".ge-name").value,
+      weight: card.querySelector(".ge-weight").value,
+      qty: card.querySelector(".ge-qty").value,
+      total: card.querySelector(".ge-out-total").textContent,
+      crateL: card.querySelector(".ge-cratel").value,
+      crateW: card.querySelector(".ge-cratew").value,
+      crateH: card.querySelector(".ge-crateh").value,
+      forkliftStatus: card.querySelector(".ge-out-forklift-badge").textContent,
+      forkliftOver: card.querySelector(".ge-out-forklift-badge").classList.contains("bad"),
+    };
+  }
+
+  function gatherReportData() {
+    return {
+      generated: new Date().toLocaleString(),
+      constraints: {
+        trailer: presetSelect.options[presetSelect.selectedIndex].text,
+        length: document.getElementById("trailerLength").value,
+        width: document.getElementById("trailerWidth").value,
+        height: document.getElementById("trailerHeight").value,
+        maxPayload: document.getElementById("maxPayload").value,
+        forkliftCapacity: document.getElementById("forkliftCapacity").value,
+        forkliftLiftHeight: document.getElementById("forkliftLiftHeight").value,
+        bedHeight: document.getElementById("bedHeight").value,
+        maxStackHeight: document.getElementById("maxStackHeight").value,
+        maxStackCount: document.getElementById("maxStackCount").value,
+      },
+      groups: Array.from(groupsContainer.querySelectorAll(".group-card")).map(currentGroupData),
+      generics: Array.from(genericContainer.querySelectorAll(".group-card")).map(currentGenericData),
+      summary: Array.from(document.querySelectorAll("#summaryBox .stat")).map((s) => ({
+        label: s.querySelector(".label").textContent,
+        value: s.querySelector(".value").textContent,
+      })),
+      trucks: lastLayout.map((truck, i) => ({
+        index: i + 1,
+        weight: truck.weight,
+        maxHeightUsed: truck.items.length ? Math.max(...truck.items.map((it) => it.height)) : 0,
+        items: truck.items.map((it) => ({
+          groupName: it.groupName, levels: it.levels, height: it.height, weight: it.weight, l: it.l, w: it.w,
+        })),
+      })),
+      maxPayload: lastConstraints.maxPayload,
+      warnings: lastWarnings,
+    };
+  }
+
+  // ---------- branded HTML report (used for both the print/PDF view and the downloadable file) ----------
+  function buildReportHtml(data) {
+    const esc = escapeHtml;
+    const groupRows = data.groups.length
+      ? data.groups.map((g) => `
+        <tr>
+          <td>${esc(g.name)}</td>
+          <td>${esc(g.material)}</td>
+          <td>${esc(g.od)}" x ${esc(g.wall)}" x ${esc(g.length)}ft</td>
+          <td>${esc(g.qty)}</td>
+          <td>${esc(g.weightPerTube)} lbs</td>
+          <td>${esc(g.groupTotal)} lbs</td>
+          <td>${esc(g.crateDims)}</td>
+          <td>${esc(g.tare)} lbs${g.autoTare ? " (calc.)" : ""}</td>
+          <td>${esc(g.tubesPerCrate)}</td>
+          <td>${esc(g.cratesNeeded)}</td>
+          <td>${esc(g.fullCrateWeight)} lbs</td>
+          <td class="${g.forkliftOver ? "status-bad" : "status-ok"}">${esc(g.forkliftStatus)}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="12" class="empty-row">No tube groups added.</td></tr>`;
+
+    const genericSection = data.generics.length ? `
+      <h2>Generic / Miscellaneous Crates</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Weight/Crate</th><th>Qty</th><th>Total Weight</th><th>Crate Dims</th><th>Forklift</th></tr></thead>
+        <tbody>
+          ${data.generics.map((g) => `
+            <tr>
+              <td>${esc(g.name)}</td>
+              <td>${esc(g.weight)} lbs</td>
+              <td>${esc(g.qty)}</td>
+              <td>${esc(g.total)} lbs</td>
+              <td>${esc(g.crateL)}" x ${esc(g.crateW)}" x ${esc(g.crateH)}"</td>
+              <td class="${g.forkliftOver ? "status-bad" : "status-ok"}">${esc(g.forkliftStatus)}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>` : "";
+
+    const truckSections = data.trucks.length ? data.trucks.map((t) => `
+      <h3>Truck ${t.index}</h3>
+      <p class="truck-meta">Weight: <b>${fmt(t.weight, 0)} lbs</b> / ${fmt(data.maxPayload, 0)} lbs payload &nbsp;&bull;&nbsp; Stacks: <b>${t.items.length}</b> &nbsp;&bull;&nbsp; Tallest stack: <b>${fmt(t.maxHeightUsed, 0)}"</b></p>
+      <table>
+        <thead><tr><th>Item</th><th>Crates High</th><th>Stack Height</th><th>Stack Weight</th><th>Footprint</th></tr></thead>
+        <tbody>
+          ${t.items.map((it) => `
+            <tr>
+              <td>${esc(it.groupName)}</td>
+              <td>${it.levels}</td>
+              <td>${fmt(it.height, 0)}"</td>
+              <td>${fmt(it.weight, 0)} lbs</td>
+              <td>${fmt(it.l, 0)}" x ${fmt(it.w, 0)}"</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`).join("") : `<p class="empty-row">No trucks planned yet — add a tube group or crate with a quantity above zero.</p>`;
+
+    const warningsSection = data.warnings.length ? `
+      <h2>Warnings (${data.warnings.length})</h2>
+      <ul class="warn-list">${data.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : `
+      <h2>Warnings</h2>
+      <p class="ok-note">No issues found.</p>`;
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tube Shipment Loading Plan</title>
+<style>
+  :root { --brand-yellow:#f4b400; --brand-black:#1a1a1a; --text:#1f2430; --text-dim:#5b6472; --border:#d8dce1; --accent-dim:#eaf1fb; --ok:#1a7f37; --ok-bg:#e6f6ea; --bad:#b3261e; --bad-bg:#fdeceb; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--text); margin: 0; padding: 0 0 40px; background: white; }
+  .report-header { display:flex; align-items:center; gap:20px; background: var(--brand-black); color: white; padding: 18px 32px; border-bottom: 4px solid var(--brand-yellow); }
+  .report-header img { height: 44px; background: white; padding: 6px 10px; border-radius: 4px; }
+  .report-header h1 { margin: 0; font-size: 1.3rem; }
+  .report-header .meta { margin: 2px 0 0; font-size: 0.82rem; opacity: 0.85; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 32px; }
+  h2 { font-size: 1.05rem; border-bottom: 2px solid var(--brand-yellow); padding-bottom: 6px; margin: 28px 0 12px; }
+  h3 { font-size: 0.95rem; margin: 20px 0 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 4px; }
+  th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+  th { background: var(--accent-dim); font-weight: 700; }
+  .status-ok { color: var(--ok); font-weight: 600; }
+  .status-bad { color: var(--bad); font-weight: 600; }
+  .empty-row { color: var(--text-dim); font-style: italic; }
+  .constraints-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 24px; font-size: 0.86rem; }
+  .constraints-grid div b { color: var(--text-dim); font-weight: 600; }
+  .summary-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0 4px; }
+  .summary-row .stat { background: var(--accent-dim); border-radius: 8px; padding: 10px 16px; }
+  .summary-row .stat .label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; }
+  .summary-row .stat .value { font-size: 1.2rem; font-weight: 700; }
+  .truck-meta { font-size: 0.85rem; color: var(--text-dim); margin: 0 0 8px; }
+  .warn-list { background: var(--bad-bg); border: 1px solid var(--bad); border-radius: 8px; padding: 12px 16px 12px 32px; color: var(--bad); font-size: 0.85rem; }
+  .ok-note { color: var(--ok); font-size: 0.9rem; }
+  footer { max-width: 980px; margin: 30px auto 0; padding: 0 32px; font-size: 0.75rem; color: var(--text-dim); }
+  .print-bar { position: sticky; top: 0; background: white; border-bottom: 1px solid var(--border); padding: 10px 32px; text-align: right; }
+  .print-bar button { background: var(--brand-black); color: white; border: none; border-radius: 6px; padding: 8px 16px; font-size: 0.85rem; cursor: pointer; }
+  @media print {
+    .print-bar { display: none; }
+    body { padding: 0; }
+    table { page-break-inside: avoid; }
+    h2, h3 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+  <div class="print-bar screen-only"><button onclick="window.print()">Print / Save as PDF</button></div>
+  <div class="report-header">
+    <img src="data:image/png;base64,${LOGO_B64}" alt="RetubeCo, Inc.">
+    <div>
+      <h1>Tube Shipment Loading Plan</h1>
+      <p class="meta">Generated ${esc(data.generated)}</p>
+    </div>
+  </div>
+  <main>
+    <h2>Truck &amp; Site Constraints</h2>
+    <div class="constraints-grid">
+      <div><b>Trailer:</b> ${esc(data.constraints.trailer)} &mdash; ${esc(data.constraints.length)}" L x ${esc(data.constraints.width)}" W x ${esc(data.constraints.height)}" H interior</div>
+      <div><b>Max payload:</b> ${esc(data.constraints.maxPayload)} lbs</div>
+      <div><b>Forklift:</b> ${esc(data.constraints.forkliftCapacity)} lb capacity, ${esc(data.constraints.forkliftLiftHeight)}" max lift height</div>
+      <div><b>Trailer bed height:</b> ${esc(data.constraints.bedHeight)}" off ground</div>
+      <div><b>Max stack:</b> ${esc(data.constraints.maxStackHeight)}" or ${esc(data.constraints.maxStackCount)} crate(s) high, whichever is more restrictive</div>
+    </div>
+
+    <h2>Tube Groups</h2>
+    <table>
+      <thead><tr><th>Group</th><th>Material</th><th>OD x Wall x Length</th><th>Qty</th><th>Wt/Tube</th><th>Group Total</th><th>Crate Dims</th><th>Tare</th><th>Tubes/Crate</th><th>Crates Needed</th><th>Full Crate Wt</th><th>Forklift</th></tr></thead>
+      <tbody>${groupRows}</tbody>
+    </table>
+
+    ${genericSection}
+
+    <h2>Summary</h2>
+    <div class="summary-row">
+      ${data.summary.map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value">${esc(s.value)}</div></div>`).join("")}
+    </div>
+
+    <h2>Per-Truck Breakdown</h2>
+    ${truckSections}
+
+    ${warningsSection}
+  </main>
+  <footer>All figures are estimates for planning purposes &mdash; verify against actual crate builds, scale weights, and DOT/carrier requirements before shipping.</footer>
+</body>
+</html>`;
+  }
+
+  // ---------- CSV (Excel) export ----------
+  function csvEscape(v) {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+  function csvRow(cells) { return cells.map(csvEscape).join(",") + "\r\n"; }
+
+  function buildReportCsv(data) {
+    let out = "";
+    out += csvRow(["Tube Shipment Loading Plan", data.generated]);
+    out += "\r\n";
+
+    out += csvRow(["TUBE GROUPS"]);
+    out += csvRow(["Group", "Material", "OD (in)", "Wall (in)", "Length (ft)", "Qty", "Weight/Tube (lbs)", "Group Total (lbs)", "Crate Dims", "Tare (lbs)", "Tubes/Crate", "Crates Needed", "Full Crate Weight (lbs)", "Forklift Status"]);
+    data.groups.forEach((g) => {
+      out += csvRow([g.name, g.material, g.od, g.wall, g.length, g.qty, g.weightPerTube, g.groupTotal, g.crateDims, g.tare, g.tubesPerCrate, g.cratesNeeded, g.fullCrateWeight, g.forkliftStatus]);
+    });
+    out += "\r\n";
+
+    if (data.generics.length) {
+      out += csvRow(["GENERIC / MISC CRATES"]);
+      out += csvRow(["Name", "Weight/Crate (lbs)", "Qty", "Total Weight (lbs)", "Crate L (in)", "Crate W (in)", "Crate H (in)", "Forklift Status"]);
+      data.generics.forEach((g) => {
+        out += csvRow([g.name, g.weight, g.qty, g.total, g.crateL, g.crateW, g.crateH, g.forkliftStatus]);
+      });
+      out += "\r\n";
+    }
+
+    out += csvRow(["SUMMARY"]);
+    data.summary.forEach((s) => out += csvRow([s.label, s.value]));
+    out += "\r\n";
+
+    out += csvRow(["TRUCK LOADING"]);
+    out += csvRow(["Truck", "Truck Weight (lbs)", "Item", "Crates High", "Stack Height (in)", "Stack Weight (lbs)", "Footprint L (in)", "Footprint W (in)"]);
+    data.trucks.forEach((t) => {
+      t.items.forEach((it) => {
+        out += csvRow([`Truck ${t.index}`, fmt(t.weight, 0), it.groupName, it.levels, fmt(it.height, 0), fmt(it.weight, 0), fmt(it.l, 0), fmt(it.w, 0)]);
+      });
+    });
+    out += "\r\n";
+
+    out += csvRow(["WARNINGS"]);
+    if (data.warnings.length) {
+      data.warnings.forEach((w) => out += csvRow([w]));
+    } else {
+      out += csvRow(["None"]);
+    }
+
+    return out;
+  }
+
+  function downloadBlob(content, mime, filename) {
+    const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `tube-loading-plan-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  document.getElementById("printReportBtn").addEventListener("click", () => {
+    const html = buildReportHtml(gatherReportData());
+    const win = window.open("", "_blank");
+    if (!win) {
+      downloadBlob(html, "text/html", `tube-loading-plan-${new Date().toISOString().slice(0, 10)}.html`);
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  });
+
+  document.getElementById("downloadCsvBtn").addEventListener("click", () => {
+    const csv = buildReportCsv(gatherReportData());
+    downloadBlob(csv, "text/csv", `tube-loading-plan-${new Date().toISOString().slice(0, 10)}.csv`);
   });
 
   loadState();
