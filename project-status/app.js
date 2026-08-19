@@ -576,17 +576,21 @@
     if (activeIndex !== -1) {
       todayTop = positions[activeIndex];
     } else {
-      const order = p.tasks.map((t, i) => i).sort((a, b) => p.tasks[a].startDate.localeCompare(p.tasks[b].startDate));
+      // Walk the list in the same order the cards are drawn (not a
+      // separately date-sorted order) so "before"/"after" are always the
+      // two tiles physically next to each other on screen — otherwise the
+      // marker can land beside a completely unrelated tile whenever the
+      // task order doesn't happen to match date order.
       let before = null, after = null;
-      for (const idx of order) {
-        if (p.tasks[idx].startDate <= todayStr()) before = idx; else { after = idx; break; }
+      for (let i = 0; i < p.tasks.length; i++) {
+        if (p.tasks[i].startDate <= todayStr()) before = i; else { after = i; break; }
       }
-      if (before === null) todayTop = positions[order[0]] - 24;
+      if (before === null) todayTop = positions[0] - 24;
       else if (after === null) todayTop = positions[before] + 24;
       else {
         const t1 = new Date(p.tasks[before].startDate + "T00:00:00").getTime();
         const t2 = new Date(p.tasks[after].startDate + "T00:00:00").getTime();
-        const frac = (todayMs - t1) / (t2 - t1);
+        const frac = t2 > t1 ? Math.min(1, Math.max(0, (todayMs - t1) / (t2 - t1))) : 0.5;
         todayTop = positions[before] + (positions[after] - positions[before]) * frac;
       }
     }
