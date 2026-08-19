@@ -286,13 +286,14 @@
     return { projectName, tasks };
   }
 
-  function openImportConfirmModal(parsed) {
+  function openImportConfirmModal(parsed, sourceLabel, extraNote) {
+    const count = parsed.tasks.length;
     const body = `
       <div class="modal-field"><label>Project name</label><input type="text" id="f-name" value="${escapeHtml(parsed.projectName)}"></div>
       <div class="modal-field"><label>Client</label><input type="text" id="f-client" value=""></div>
-      <p style="font-size:0.85rem;color:var(--text-dim);margin:-6px 0 12px;">Found ${parsed.tasks.length} task${parsed.tasks.length === 1 ? "" : "s"} to import (summary/rollup rows are skipped).</p>
+      <p style="font-size:0.85rem;color:var(--text-dim);margin:-6px 0 12px;">Found ${count} task${count === 1 ? "" : "s"} to import${extraNote ? " — " + escapeHtml(extraNote) : ""}.</p>
     `;
-    openModal("Import from MS Project", body, async () => {
+    openModal(`Import from ${sourceLabel}`, body, async () => {
       const name = document.getElementById("f-name").value.trim();
       if (!name) { alert("Project name is required."); return false; }
       const dates = parsed.tasks.map((t) => [t.startDate, t.endDate]).flat();
@@ -301,7 +302,7 @@
         status: "on_track",
         startDate: dates.length ? dates.reduce((a, b) => (b < a ? b : a)) : todayStr(),
         endDate: dates.length ? dates.reduce((a, b) => (b > a ? b : a)) : "",
-        description: `Imported from Microsoft Project (${parsed.tasks.length} task${parsed.tasks.length === 1 ? "" : "s"}).`,
+        description: `Imported from ${sourceLabel} (${count} task${count === 1 ? "" : "s"}).`,
         tasks: parsed.tasks.map((t) => ({ id: uid(), ...t })),
         delays: [], notes: [],
       };
@@ -327,7 +328,105 @@
         alert("No importable tasks found in that file. Summary rows are skipped automatically, so this can happen if every row is a summary task.");
         return;
       }
-      openImportConfirmModal(parsed);
+      openImportConfirmModal(parsed, "Microsoft Project", "summary/rollup rows are skipped");
+    } catch (err) {
+      alert("Couldn't import that file: " + err.message);
+    }
+  });
+
+  // ---------- Excel import ----------
+  const EXCEL_HEADER_ALIASES = {
+    name: ["task name", "task", "name", "activity", "activity name"],
+    start: ["start", "start date", "begin", "begin date"],
+    finish: ["finish", "end", "end date", "finish date", "due", "due date"],
+    percent: ["% complete", "percent complete", "% work complete", "progress", "complete", "% done"],
+    responsible: ["resource names", "resource", "resources", "assigned to", "responsible", "owner", "assignee"],
+  };
+
+  function normalizeHeader(h) { return String(h || "").trim().toLowerCase().replace(/\s+/g, " "); }
+
+  function findColumnKey(headers, aliasList) {
+    const normalizedMap = {};
+    headers.forEach((h) => { normalizedMap[normalizeHeader(h)] = h; });
+    for (const alias of aliasList) {
+      if (normalizedMap[alias] !== undefined) return normalizedMap[alias];
+    }
+    return null;
+  }
+
+  function excelDateToYMD(val) {
+    if (val instanceof Date && !isNaN(val.getTime())) return val.toISOString().slice(0, 10);
+    if (typeof val === "number") {
+      // Excel serial date, in case cellDates didn't convert this particular cell
+      const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    }
+    if (typeof val === "string" && val.trim()) {
+      const d = new Date(val.trim());
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    }
+    return null;
+  }
+
+  function parseExcelWorkbook(arrayBuffer) {
+    if (typeof XLSX === "undefined") throw new Error("Excel import library failed to load — try reloading the page.");
+    const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    const sheetName = wb.SheetNames[0];
+    if (!sheetName) throw new Error("This workbook has no sheets.");
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    if (!rows.length) throw new Error(`The "${sheetName}" sheet has no data rows.`);
+
+    const headers = Object.keys(rows[0]);
+    const nameKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.name);
+    const startKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.start);
+    const finishKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.finish);
+    const percentKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.percent);
+    const responsibleKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.responsible);
+
+    if (!nameKey || !startKey || !finishKey) {
+      throw new Error(`Couldn't find the required columns in "${sheetName}" — need a task name column, a start date column, and a finish/end date column. Found: ${headers.join(", ")}`);
+    }
+
+    const tasks = [];
+    rows.forEach((row) => {
+      const name = String(row[nameKey] || "").trim();
+      const startDate = excelDateToYMD(row[startKey]);
+      const endDate = excelDateToYMD(row[finishKey]);
+      if (!name || !startDate || !endDate) return;
+
+      let pct = 0;
+      if (percentKey) {
+        const raw = row[percentKey];
+        const n = typeof raw === "number" ? raw : parseFloat(String(raw).replace("%", ""));
+        if (Number.isFinite(n)) pct = n <= 1 ? Math.round(n * 100) : Math.round(n);
+      }
+      pct = Math.max(0, Math.min(100, pct));
+      const status = pct >= 100 ? "complete" : pct > 0 ? "in_progress" : "not_started";
+      const responsible = responsibleKey ? String(row[responsibleKey] || "").trim() : "";
+
+      tasks.push({ name, startDate, endDate, responsible, status, progress: pct });
+    });
+
+    const projectName = sheetName && normalizeHeader(sheetName) !== "sheet1" ? sheetName : "Imported Project";
+    return { projectName, tasks };
+  }
+
+  document.getElementById("importExcelBtn").addEventListener("click", () => {
+    document.getElementById("importExcelInput").click();
+  });
+  document.getElementById("importExcelInput").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const parsed = parseExcelWorkbook(buf);
+      if (!parsed.tasks.length) {
+        alert("No importable rows found in that sheet. Each row needs a task name, a start date, and a finish/end date.");
+        return;
+      }
+      openImportConfirmModal(parsed, "Excel", null);
     } catch (err) {
       alert("Couldn't import that file: " + err.message);
     }

@@ -36,6 +36,8 @@
         <button class="btn-secondary" id="shareListBtn">Share Link</button>
         <button class="btn-secondary editor-only hidden" id="importMspBtn">Import from MS Project</button>
         <input type="file" id="importFileInput" accept=".xml" class="hidden">
+        <button class="btn-secondary editor-only hidden" id="importExcelBtn">Import from Excel</button>
+        <input type="file" id="importExcelInput" accept=".xlsx,.xls" class="hidden">
         <button class="btn-primary editor-only hidden" id="newProjectBtn">+ New Project</button>
       </div>
     </div>
@@ -114,6 +116,7 @@
   <p>Anyone with this link can view these projects. Only the signed-in project manager can edit.</p>
 </footer>
 
+<script src="vendor/xlsx.core.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
