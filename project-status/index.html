@@ -46,55 +46,58 @@
 
   <!-- ===================== PROJECT DETAIL VIEW ===================== -->
   <section id="detailView" class="view hidden">
-    <div class="detail-header">
-      <button class="btn-link" id="backToListBtn">&larr; All Projects</button>
-      <div class="detail-title-row">
-        <div>
-          <h2 id="detailName">Project Name</h2>
-          <p id="detailClient" class="detail-client"></p>
+    <aside class="calendar-strip" id="calendarStrip"></aside>
+    <div class="detail-main">
+      <div class="detail-header">
+        <button class="btn-link" id="backToListBtn">&larr; All Projects</button>
+        <div class="detail-title-row">
+          <div>
+            <h2 id="detailName">Project Name</h2>
+            <p id="detailClient" class="detail-client"></p>
+          </div>
+          <div class="detail-actions">
+            <select id="detailStatus" class="status-select hidden"></select>
+            <span id="detailStatusBadge" class="status-badge hidden"></span>
+            <button class="btn-secondary" id="shareProjectBtn">Share Link</button>
+            <button class="btn-secondary editor-only hidden" id="editProjectBtn">Edit Project</button>
+            <button class="btn-danger editor-only hidden" id="deleteProjectBtn">Delete</button>
+          </div>
         </div>
-        <div class="detail-actions">
-          <select id="detailStatus" class="status-select hidden"></select>
-          <span id="detailStatusBadge" class="status-badge hidden"></span>
-          <button class="btn-secondary" id="shareProjectBtn">Share Link</button>
-          <button class="btn-secondary editor-only hidden" id="editProjectBtn">Edit Project</button>
-          <button class="btn-danger editor-only hidden" id="deleteProjectBtn">Delete</button>
+        <p id="detailDescription" class="detail-description"></p>
+      </div>
+
+      <nav class="tab-bar">
+        <button class="tab-btn active" data-tab="tasks">Tasks</button>
+        <button class="tab-btn" data-tab="delays">Delays</button>
+        <button class="tab-btn" data-tab="notes">Notes</button>
+      </nav>
+
+      <!-- Tasks tab -->
+      <div class="tab-panel" data-tab-panel="tasks">
+        <div class="panel-header-row">
+          <h3>Tasks</h3>
+          <button class="btn-secondary editor-only hidden" id="addTaskBtn">+ Add Task</button>
         </div>
+        <div id="taskListWrap" class="task-list"></div>
       </div>
-      <p id="detailDescription" class="detail-description"></p>
-    </div>
 
-    <nav class="tab-bar">
-      <button class="tab-btn active" data-tab="tasks">Tasks</button>
-      <button class="tab-btn" data-tab="delays">Delays</button>
-      <button class="tab-btn" data-tab="notes">Notes</button>
-    </nav>
-
-    <!-- Tasks tab -->
-    <div class="tab-panel" data-tab-panel="tasks">
-      <div class="panel-header-row">
-        <h3>Tasks</h3>
-        <button class="btn-secondary editor-only hidden" id="addTaskBtn">+ Add Task</button>
+      <!-- Delays tab -->
+      <div class="tab-panel hidden" data-tab-panel="delays">
+        <div class="panel-header-row">
+          <h3>Delays</h3>
+          <button class="btn-secondary editor-only hidden" id="addDelayBtn">+ Log Delay</button>
+        </div>
+        <div id="delaysList" class="log-list"></div>
       </div>
-      <div id="taskListWrap" class="task-list"></div>
-    </div>
 
-    <!-- Delays tab -->
-    <div class="tab-panel hidden" data-tab-panel="delays">
-      <div class="panel-header-row">
-        <h3>Delays</h3>
-        <button class="btn-secondary editor-only hidden" id="addDelayBtn">+ Log Delay</button>
+      <!-- Notes tab -->
+      <div class="tab-panel hidden" data-tab-panel="notes">
+        <div class="panel-header-row">
+          <h3>Notes</h3>
+          <button class="btn-secondary editor-only hidden" id="addNoteBtn">+ Add Note</button>
+        </div>
+        <div id="notesList" class="log-list"></div>
       </div>
-      <div id="delaysList" class="log-list"></div>
-    </div>
-
-    <!-- Notes tab -->
-    <div class="tab-panel hidden" data-tab-panel="notes">
-      <div class="panel-header-row">
-        <h3>Notes</h3>
-        <button class="btn-secondary editor-only hidden" id="addNoteBtn">+ Add Note</button>
-      </div>
-      <div id="notesList" class="log-list"></div>
     </div>
   </section>
 

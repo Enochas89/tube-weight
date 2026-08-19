@@ -522,7 +522,28 @@
   });
 
   // ---------- detail view ----------
+  function renderCalendarStrip() {
+    const el = document.getElementById("calendarStrip");
+    if (!el) return;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const today = now.getDate();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const monthLabel = now.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+
+    let html = `<div class="calendar-strip-month">${monthLabel}</div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dow = new Date(year, month, d).getDay();
+      const weekend = dow === 0 || dow === 6;
+      const isToday = d === today;
+      html += `<div class="calendar-strip-day${weekend ? " weekend" : ""}${isToday ? " is-today" : ""}">${d}</div>`;
+    }
+    el.innerHTML = html;
+  }
+
   function renderDetail(p) {
+    renderCalendarStrip();
     document.getElementById("detailName").textContent = p.name;
     document.getElementById("detailClient").textContent = p.client || "";
     document.getElementById("detailDescription").textContent = p.description || "";
