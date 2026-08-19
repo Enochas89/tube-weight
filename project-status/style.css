@@ -61,6 +61,15 @@ body {
 .erogn-logo { height: 28px; width: auto; border-radius: 3px; }
 
 .edit-auth { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; }
+#signInBtn {
+  background: none;
+  color: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+#signInBtn:hover { color: white; border-color: rgba(255, 255, 255, 0.6); background: none; }
 .editor-badge {
   display: flex;
   align-items: center;
