@@ -1,22 +1,27 @@
-const { Redis } = require("@upstash/redis");
+const { createClient } = require("redis");
 
 const KV_KEY = "projectStatus:data";
 
-// Different Vercel storage integrations (the old "KV" product, the current
-// "Redis" first-party option, or the Upstash marketplace listing) inject
-// differently-named REST env vars. Try the known naming conventions rather
-// than assuming one.
-function getRedisClient() {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) {
+// The connected store exposes a standard TCP connection string, not a REST
+// API. Connect fresh per request and close it afterward — simplest thing
+// that's safe across serverless cold/warm starts for this app's low traffic.
+async function withRedis(fn) {
+  const url = process.env.REDIS_URL || process.env.KV_URL;
+  if (!url) {
     const seen = Object.keys(process.env).filter((k) => /REDIS|KV_/i.test(k));
     throw new Error(
-      "No Redis REST URL/token found in environment variables. " +
+      "No REDIS_URL found in environment variables. " +
       (seen.length ? `Found these related env vars instead: ${seen.join(", ")}` : "No Redis-related env vars found at all — is a store connected to this project?")
     );
   }
-  return new Redis({ url, token });
+  const client = createClient({ url });
+  client.on("error", () => { /* surfaced via the outer try/catch instead */ });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.quit();
+  }
 }
 
 // GET  -> returns the current project-status data, open to anyone with the link.
@@ -26,8 +31,8 @@ function getRedisClient() {
 module.exports = async function handler(req, res) {
   if (req.method === "GET") {
     try {
-      const redis = getRedisClient();
-      const data = await redis.get(KV_KEY);
+      const raw = await withRedis((client) => client.get(KV_KEY));
+      const data = raw ? JSON.parse(raw) : null;
       res.status(200).json(data && Array.isArray(data.projects) ? data : { projects: [] });
     } catch (err) {
       res.status(500).json({ error: "Failed to load data: " + err.message });
@@ -56,8 +61,7 @@ module.exports = async function handler(req, res) {
         return;
       }
       try {
-        const redis = getRedisClient();
-        await redis.set(KV_KEY, data);
+        await withRedis((client) => client.set(KV_KEY, JSON.stringify(data)));
       } catch (err) {
         res.status(500).json({ error: "Failed to save data: " + err.message });
         return;

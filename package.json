@@ -3,6 +3,6 @@
   "private": true,
   "description": "RetubeCo tools: truck loading calculator, project status tracker.",
   "dependencies": {
-    "@upstash/redis": "latest"
+    "redis": "^4"
   }
 }
