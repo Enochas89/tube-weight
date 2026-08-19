@@ -522,28 +522,67 @@
   });
 
   // ---------- detail view ----------
-  function renderCalendarStrip() {
-    const el = document.getElementById("calendarStrip");
-    if (!el) return;
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const today = now.getDate();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const monthLabel = now.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  // One marker per task, positioned at that task card's own vertical center
+  // (so the strip is literally locked to the tiles), plus a Today marker
+  // interpolated between whichever tasks bracket today's date. Only
+  // meaningful while the Tasks tab is showing, since that's the only tab
+  // whose tiles this can measure.
+  function renderCalendarStrip(p) {
+    const strip = document.getElementById("calendarStrip");
+    if (!strip) return;
+    const tasksPanel = document.querySelector('.tab-panel[data-tab-panel="tasks"]');
+    if (!tasksPanel || tasksPanel.classList.contains("hidden")) return;
 
-    let html = `<div class="calendar-strip-month">${monthLabel}</div>`;
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dow = new Date(year, month, d).getDay();
-      const weekend = dow === 0 || dow === 6;
-      const isToday = d === today;
-      html += `<div class="calendar-strip-day${weekend ? " weekend" : ""}${isToday ? " is-today" : ""}">${d}</div>`;
+    if (!p.tasks.length) {
+      strip.innerHTML = `<div class="calendar-strip-marker is-today" style="top:0px;"><span class="calendar-strip-marker-label">${new Date().getDate()}</span></div>`;
+      return;
     }
-    el.innerHTML = html;
+
+    const cards = Array.from(document.getElementById("taskListWrap").querySelectorAll(".task-card"));
+    if (cards.length !== p.tasks.length) return;
+
+    const stripRect = strip.getBoundingClientRect();
+    const positions = cards.map((card) => {
+      const r = card.getBoundingClientRect();
+      return (r.top + r.bottom) / 2 - stripRect.top;
+    });
+
+    let html = p.tasks.map((t, i) => `
+      <div class="calendar-strip-marker" style="top:${Math.max(0, positions[i]).toFixed(0)}px;">
+        <span class="calendar-strip-marker-label">${new Date(t.startDate + "T00:00:00").getDate()}</span>
+      </div>`).join("");
+
+    const todayMs = new Date(todayStr() + "T00:00:00").getTime();
+    const activeIndex = p.tasks.findIndex((t) =>
+      todayMs >= new Date(t.startDate + "T00:00:00").getTime() && todayMs <= new Date(t.endDate + "T00:00:00").getTime());
+
+    let todayTop;
+    if (activeIndex !== -1) {
+      todayTop = positions[activeIndex];
+    } else {
+      const order = p.tasks.map((t, i) => i).sort((a, b) => p.tasks[a].startDate.localeCompare(p.tasks[b].startDate));
+      let before = null, after = null;
+      for (const idx of order) {
+        if (p.tasks[idx].startDate <= todayStr()) before = idx; else { after = idx; break; }
+      }
+      if (before === null) todayTop = positions[order[0]] - 24;
+      else if (after === null) todayTop = positions[before] + 24;
+      else {
+        const t1 = new Date(p.tasks[before].startDate + "T00:00:00").getTime();
+        const t2 = new Date(p.tasks[after].startDate + "T00:00:00").getTime();
+        const frac = (todayMs - t1) / (t2 - t1);
+        todayTop = positions[before] + (positions[after] - positions[before]) * frac;
+      }
+    }
+    html += `
+      <div class="calendar-strip-marker is-today" style="top:${Math.max(0, todayTop).toFixed(0)}px;">
+        <span class="calendar-strip-marker-label">${new Date().getDate()}</span>
+      </div>`;
+
+    strip.innerHTML = html;
   }
 
   function renderDetail(p) {
-    renderCalendarStrip();
     document.getElementById("detailName").textContent = p.name;
     document.getElementById("detailClient").textContent = p.client || "";
     document.getElementById("detailDescription").textContent = p.description || "";
@@ -572,6 +611,7 @@
     }
 
     renderTaskList(p);
+    renderCalendarStrip(p);
     renderDelays(p);
     renderNotes(p);
   }
@@ -595,6 +635,7 @@
       document.querySelectorAll(".tab-panel").forEach((panel) => {
         panel.classList.toggle("hidden", panel.dataset.tabPanel !== tab);
       });
+      if (tab === "tasks" && currentProjectId) renderCalendarStrip(getProject(currentProjectId));
     });
   });
 

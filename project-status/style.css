@@ -173,34 +173,24 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 #detailView { display: flex; align-items: flex-start; gap: 16px; }
 .detail-main { flex: 1; min-width: 0; }
 .calendar-strip {
-  flex: 0 0 52px;
+  flex: 0 0 40px;
+  position: relative;
+}
+.calendar-strip-marker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  padding: 10px 2px;
-  position: sticky;
-  top: 16px;
+  justify-content: center;
 }
-.calendar-strip-month {
-  font-size: 0.64rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--text-dim);
-  margin-bottom: 4px;
-  text-align: center;
-}
-.calendar-strip-day {
-  width: 100%;
-  text-align: center;
+.calendar-strip-marker-label {
   font-size: 0.72rem;
   color: var(--text-dim);
-  padding: 2px 0;
   border-radius: 4px;
+  padding: 1px 6px;
 }
-.calendar-strip-day.weekend { opacity: 0.55; }
-.calendar-strip-day.is-today {
+.calendar-strip-marker.is-today .calendar-strip-marker-label {
   font-weight: 700;
   color: var(--brand-black);
   background: var(--brand-yellow);
