@@ -274,29 +274,50 @@
       });
     }
 
-    const tasks = [];
+    // Collect every <Task> first, in document order, with its outline level —
+    // some MSP exports don't set <Summary>1</Summary> reliably, so a task is
+    // ALSO treated as a summary/rollup if the next task nests one level
+    // deeper than it (i.e. it has children). Combined with the UID-0 and
+    // project-name checks below, this catches summary rows even when the
+    // explicit flag is missing.
+    const rawTasks = [];
     if (tasksContainer) {
       Array.from(tasksContainer.children).forEach((t) => {
         if (t.localName !== "Task") return;
-        const uid = directChildText(t, "UID");
-        if (!uid || uid === "0") return; // UID 0 is the whole-project rollup, not a real task
-        if (directChildText(t, "Summary") === "1") return; // skip summary/rollup rows — they duplicate their children's date range
-
-        const name = directChildText(t, "Name");
-        const start = directChildText(t, "Start");
-        const finish = directChildText(t, "Finish");
-        if (!name || !start || !finish) return;
-        const startDate = start.slice(0, 10);
-        const endDate = finish.slice(0, 10);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return;
-
-        const pct = Math.max(0, Math.min(100, Math.round(num(directChildText(t, "PercentComplete")))));
-        const status = pct >= 100 ? "complete" : pct > 0 ? "in_progress" : "not_started";
-        const responsible = (taskResources[uid] || []).join(", ");
-
-        tasks.push({ name, startDate, endDate, responsible, status, progress: pct });
+        const outline = parseInt(directChildText(t, "OutlineLevel"), 10);
+        rawTasks.push({
+          el: t,
+          uid: directChildText(t, "UID"),
+          outlineLevel: Number.isFinite(outline) ? outline : null,
+          explicitSummary: directChildText(t, "Summary") === "1",
+        });
       });
     }
+
+    const normalizedProjectName = projectName.trim().toLowerCase();
+    const tasks = [];
+    rawTasks.forEach((rt, i) => {
+      const t = rt.el;
+      if (!rt.uid || rt.uid === "0") return; // UID 0 is the whole-project rollup, not a real task
+      if (rt.explicitSummary) return;
+      const next = rawTasks[i + 1];
+      if (next && rt.outlineLevel !== null && next.outlineLevel !== null && next.outlineLevel > rt.outlineLevel) return; // has children -> it's a summary row
+
+      const name = directChildText(t, "Name");
+      if (name.trim().toLowerCase() === normalizedProjectName) return; // rollup row named after the project itself
+      const start = directChildText(t, "Start");
+      const finish = directChildText(t, "Finish");
+      if (!name || !start || !finish) return;
+      const startDate = start.slice(0, 10);
+      const endDate = finish.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return;
+
+      const pct = Math.max(0, Math.min(100, Math.round(num(directChildText(t, "PercentComplete")))));
+      const status = pct >= 100 ? "complete" : pct > 0 ? "in_progress" : "not_started";
+      const responsible = (taskResources[rt.uid] || []).join(", ");
+
+      tasks.push({ name, startDate, endDate, responsible, status, progress: pct });
+    });
 
     return { projectName, tasks };
   }
@@ -526,13 +547,21 @@
       cursor.setMonth(cursor.getMonth() + 1);
     }
     // Lines alone (used in every row, for visual alignment) vs. lines+labels
-    // (used in the header only — repeating text on every row was both noisy
-    // and, with the header not pinned, invisible the moment you scrolled).
+    // (header only). Each header label lives in a section spanning that
+    // month's whole date range with position:sticky inside it — so it stays
+    // pinned just past the task-name column for as long as that month is in
+    // view, then hands off to the next one as you scroll. A single
+    // fixed-position label would scroll behind the sticky task-name column
+    // and become permanently invisible at common scroll offsets.
     const monthLinesOnly = months.map((m) => `<div class="gantt-month-line" style="left:${pct(m.getTime()).toFixed(2)}%"></div>`).join("");
-    const monthLinesWithLabels = months.map((m) => {
+    const monthLinesWithLabels = months.map((m, i) => {
       const left = pct(m.getTime());
+      const right = i + 1 < months.length ? pct(months[i + 1].getTime()) : 100;
       const label = m.toLocaleDateString(undefined, { month: "short", year: "numeric" });
-      return `<div class="gantt-month-line" style="left:${left.toFixed(2)}%"></div><div class="gantt-month-label" style="left:${left.toFixed(2)}%">${label}</div>`;
+      return `<div class="gantt-month-section" style="left:${left.toFixed(2)}%; width:${Math.max(right - left, 0).toFixed(2)}%;">
+        <div class="gantt-month-line"></div>
+        <span class="gantt-month-label">${label}</span>
+      </div>`;
     }).join("");
 
     // Week ticks for finer-grained reference when the whole schedule fits in

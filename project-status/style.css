@@ -286,11 +286,30 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 }
 .gantt-month-line {
   position: absolute;
+  left: 0;
   top: 0; bottom: 0;
   border-left: 1px solid var(--text-dim);
   opacity: 0.5;
 }
-.gantt-month-label { position: absolute; top: 8px; font-size: 0.72rem; font-weight: 700; color: var(--text); padding-left: 4px; white-space: nowrap; }
+/* Each month gets a section spanning its own date range; the label inside
+   is sticky within that section, so it stays pinned just past the task-name
+   column while its month is in view, then the next section's label takes
+   over — like a spreadsheet's frozen row-group header. */
+.gantt-month-section { position: absolute; top: 0; bottom: 0; }
+.gantt-month-label {
+  position: sticky;
+  left: 236px;
+  top: 8px;
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text);
+  background: #fafbfc;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 1;
+}
 .gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--brand-yellow); z-index: 2; }
 .gantt-today-label {
   position: absolute;
