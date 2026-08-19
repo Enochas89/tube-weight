@@ -39,6 +39,28 @@
     return t.duration || Math.max(1, daysBetween(t.startDate, t.endDate) + 1);
   }
 
+  // Project-level "block out Sat/Sun" — non-working days are skipped when
+  // scheduling a task's span or the gap after a predecessor, but a manually
+  // chosen start date is never moved on its own.
+  function isBlockedDay(dateStr, project) {
+    const dow = new Date(dateStr + "T00:00:00").getDay();
+    return (project.excludeSat && dow === 6) || (project.excludeSun && dow === 0);
+  }
+  function nextWorkDay(dateStr, project) {
+    let d = dateStr;
+    while (isBlockedDay(d, project)) d = addDays(d, 1);
+    return d;
+  }
+  function endDateForDuration(startDate, duration, project) {
+    let d = startDate;
+    let remaining = duration - 1;
+    while (remaining > 0) {
+      d = addDays(d, 1);
+      if (!isBlockedDay(d, project)) remaining--;
+    }
+    return d;
+  }
+
   // Tasks that (transitively) depend on taskId — used to keep the
   // predecessor picker from offering a choice that would create a cycle.
   function descendantsOf(project, taskId, visited) {
@@ -68,8 +90,8 @@
         const preds = (t.predecessors || []).map((id) => byId[id]).filter(Boolean);
         if (!preds.length) return;
         const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
-        const newStart = new Date(latestEnd + 86400000).toISOString().slice(0, 10);
-        const newEnd = addDays(newStart, taskDuration(t) - 1);
+        const newStart = nextWorkDay(new Date(latestEnd + 86400000).toISOString().slice(0, 10), project);
+        const newEnd = endDateForDuration(newStart, taskDuration(t), project);
         if (t.startDate !== newStart || t.endDate !== newEnd) {
           t.startDate = newStart;
           t.endDate = newEnd;
@@ -522,86 +544,6 @@
   });
 
   // ---------- detail view ----------
-  // One marker per task, positioned at that task card's own vertical center
-  // (so the strip is literally locked to the tiles), plus a Today marker
-  // interpolated between whichever tasks bracket today's date. Only
-  // meaningful while the Tasks tab is showing, since that's the only tab
-  // whose tiles this can measure.
-  function renderCalendarStrip(p) {
-    const strip = document.getElementById("calendarStrip");
-    if (!strip) return;
-    const tasksPanel = document.querySelector('.tab-panel[data-tab-panel="tasks"]');
-    if (!tasksPanel || tasksPanel.classList.contains("hidden")) return;
-
-    if (!p.tasks.length) {
-      strip.innerHTML = `<div class="calendar-strip-marker is-today" style="top:0px;"><span class="calendar-strip-marker-label">${new Date().getDate()}</span></div>`;
-      return;
-    }
-
-    const cards = Array.from(document.getElementById("taskListWrap").querySelectorAll(".task-card"));
-    if (cards.length !== p.tasks.length) return;
-
-    const stripRect = strip.getBoundingClientRect();
-    const positions = cards.map((card) => {
-      const r = card.getBoundingClientRect();
-      return (r.top + r.bottom) / 2 - stripRect.top;
-    });
-
-    // Group tasks that share a start date so they get one label with a
-    // bracket spanning both tiles, instead of two identical numbers.
-    const groups = {};
-    p.tasks.forEach((t, i) => {
-      (groups[t.startDate] = groups[t.startDate] || []).push(i);
-    });
-    let html = Object.values(groups).map((idxs) => {
-      const day = new Date(p.tasks[idxs[0]].startDate + "T00:00:00").getDate();
-      const groupTops = idxs.map((i) => Math.max(0, positions[i]));
-      const top = Math.min(...groupTops);
-      const bottom = Math.max(...groupTops);
-      const mid = (top + bottom) / 2;
-      const bracket = idxs.length > 1
-        ? `<div class="calendar-strip-bracket" style="top:${top.toFixed(0)}px; height:${(bottom - top).toFixed(0)}px;"></div>`
-        : "";
-      return `${bracket}
-        <div class="calendar-strip-marker" style="top:${mid.toFixed(0)}px;">
-          <span class="calendar-strip-marker-label">${day}</span>
-        </div>`;
-    }).join("");
-
-    const todayMs = new Date(todayStr() + "T00:00:00").getTime();
-    const activeIndex = p.tasks.findIndex((t) =>
-      todayMs >= new Date(t.startDate + "T00:00:00").getTime() && todayMs <= new Date(t.endDate + "T00:00:00").getTime());
-
-    let todayTop;
-    if (activeIndex !== -1) {
-      todayTop = positions[activeIndex];
-    } else {
-      // Walk the list in the same order the cards are drawn (not a
-      // separately date-sorted order) so "before"/"after" are always the
-      // two tiles physically next to each other on screen — otherwise the
-      // marker can land beside a completely unrelated tile whenever the
-      // task order doesn't happen to match date order.
-      let before = null, after = null;
-      for (let i = 0; i < p.tasks.length; i++) {
-        if (p.tasks[i].startDate <= todayStr()) before = i; else { after = i; break; }
-      }
-      if (before === null) todayTop = positions[0] - 24;
-      else if (after === null) todayTop = positions[before] + 24;
-      else {
-        const t1 = new Date(p.tasks[before].startDate + "T00:00:00").getTime();
-        const t2 = new Date(p.tasks[after].startDate + "T00:00:00").getTime();
-        const frac = t2 > t1 ? Math.min(1, Math.max(0, (todayMs - t1) / (t2 - t1))) : 0.5;
-        todayTop = positions[before] + (positions[after] - positions[before]) * frac;
-      }
-    }
-    html += `
-      <div class="calendar-strip-marker is-today" style="top:${Math.max(0, todayTop).toFixed(0)}px;">
-        <span class="calendar-strip-marker-label">${new Date().getDate()}</span>
-      </div>`;
-
-    strip.innerHTML = html;
-  }
-
   function renderDetail(p) {
     document.getElementById("detailName").textContent = p.name;
     document.getElementById("detailClient").textContent = p.client || "";
@@ -631,7 +573,6 @@
     }
 
     renderTaskList(p);
-    renderCalendarStrip(p);
     renderDelays(p);
     renderNotes(p);
   }
@@ -655,7 +596,6 @@
       document.querySelectorAll(".tab-panel").forEach((panel) => {
         panel.classList.toggle("hidden", panel.dataset.tabPanel !== tab);
       });
-      if (tab === "tasks" && currentProjectId) renderCalendarStrip(getProject(currentProjectId));
     });
   });
 
@@ -715,7 +655,10 @@
             <button class="btn-chip" data-add-note-task="${t.id}">+ Note</button>
           </div>` : "";
 
+      const currentBanner = isToday ? `<div class="current-marker">Current &bull; ${fmtDate(todayStr())}</div>` : "";
+
       return `
+        ${currentBanner}
         <div class="task-card">
           <div class="task-card-stripe" style="background:${color}"></div>
           <div class="task-card-top">
@@ -904,10 +847,17 @@
         <div class="modal-field"><label>Target end date</label><input type="date" id="f-end" value="${project?.endDate || ""}"></div>
       </div>
       <div class="modal-field"><label>Description</label><textarea id="f-desc">${escapeHtml(project?.description || "")}</textarea></div>
+      <div class="modal-field">
+        <label>Non-working days <span class="modal-label-hint">(skipped when scheduling task durations and predecessors)</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="f-exclude-sat" ${project?.excludeSat ? "checked" : ""}> Block out Saturdays</label>
+        <label class="checkbox-row"><input type="checkbox" id="f-exclude-sun" ${project?.excludeSun ? "checked" : ""}> Block out Sundays</label>
+      </div>
     `;
     openModal(isEdit ? "Edit Project" : "New Project", body, async () => {
       const name = document.getElementById("f-name").value.trim();
       if (!name) { alert("Project name is required."); return false; }
+      const excludeSat = document.getElementById("f-exclude-sat").checked;
+      const excludeSun = document.getElementById("f-exclude-sun").checked;
       if (isEdit) {
         const prev = { ...project };
         project.name = name;
@@ -915,6 +865,9 @@
         project.startDate = document.getElementById("f-start").value;
         project.endDate = document.getElementById("f-end").value;
         project.description = document.getElementById("f-desc").value.trim();
+        project.excludeSat = excludeSat;
+        project.excludeSun = excludeSun;
+        recalcSchedule(project);
         const ok = await saveRemote();
         if (!ok) { Object.assign(project, prev); return false; }
         renderDetail(project);
@@ -926,6 +879,7 @@
           startDate: document.getElementById("f-start").value,
           endDate: document.getElementById("f-end").value,
           description: document.getElementById("f-desc").value.trim(),
+          excludeSat, excludeSun,
           tasks: [], delays: [], notes: [],
         };
         state.projects.push(p);
@@ -980,9 +934,9 @@
       if (!name || !startDate) { alert("Task name and start date are required."); return false; }
       if (predecessors.length) {
         const latestEnd = Math.max(...predecessors.map((id) => new Date(project.tasks.find((t) => t.id === id).endDate + "T00:00:00").getTime()));
-        startDate = new Date(latestEnd + 86400000).toISOString().slice(0, 10);
+        startDate = nextWorkDay(new Date(latestEnd + 86400000).toISOString().slice(0, 10), project);
       }
-      const endDate = addDays(startDate, duration - 1);
+      const endDate = endDateForDuration(startDate, duration, project);
       const vals = {
         name, startDate, endDate, duration, predecessors,
         responsible: document.getElementById("f-owner").value.trim(),
