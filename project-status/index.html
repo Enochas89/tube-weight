@@ -32,7 +32,10 @@
   <section id="listView" class="view">
     <div class="panel-header-row">
       <h2>Projects</h2>
-      <button class="btn-primary editor-only hidden" id="newProjectBtn">+ New Project</button>
+      <div class="header-row-actions">
+        <button class="btn-secondary" id="shareListBtn">Share Link</button>
+        <button class="btn-primary editor-only hidden" id="newProjectBtn">+ New Project</button>
+      </div>
     </div>
     <div id="projectGrid" class="project-grid"></div>
   </section>
@@ -49,6 +52,7 @@
         <div class="detail-actions">
           <select id="detailStatus" class="status-select hidden"></select>
           <span id="detailStatusBadge" class="status-badge hidden"></span>
+          <button class="btn-secondary" id="shareProjectBtn">Share Link</button>
           <button class="btn-secondary editor-only hidden" id="editProjectBtn">Edit Project</button>
           <button class="btn-danger editor-only hidden" id="deleteProjectBtn">Delete</button>
         </div>
@@ -105,7 +109,7 @@
 </div>
 
 <footer>
-  <p>Data is stored locally in this browser (no server/account) &mdash; export or share by copying data between devices isn't supported yet.</p>
+  <p>Anyone with this link can view these projects. Only the signed-in project manager can edit.</p>
 </footer>
 
 <script src="app.js"></script>

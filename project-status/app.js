@@ -27,6 +27,21 @@
   }
   function getProject(id) { return state.projects.find((p) => p.id === id); }
 
+  async function copyLink(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      showStatus("Link copied to clipboard", "success");
+    } catch (e) {
+      window.prompt("Copy this link:", url);
+    }
+  }
+  document.getElementById("shareListBtn").addEventListener("click", () => {
+    copyLink(location.origin + location.pathname);
+  });
+  document.getElementById("shareProjectBtn").addEventListener("click", () => {
+    copyLink(location.origin + location.pathname + "#project/" + currentProjectId);
+  });
+
   // ---------- status toast ----------
   const toastEl = document.getElementById("statusToast");
   let toastTimer = null;
