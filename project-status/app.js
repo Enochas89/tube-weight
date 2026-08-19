@@ -581,7 +581,7 @@
           </div>
           <div class="task-card-owner-row">${owner}</div>
           <div class="task-card-progress">
-            <div class="progress-bar"><div class="progress-bar-fill" style="width:${t.progress || 0}%; background:${color};"></div></div>
+            <div class="progress-bar"><div class="progress-bar-fill" style="width:${t.progress || 0}%;"></div></div>
             <span class="task-card-pct">${t.progress || 0}%</span>
           </div>
           <div class="task-card-dates">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)}</div>
