@@ -510,15 +510,36 @@
       months.push(new Date(cursor));
       cursor.setMonth(cursor.getMonth() + 1);
     }
-    const monthLinesHtml = months.map((m) => {
+    // Lines alone (used in every row, for visual alignment) vs. lines+labels
+    // (used in the header only — repeating text on every row was both noisy
+    // and, with the header not pinned, invisible the moment you scrolled).
+    const monthLinesOnly = months.map((m) => `<div class="gantt-month-line" style="left:${pct(m.getTime()).toFixed(2)}%"></div>`).join("");
+    const monthLinesWithLabels = months.map((m) => {
       const left = pct(m.getTime());
       const label = m.toLocaleDateString(undefined, { month: "short", year: "numeric" });
       return `<div class="gantt-month-line" style="left:${left.toFixed(2)}%"></div><div class="gantt-month-label" style="left:${left.toFixed(2)}%">${label}</div>`;
     }).join("");
 
+    // Week ticks for finer-grained reference when the whole schedule fits in
+    // a few months — otherwise they'd be too dense to read.
+    let weekLinesOnly = "";
+    if (totalMs <= 100 * 86400000) {
+      const weeks = [];
+      const wCursor = new Date(rangeStart);
+      wCursor.setHours(0, 0, 0, 0);
+      while (wCursor.getTime() < rangeEnd) {
+        weeks.push(new Date(wCursor));
+        wCursor.setDate(wCursor.getDate() + 7);
+      }
+      weekLinesOnly = weeks.map((w) => `<div class="gantt-week-line" style="left:${pct(w.getTime()).toFixed(2)}%"></div>`).join("");
+    }
+
     const todayMs = new Date(todayStr() + "T00:00:00").getTime();
-    const todayLine = (todayMs >= rangeStart && todayMs <= rangeEnd)
+    const todayInRange = todayMs >= rangeStart && todayMs <= rangeEnd;
+    const todayLine = todayInRange
       ? `<div class="gantt-today-line" style="left:${pct(todayMs).toFixed(2)}%" title="Today"></div>` : "";
+    const todayLabel = todayInRange
+      ? `<div class="gantt-today-label" style="left:${pct(todayMs).toFixed(2)}%">Today</div>` : "";
 
     const rows = p.tasks.map((t) => {
       const left = pct(new Date(t.startDate + "T00:00:00").getTime());
@@ -539,7 +560,7 @@
             ${actions}
           </div>
           <div class="gantt-track">
-            <div class="gantt-months">${monthLinesHtml}${todayLine}</div>
+            <div class="gantt-months">${weekLinesOnly}${monthLinesOnly}${todayLine}</div>
             <div class="gantt-bar ${hasDelay ? "delay-flag" : ""}" data-open-task="${t.id}" style="left:${left.toFixed(2)}%; width:${width.toFixed(2)}%; background:${color};" title="${escapeHtml(t.name)}: ${fmtDate(t.startDate)} → ${fmtDate(t.endDate)} (${t.progress || 0}%)">
               <div class="gantt-bar-fill" style="width:${t.progress || 0}%"></div>
               <span class="gantt-bar-text">${escapeHtml(t.name)}</span>
@@ -551,7 +572,7 @@
     wrap.innerHTML = `<div class="gantt-grid">
       <div class="gantt-row header-row">
         <div class="gantt-label">Task / Responsible</div>
-        <div class="gantt-track" style="min-height:28px;">${monthLinesHtml}${todayLine}</div>
+        <div class="gantt-track" style="min-height:32px;">${weekLinesOnly}${monthLinesWithLabels}${todayLine}${todayLabel}</div>
       </div>
       ${rows}
     </div>`;

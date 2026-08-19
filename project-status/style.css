@@ -217,13 +217,24 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 65vh;
 }
 .gantt-empty { padding: 30px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
 .gantt-grid { display: grid; min-width: 720px; }
 .gantt-row { display: grid; grid-template-columns: 220px 1fr; border-bottom: 1px solid var(--border); }
 .gantt-row:last-child { border-bottom: none; }
-.gantt-row.header-row { background: #fafbfc; font-size: 0.76rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; }
+.gantt-row.header-row {
+  background: #fafbfc;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 1px 0 var(--border);
+}
 .gantt-label {
   padding: 10px 12px;
   border-right: 1px solid var(--border);
@@ -237,19 +248,39 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   z-index: 3;
   background: var(--panel);
 }
-.gantt-row.header-row .gantt-label { background: #fafbfc; }
+.gantt-row.header-row .gantt-label { background: #fafbfc; z-index: 6; }
 .gantt-label .task-name { font-size: 0.85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gantt-label .task-owner { font-size: 0.74rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gantt-label .task-actions { display: flex; gap: 4px; margin-top: 2px; }
 .gantt-track { position: relative; min-height: 44px; }
 .gantt-months { position: relative; height: 100%; }
+.gantt-week-line {
+  position: absolute;
+  top: 0; bottom: 0;
+  border-left: 1px dotted var(--border);
+  opacity: 0.7;
+}
 .gantt-month-line {
   position: absolute;
   top: 0; bottom: 0;
-  border-left: 1px dashed var(--border);
+  border-left: 1px solid var(--text-dim);
+  opacity: 0.5;
 }
-.gantt-month-label { position: absolute; top: 6px; font-size: 0.7rem; color: var(--text-dim); padding-left: 4px; white-space: nowrap; }
+.gantt-month-label { position: absolute; top: 8px; font-size: 0.72rem; font-weight: 700; color: var(--text); padding-left: 4px; white-space: nowrap; }
 .gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--brand-yellow); z-index: 2; }
+.gantt-today-label {
+  position: absolute;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--brand-black);
+  background: var(--brand-yellow);
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 2;
+}
 .gantt-bar {
   position: absolute;
   top: 10px;
