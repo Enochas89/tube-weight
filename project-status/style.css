@@ -212,54 +212,21 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 .tab-panel.hidden { display: none; }
 
-/* ---------- gantt chart ---------- */
-.gantt-wrap {
+/* ---------- task list ---------- */
+.task-list { display: flex; flex-direction: column; gap: 14px; }
+.task-card {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: auto;
-  max-height: 65vh;
-  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
+  border-radius: 14px;
+  padding: 16px 20px;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.07);
 }
-.gantt-empty { padding: 30px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
-.gantt-grid { display: grid; min-width: 720px; }
-.gantt-row { display: grid; grid-template-columns: 230px 1fr; border-bottom: 1px solid var(--border); }
-.gantt-row:last-child { border-bottom: none; }
-.gantt-row:not(.header-row):nth-child(even) { background: #fbfcfe; }
-.gantt-row:not(.header-row):nth-child(even) .gantt-label { background: #fbfcfe; }
-.gantt-row:not(.header-row):hover { background: #f0f6ff; }
-.gantt-row:not(.header-row):hover .gantt-label { background: #f0f6ff; }
-.gantt-row.header-row {
-  background: #fafbfc;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  box-shadow: 0 1px 0 var(--border);
-}
-.gantt-label {
-  padding: 8px 12px;
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  background: var(--panel);
-  transition: background 0.1s ease;
-}
-.gantt-row.header-row .gantt-label { background: #fafbfc; z-index: 6; padding: 10px 12px; }
-.task-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.task-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.task-card-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.gantt-label .task-name { font-size: 0.85rem; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task-owner-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.task-name { font-size: 0.98rem; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.task-card-owner-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .avatar {
   width: 20px;
   height: 20px;
@@ -273,86 +240,32 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   font-weight: 700;
   letter-spacing: -0.02em;
 }
-.gantt-label .task-owner { font-size: 0.74rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gantt-label .task-owner.unassigned { font-style: italic; opacity: 0.7; }
-.gantt-label .task-actions { display: flex; gap: 4px; margin-top: 2px; }
-.gantt-track { position: relative; min-height: 48px; }
-.gantt-months { position: relative; height: 100%; }
-.gantt-week-line {
-  position: absolute;
-  top: 0; bottom: 0;
-  border-left: 1px dotted var(--border);
-  opacity: 0.7;
-}
-.gantt-month-line {
-  position: absolute;
-  left: 0;
-  top: 0; bottom: 0;
-  border-left: 1px solid var(--text-dim);
-  opacity: 0.5;
-}
-/* Each month gets a section spanning its own date range; the label inside
-   is sticky within that section, so it stays pinned just past the task-name
-   column while its month is in view, then the next section's label takes
-   over — like a spreadsheet's frozen row-group header. */
-.gantt-month-section { position: absolute; top: 0; bottom: 0; }
-.gantt-month-label {
-  position: sticky;
-  left: 236px;
-  top: 8px;
-  display: inline-block;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--text);
-  background: #fafbfc;
-  padding: 2px 6px;
-  border-radius: 4px;
-  white-space: nowrap;
-  z-index: 1;
-}
-.gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--brand-yellow); z-index: 2; }
-.gantt-today-label {
-  position: absolute;
-  bottom: 4px;
-  transform: translateX(-50%);
-  font-size: 0.66rem;
-  font-weight: 700;
-  color: var(--brand-black);
-  background: var(--brand-yellow);
-  padding: 1px 5px;
-  border-radius: 4px;
-  white-space: nowrap;
-  z-index: 2;
-}
-.gantt-bar {
-  position: absolute;
-  top: 10px;
-  height: 28px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
+.task-owner { font-size: 0.8rem; color: var(--text-dim); }
+.task-owner.unassigned { font-style: italic; opacity: 0.7; }
+.task-card-progress { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.task-card-progress .progress-bar { flex: 1; height: 10px; border-radius: 999px; }
+.task-card-progress .progress-bar-fill { border-radius: 999px; transition: width 0.15s ease; }
+.task-card-pct { font-size: 0.78rem; font-weight: 700; color: var(--text-dim); min-width: 34px; text-align: right; }
+.task-card-dates { margin-top: 6px; font-size: 0.78rem; color: var(--text-dim); }
+
+.task-card-sub { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.task-sub-item { border-left: 3px solid var(--border); background: var(--bg); border-radius: 6px; padding: 8px 10px; }
+.task-sub-item.delay { border-left-color: var(--status-delayed); }
+.task-sub-item.note { border-left-color: var(--accent); }
+.task-sub-item-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 2px; }
+.task-card-actions { display: flex; gap: 8px; }
+.btn-chip {
   cursor: pointer;
-  min-width: 10px;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.18);
-  transition: transform 0.08s ease, box-shadow 0.08s ease;
-}
-.gantt-bar:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(16, 24, 40, 0.22); }
-.gantt-bar-fill { position: absolute; top: 0; bottom: 0; left: 0; background: rgba(255, 255, 255, 0.32); }
-.gantt-bar-text { position: relative; padding: 0 8px; font-size: 0.74rem; color: white; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15); }
-.gantt-bar-pct {
-  position: relative;
-  margin-left: auto;
-  padding: 1px 6px;
-  font-size: 0.64rem;
-  font-weight: 700;
-  color: white;
-  background: rgba(0, 0, 0, 0.2);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.76rem;
   border-radius: 999px;
-  flex-shrink: 0;
-  margin-right: 4px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-dim);
+  padding: 4px 12px;
 }
-.gantt-bar.delay-flag::after { content: "⚠"; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; }
+.btn-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
 /* ---------- delay/note logs ---------- */
 .log-list { display: flex; flex-direction: column; gap: 10px; }

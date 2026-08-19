@@ -497,7 +497,7 @@
       statusBadgeReadonly.className = "status-badge " + p.status;
     }
 
-    renderGantt(p);
+    renderTaskList(p);
     renderDelays(p);
     renderNotes(p);
   }
@@ -524,73 +524,22 @@
     });
   });
 
-  // ---------- Gantt chart ----------
-  function renderGantt(p) {
-    const wrap = document.getElementById("ganttWrap");
+  // ---------- task list ----------
+  function taskSubEntries(p, taskId) {
+    const delays = p.delays.filter((d) => d.taskId === taskId).map((d) => ({ ...d, kind: "delay" }));
+    const notes = p.notes.filter((n) => n.taskId === taskId).map((n) => ({ ...n, kind: "note" }));
+    return [...delays, ...notes].sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  function renderTaskList(p) {
+    const wrap = document.getElementById("taskListWrap");
     if (!p.tasks.length) {
-      wrap.innerHTML = `<div class="gantt-empty">No tasks yet.${isEditor ? ' Click "+ Add Task" to build the schedule.' : ""}</div>`;
+      wrap.innerHTML = `<div class="empty-state">No tasks yet.${isEditor ? ' Click "+ Add Task" to get started.' : ""}</div>`;
       return;
     }
 
-    const starts = p.tasks.map((t) => new Date(t.startDate + "T00:00:00").getTime());
-    const ends = p.tasks.map((t) => new Date(t.endDate + "T00:00:00").getTime());
-    let rangeStart = Math.min(...starts) - 3 * 86400000;
-    let rangeEnd = Math.max(...ends) + 3 * 86400000;
-    const totalMs = Math.max(rangeEnd - rangeStart, 86400000);
-    const pct = (ms) => ((ms - rangeStart) / totalMs) * 100;
-
-    const months = [];
-    const cursor = new Date(rangeStart);
-    cursor.setDate(1);
-    while (cursor.getTime() < rangeEnd) {
-      months.push(new Date(cursor));
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
-    // Lines alone (used in every row, for visual alignment) vs. lines+labels
-    // (header only). Each header label lives in a section spanning that
-    // month's whole date range with position:sticky inside it — so it stays
-    // pinned just past the task-name column for as long as that month is in
-    // view, then hands off to the next one as you scroll. A single
-    // fixed-position label would scroll behind the sticky task-name column
-    // and become permanently invisible at common scroll offsets.
-    const monthLinesOnly = months.map((m) => `<div class="gantt-month-line" style="left:${pct(m.getTime()).toFixed(2)}%"></div>`).join("");
-    const monthLinesWithLabels = months.map((m, i) => {
-      const left = pct(m.getTime());
-      const right = i + 1 < months.length ? pct(months[i + 1].getTime()) : 100;
-      const label = m.toLocaleDateString(undefined, { month: "short", year: "numeric" });
-      return `<div class="gantt-month-section" style="left:${left.toFixed(2)}%; width:${Math.max(right - left, 0).toFixed(2)}%;">
-        <div class="gantt-month-line"></div>
-        <span class="gantt-month-label">${label}</span>
-      </div>`;
-    }).join("");
-
-    // Week ticks for finer-grained reference when the whole schedule fits in
-    // a few months — otherwise they'd be too dense to read.
-    let weekLinesOnly = "";
-    if (totalMs <= 100 * 86400000) {
-      const weeks = [];
-      const wCursor = new Date(rangeStart);
-      wCursor.setHours(0, 0, 0, 0);
-      while (wCursor.getTime() < rangeEnd) {
-        weeks.push(new Date(wCursor));
-        wCursor.setDate(wCursor.getDate() + 7);
-      }
-      weekLinesOnly = weeks.map((w) => `<div class="gantt-week-line" style="left:${pct(w.getTime()).toFixed(2)}%"></div>`).join("");
-    }
-
-    const todayMs = new Date(todayStr() + "T00:00:00").getTime();
-    const todayInRange = todayMs >= rangeStart && todayMs <= rangeEnd;
-    const todayLine = todayInRange
-      ? `<div class="gantt-today-line" style="left:${pct(todayMs).toFixed(2)}%" title="Today"></div>` : "";
-    const todayLabel = todayInRange
-      ? `<div class="gantt-today-label" style="left:${pct(todayMs).toFixed(2)}%">Today</div>` : "";
-
-    const rows = p.tasks.map((t) => {
-      const left = pct(new Date(t.startDate + "T00:00:00").getTime());
-      const right = pct(new Date(t.endDate + "T00:00:00").getTime());
-      const width = Math.max(right - left, 0.8);
+    wrap.innerHTML = p.tasks.map((t) => {
       const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
-      const hasDelay = p.delays.some((d) => d.taskId === t.id);
       const actions = isEditor ? `
             <span class="task-actions">
               <button class="btn-icon" data-edit-task="${t.id}" title="Edit">&#9998;</button>
@@ -599,62 +548,103 @@
       const owner = t.responsible
         ? `<span class="avatar" style="background:${avatarColor(t.responsible)}" title="${escapeHtml(t.responsible)}">${initials(t.responsible)}</span><span class="task-owner">${escapeHtml(t.responsible)}</span>`
         : `<span class="task-owner unassigned">Unassigned</span>`;
+
+      const entries = taskSubEntries(p, t.id);
+      const entriesHtml = entries.map((e) => {
+        const del = isEditor ? `<button class="btn-icon" data-delete-${e.kind}="${e.id}" title="Delete">&times;</button>` : "";
+        const meta = e.kind === "delay"
+          ? `${fmtDate(e.date)}${e.days ? " &bull; " + e.days + " day(s)" : ""}`
+          : `${fmtDate(e.date)}${e.author ? " &bull; " + escapeHtml(e.author) : ""}`;
+        return `
+          <div class="task-sub-item ${e.kind}">
+            <div class="task-sub-item-head">
+              <span class="log-item-meta">${meta}</span>
+              ${del}
+            </div>
+            <div class="log-item-text">${escapeHtml(e.kind === "delay" ? e.reason : e.text)}</div>
+          </div>`;
+      }).join("");
+      const subActions = isEditor ? `
+          <div class="task-card-actions">
+            <button class="btn-chip" data-add-delay-task="${t.id}">+ Delay</button>
+            <button class="btn-chip" data-add-note-task="${t.id}">+ Note</button>
+          </div>` : "";
+
       return `
-        <div class="gantt-row">
-          <div class="gantt-label">
-            <div class="task-name-row">
+        <div class="task-card">
+          <div class="task-card-top">
+            <div class="task-card-title">
               <span class="status-dot" style="background:${color}"></span>
               <span class="task-name">${escapeHtml(t.name)}</span>
             </div>
-            <div class="task-owner-row">${owner}</div>
             ${actions}
           </div>
-          <div class="gantt-track">
-            <div class="gantt-months">${weekLinesOnly}${monthLinesOnly}${todayLine}</div>
-            <div class="gantt-bar ${hasDelay ? "delay-flag" : ""}" data-open-task="${t.id}" style="left:${left.toFixed(2)}%; width:${width.toFixed(2)}%; background:${color};" title="${escapeHtml(t.name)}: ${fmtDate(t.startDate)} → ${fmtDate(t.endDate)} (${t.progress || 0}%)">
-              <div class="gantt-bar-fill" style="width:${t.progress || 0}%"></div>
-              <span class="gantt-bar-text">${escapeHtml(t.name)}</span>
-              <span class="gantt-bar-pct">${t.progress || 0}%</span>
-            </div>
+          <div class="task-card-owner-row">${owner}</div>
+          <div class="task-card-progress">
+            <div class="progress-bar"><div class="progress-bar-fill" style="width:${t.progress || 0}%; background:${color};"></div></div>
+            <span class="task-card-pct">${t.progress || 0}%</span>
           </div>
+          <div class="task-card-dates">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)}</div>
+          ${entries.length || isEditor ? `<div class="task-card-sub">${entriesHtml}${subActions}</div>` : ""}
         </div>`;
     }).join("");
 
-    wrap.innerHTML = `<div class="gantt-grid">
-      <div class="gantt-row header-row">
-        <div class="gantt-label">Task / Responsible</div>
-        <div class="gantt-track" style="min-height:32px;">${weekLinesOnly}${monthLinesWithLabels}${todayLine}${todayLabel}</div>
-      </div>
-      ${rows}
-    </div>`;
-
-    if (isEditor) {
-      wrap.querySelectorAll("[data-edit-task], [data-open-task]").forEach((el) => {
-        el.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const id = el.dataset.editTask || el.dataset.openTask;
-          openTaskModal(p, p.tasks.find((t) => t.id === id));
-        });
+    wrap.querySelectorAll("[data-edit-task]").forEach((el) => {
+      el.addEventListener("click", () => {
+        openTaskModal(p, p.tasks.find((t) => t.id === el.dataset.editTask));
       });
-      wrap.querySelectorAll("[data-delete-task]").forEach((btn) => {
-        btn.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          if (!confirm("Delete this task?")) return;
-          const removedTask = p.tasks.find((t) => t.id === btn.dataset.deleteTask);
-          p.tasks = p.tasks.filter((t) => t.id !== btn.dataset.deleteTask);
-          const affectedDelays = p.delays.filter((d) => d.taskId === btn.dataset.deleteTask);
-          affectedDelays.forEach((d) => { d.taskId = null; });
-          const ok = await saveRemote();
-          if (!ok) {
-            p.tasks.push(removedTask);
-            affectedDelays.forEach((d) => { d.taskId = removedTask.id; });
-          }
-          renderGantt(p);
-          renderDelays(p);
-          renderList();
-        });
+    });
+    wrap.querySelectorAll("[data-delete-task]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Delete this task?")) return;
+        const removedTask = p.tasks.find((t) => t.id === btn.dataset.deleteTask);
+        p.tasks = p.tasks.filter((t) => t.id !== btn.dataset.deleteTask);
+        const affectedDelays = p.delays.filter((d) => d.taskId === btn.dataset.deleteTask);
+        affectedDelays.forEach((d) => { d.taskId = null; });
+        const affectedNotes = p.notes.filter((n) => n.taskId === btn.dataset.deleteTask);
+        affectedNotes.forEach((n) => { n.taskId = null; });
+        const ok = await saveRemote();
+        if (!ok) {
+          p.tasks.push(removedTask);
+          affectedDelays.forEach((d) => { d.taskId = removedTask.id; });
+          affectedNotes.forEach((n) => { n.taskId = removedTask.id; });
+        }
+        renderTaskList(p);
+        renderDelays(p);
+        renderNotes(p);
+        renderList();
       });
-    }
+    });
+    wrap.querySelectorAll("[data-add-delay-task]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        openDelayModal(p, p.tasks.find((t) => t.id === btn.dataset.addDelayTask));
+      });
+    });
+    wrap.querySelectorAll("[data-add-note-task]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        openNoteModal(p, p.tasks.find((t) => t.id === btn.dataset.addNoteTask));
+      });
+    });
+    wrap.querySelectorAll("[data-delete-delay]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const removed = p.delays.find((d) => d.id === btn.dataset.deleteDelay);
+        p.delays = p.delays.filter((d) => d.id !== btn.dataset.deleteDelay);
+        const ok = await saveRemote();
+        if (!ok) p.delays.push(removed);
+        renderTaskList(p);
+        renderDelays(p);
+      });
+    });
+    wrap.querySelectorAll("[data-delete-note]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const removed = p.notes.find((n) => n.id === btn.dataset.deleteNote);
+        p.notes = p.notes.filter((n) => n.id !== btn.dataset.deleteNote);
+        const ok = await saveRemote();
+        if (!ok) p.notes.push(removed);
+        renderTaskList(p);
+        renderNotes(p);
+      });
+    });
   }
 
   document.getElementById("addTaskBtn").addEventListener("click", () => openTaskModal(getProject(currentProjectId)));
@@ -684,7 +674,7 @@
           const ok = await saveRemote();
           if (!ok) p.delays.push(removed);
           renderDelays(p);
-          renderGantt(p);
+          renderTaskList(p);
         });
       });
     }
@@ -697,11 +687,12 @@
     if (!p.notes.length) { list.innerHTML = `<div class="empty-state">No notes yet.</div>`; return; }
     const sorted = [...p.notes].sort((a, b) => b.date.localeCompare(a.date));
     list.innerHTML = sorted.map((n) => {
+      const task = p.tasks.find((t) => t.id === n.taskId);
       const del = isEditor ? `<button class="btn-icon" data-delete-note="${n.id}" title="Delete">&times;</button>` : "";
       return `
       <div class="log-item note">
         <div class="log-item-head">
-          <span class="log-item-meta">${fmtDate(n.date)}${n.author ? " &bull; " + escapeHtml(n.author) : ""}</span>
+          <span class="log-item-meta">${fmtDate(n.date)}${task ? " &bull; " + escapeHtml(task.name) : ""}${n.author ? " &bull; " + escapeHtml(n.author) : ""}</span>
           ${del}
         </div>
         <div class="log-item-text">${escapeHtml(n.text)}</div>
@@ -715,6 +706,7 @@
           const ok = await saveRemote();
           if (!ok) p.notes.push(removed);
           renderNotes(p);
+          renderTaskList(p);
         });
       });
     }
@@ -833,13 +825,13 @@
         else project.tasks.pop();
         return false;
       }
-      renderGantt(project);
+      renderTaskList(project);
       renderList();
     });
     document.getElementById("f-status").value = isEdit ? task.status : "not_started";
   }
 
-  function openDelayModal(project) {
+  function openDelayModal(project, presetTask) {
     const taskOptions = project.tasks.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
     const body = `
       <div class="modal-field"><label>Date</label><input type="date" id="f-date" value="${todayStr()}"></div>
@@ -863,13 +855,18 @@
       const ok = await saveRemote();
       if (!ok) { project.delays.pop(); return false; }
       renderDelays(project);
-      renderGantt(project);
+      renderTaskList(project);
     });
+    if (presetTask) document.getElementById("f-task").value = presetTask.id;
   }
 
-  function openNoteModal(project) {
+  function openNoteModal(project, presetTask) {
+    const taskOptions = project.tasks.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
     const body = `
       <div class="modal-field"><label>Date</label><input type="date" id="f-date" value="${todayStr()}"></div>
+      <div class="modal-field"><label>Related task (optional)</label>
+        <select id="f-task"><option value="">&mdash; None &mdash;</option>${taskOptions}</select>
+      </div>
       <div class="modal-field"><label>Author</label><input type="text" id="f-author" placeholder="Your name"></div>
       <div class="modal-field"><label>Note</label><textarea id="f-text" placeholder="What's the update?"></textarea></div>
     `;
@@ -879,6 +876,7 @@
       const entry = {
         id: uid(),
         date: document.getElementById("f-date").value || todayStr(),
+        taskId: document.getElementById("f-task").value || null,
         author: document.getElementById("f-author").value.trim(),
         text,
       };
@@ -886,7 +884,9 @@
       const ok = await saveRemote();
       if (!ok) { project.notes.pop(); return false; }
       renderNotes(project);
+      renderTaskList(project);
     });
+    if (presetTask) document.getElementById("f-task").value = presetTask.id;
   }
 
   // ---------- init ----------
