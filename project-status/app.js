@@ -216,6 +216,123 @@
 
   document.getElementById("newProjectBtn").addEventListener("click", () => openProjectModal());
 
+  // ---------- MS Project XML import ----------
+  // Reads only direct children by local name — namespace-agnostic (MSP XML
+  // typically declares xmlns="http://schemas.microsoft.com/project"), and
+  // avoids accidentally matching a same-named descendant deeper in the tree.
+  function directChildText(el, tag) {
+    for (let i = 0; i < el.children.length; i++) {
+      if (el.children[i].localName === tag) return (el.children[i].textContent || "").trim();
+    }
+    return "";
+  }
+
+  function parseMsProjectXml(xmlText) {
+    const dom = new DOMParser().parseFromString(xmlText, "application/xml");
+    if (dom.getElementsByTagName("parsererror").length) {
+      throw new Error("That's not valid XML — make sure you exported from Microsoft Project using Save As > XML.");
+    }
+
+    const root = dom.documentElement;
+    const projectName = directChildText(root, "Title") || directChildText(root, "Name") || "Imported Project";
+
+    const tasksContainer = Array.from(root.children).find((c) => c.localName === "Tasks");
+    const resourcesContainer = Array.from(root.children).find((c) => c.localName === "Resources");
+    const assignmentsContainer = Array.from(root.children).find((c) => c.localName === "Assignments");
+
+    const resources = {};
+    if (resourcesContainer) {
+      Array.from(resourcesContainer.children).forEach((r) => {
+        if (r.localName !== "Resource") return;
+        resources[directChildText(r, "UID")] = directChildText(r, "Name");
+      });
+    }
+
+    const taskResources = {};
+    if (assignmentsContainer) {
+      Array.from(assignmentsContainer.children).forEach((a) => {
+        if (a.localName !== "Assignment") return;
+        const taskUid = directChildText(a, "TaskUID");
+        const resName = resources[directChildText(a, "ResourceUID")];
+        if (!resName) return;
+        (taskResources[taskUid] = taskResources[taskUid] || []).push(resName);
+      });
+    }
+
+    const tasks = [];
+    if (tasksContainer) {
+      Array.from(tasksContainer.children).forEach((t) => {
+        if (t.localName !== "Task") return;
+        const uid = directChildText(t, "UID");
+        if (!uid || uid === "0") return; // UID 0 is the whole-project rollup, not a real task
+        if (directChildText(t, "Summary") === "1") return; // skip summary/rollup rows — they duplicate their children's date range
+
+        const name = directChildText(t, "Name");
+        const start = directChildText(t, "Start");
+        const finish = directChildText(t, "Finish");
+        if (!name || !start || !finish) return;
+        const startDate = start.slice(0, 10);
+        const endDate = finish.slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return;
+
+        const pct = Math.max(0, Math.min(100, Math.round(num(directChildText(t, "PercentComplete")))));
+        const status = pct >= 100 ? "complete" : pct > 0 ? "in_progress" : "not_started";
+        const responsible = (taskResources[uid] || []).join(", ");
+
+        tasks.push({ name, startDate, endDate, responsible, status, progress: pct });
+      });
+    }
+
+    return { projectName, tasks };
+  }
+
+  function openImportConfirmModal(parsed) {
+    const body = `
+      <div class="modal-field"><label>Project name</label><input type="text" id="f-name" value="${escapeHtml(parsed.projectName)}"></div>
+      <div class="modal-field"><label>Client</label><input type="text" id="f-client" value=""></div>
+      <p style="font-size:0.85rem;color:var(--text-dim);margin:-6px 0 12px;">Found ${parsed.tasks.length} task${parsed.tasks.length === 1 ? "" : "s"} to import (summary/rollup rows are skipped).</p>
+    `;
+    openModal("Import from MS Project", body, async () => {
+      const name = document.getElementById("f-name").value.trim();
+      if (!name) { alert("Project name is required."); return false; }
+      const dates = parsed.tasks.map((t) => [t.startDate, t.endDate]).flat();
+      const p = {
+        id: uid(), name, client: document.getElementById("f-client").value.trim(),
+        status: "on_track",
+        startDate: dates.length ? dates.reduce((a, b) => (b < a ? b : a)) : todayStr(),
+        endDate: dates.length ? dates.reduce((a, b) => (b > a ? b : a)) : "",
+        description: `Imported from Microsoft Project (${parsed.tasks.length} task${parsed.tasks.length === 1 ? "" : "s"}).`,
+        tasks: parsed.tasks.map((t) => ({ id: uid(), ...t })),
+        delays: [], notes: [],
+      };
+      state.projects.push(p);
+      const ok = await saveRemote();
+      if (!ok) { state.projects.pop(); return false; }
+      renderList();
+      location.hash = "project/" + p.id;
+    });
+  }
+
+  document.getElementById("importMspBtn").addEventListener("click", () => {
+    document.getElementById("importFileInput").click();
+  });
+  document.getElementById("importFileInput").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = parseMsProjectXml(text);
+      if (!parsed.tasks.length) {
+        alert("No importable tasks found in that file. Summary rows are skipped automatically, so this can happen if every row is a summary task.");
+        return;
+      }
+      openImportConfirmModal(parsed);
+    } catch (err) {
+      alert("Couldn't import that file: " + err.message);
+    }
+  });
+
   // ---------- detail view ----------
   function renderDetail(p) {
     document.getElementById("detailName").textContent = p.name;
