@@ -216,12 +216,15 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 /* ---------- task list ---------- */
 .task-list { display: flex; flex-direction: column; gap: 14px; }
 .task-card {
+  position: relative;
+  overflow: hidden;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 16px 20px;
+  padding: 16px 20px 16px 26px;
   box-shadow: 0 2px 8px rgba(16, 24, 40, 0.07);
 }
+.task-card-stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; }
 .task-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .task-card-title { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .task-card-title .status-dot { margin-top: 6px; }
@@ -262,6 +265,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .task-card-progress .progress-bar-fill { border-radius: 999px; background: #00c875; transition: width 0.15s ease; }
 .task-card-pct { font-size: 0.78rem; font-weight: 700; color: var(--text-dim); min-width: 34px; text-align: right; }
 .task-card-dates { margin-top: 6px; font-size: 0.78rem; color: var(--text-dim); }
+.task-card-dates.is-today { font-weight: 700; color: var(--text); }
 .task-card-links { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; font-size: 0.76rem; color: var(--text-dim); }
 
 .task-card-sub { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }

@@ -591,8 +591,10 @@
       return;
     }
 
+    const todayMs = new Date(todayStr() + "T00:00:00").getTime();
     wrap.innerHTML = p.tasks.map((t) => {
       const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
+      const isToday = todayMs >= new Date(t.startDate + "T00:00:00").getTime() && todayMs <= new Date(t.endDate + "T00:00:00").getTime();
       const actions = isEditor ? `
             <span class="task-actions">
               <button class="btn-icon" data-edit-task="${t.id}" title="Edit">&#9998;</button>
@@ -633,6 +635,7 @@
 
       return `
         <div class="task-card">
+          <div class="task-card-stripe" style="background:${color}"></div>
           <div class="task-card-top">
             <div class="task-card-title">
               <span class="status-dot" style="background:${color}"></span>
@@ -646,7 +649,7 @@
             <div class="progress-bar"><div class="progress-bar-fill" style="width:${t.progress || 0}%;"></div></div>
             <span class="task-card-pct">${t.progress || 0}%</span>
           </div>
-          <div class="task-card-dates">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)} &bull; ${taskDuration(t)} day${taskDuration(t) === 1 ? "" : "s"}</div>
+          <div class="task-card-dates${isToday ? " is-today" : ""}">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)} &bull; ${taskDuration(t)} day${taskDuration(t) === 1 ? "" : "s"}</div>
           ${linksHtml}
           ${entries.length || isEditor ? `<div class="task-card-sub">${entriesHtml}${subActions}</div>` : ""}
         </div>`;
