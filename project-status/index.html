@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Status</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="app-header">
+  <a href="../" class="back-to-hub" title="Back to RetubeCo Tools">&larr; Tools</a>
+  <img src="../truck-calculator/logo.png" alt="RetubeCo, Inc." class="app-logo">
+  <div class="app-header-text">
+    <h1>Project Status</h1>
+    <p class="subtitle">Schedules, delays, notes, and ownership &mdash; one board per project.</p>
+  </div>
+  <div class="powered-by">
+    <span class="powered-by-label">Powered by</span>
+    <img src="../truck-calculator/erogn-logo.png" alt="Erogn Tools" class="erogn-logo">
+  </div>
+</header>
+
+<main id="app">
+
+  <!-- ===================== PROJECT LIST VIEW ===================== -->
+  <section id="listView" class="view">
+    <div class="panel-header-row">
+      <h2>Projects</h2>
+      <button class="btn-primary" id="newProjectBtn">+ New Project</button>
+    </div>
+    <div id="projectGrid" class="project-grid"></div>
+  </section>
+
+  <!-- ===================== PROJECT DETAIL VIEW ===================== -->
+  <section id="detailView" class="view hidden">
+    <div class="detail-header">
+      <button class="btn-link" id="backToListBtn">&larr; All Projects</button>
+      <div class="detail-title-row">
+        <div>
+          <h2 id="detailName">Project Name</h2>
+          <p id="detailClient" class="detail-client"></p>
+        </div>
+        <div class="detail-actions">
+          <select id="detailStatus" class="status-select"></select>
+          <button class="btn-secondary" id="editProjectBtn">Edit Project</button>
+          <button class="btn-danger" id="deleteProjectBtn">Delete</button>
+        </div>
+      </div>
+      <p id="detailDescription" class="detail-description"></p>
+    </div>
+
+    <nav class="tab-bar">
+      <button class="tab-btn active" data-tab="gantt">Schedule</button>
+      <button class="tab-btn" data-tab="delays">Delays</button>
+      <button class="tab-btn" data-tab="notes">Notes</button>
+    </nav>
+
+    <!-- Schedule / Gantt tab -->
+    <div class="tab-panel" data-tab-panel="gantt">
+      <div class="panel-header-row">
+        <h3>Schedule</h3>
+        <button class="btn-secondary" id="addTaskBtn">+ Add Task</button>
+      </div>
+      <div id="ganttWrap" class="gantt-wrap"></div>
+    </div>
+
+    <!-- Delays tab -->
+    <div class="tab-panel hidden" data-tab-panel="delays">
+      <div class="panel-header-row">
+        <h3>Delays</h3>
+        <button class="btn-secondary" id="addDelayBtn">+ Log Delay</button>
+      </div>
+      <div id="delaysList" class="log-list"></div>
+    </div>
+
+    <!-- Notes tab -->
+    <div class="tab-panel hidden" data-tab-panel="notes">
+      <div class="panel-header-row">
+        <h3>Notes</h3>
+        <button class="btn-secondary" id="addNoteBtn">+ Add Note</button>
+      </div>
+      <div id="notesList" class="log-list"></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===================== MODAL ===================== -->
+<div id="modalBackdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <h3 id="modalTitle">Title</h3>
+    <div id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="btn-link" id="modalCancelBtn">Cancel</button>
+      <button class="btn-primary" id="modalSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <p>Data is stored locally in this browser (no server/account) &mdash; export or share by copying data between devices isn't supported yet.</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
