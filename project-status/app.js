@@ -246,8 +246,9 @@
 
   // ---------- list view ----------
   function projectProgress(p) {
-    if (!p.tasks.length) return 0;
-    return Math.round(p.tasks.reduce((a, t) => a + (t.progress || 0), 0) / p.tasks.length);
+    const counted = p.tasks.filter((t) => !t.noScheduleImpact);
+    if (!counted.length) return 0;
+    return Math.round(counted.reduce((a, t) => a + (t.progress || 0), 0) / counted.length);
   }
 
   function renderList() {
@@ -636,6 +637,7 @@
             <div class="task-card-title">
               <span class="status-dot" style="background:${color}"></span>
               <span class="task-name">${escapeHtml(t.name)}</span>
+              ${t.noScheduleImpact ? `<span class="no-impact-badge" title="Excluded from overall % complete">No impact</span>` : ""}
             </div>
             ${actions}
           </div>
@@ -883,6 +885,7 @@
         </div>
         <div class="modal-field"><label>Progress (%)</label><input type="number" id="f-progress" min="0" max="100" value="${task?.progress ?? 0}"></div>
       </div>
+      <label class="checkbox-row"><input type="checkbox" id="f-no-impact" ${task?.noScheduleImpact ? "checked" : ""}> No impact on schedule <span class="modal-label-hint">(excluded from overall % complete)</span></label>
     `;
     openModal(isEdit ? "Edit Task" : "Add Task", body, async () => {
       const name = document.getElementById("f-name").value.trim();
@@ -900,6 +903,7 @@
         responsible: document.getElementById("f-owner").value.trim(),
         status: document.getElementById("f-status").value,
         progress: Math.max(0, Math.min(100, Math.round(num(document.getElementById("f-progress").value)))),
+        noScheduleImpact: document.getElementById("f-no-impact").checked,
       };
       let prev = null;
       let addedTask = null;
