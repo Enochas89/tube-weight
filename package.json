@@ -1,0 +1,8 @@
+{
+  "name": "tube-weight-site",
+  "private": true,
+  "description": "RetubeCo tools: truck loading calculator, project status tracker.",
+  "dependencies": {
+    "@vercel/kv": "latest"
+  }
+}

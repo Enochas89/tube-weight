@@ -14,11 +14,17 @@
     <h1>Project Status</h1>
     <p class="subtitle">Schedules, delays, notes, and ownership &mdash; one board per project.</p>
   </div>
+  <div class="edit-auth">
+    <button id="signInBtn" class="btn-secondary">Sign in to edit</button>
+    <span id="editorBadge" class="editor-badge hidden">Editing <button id="signOutBtn" class="btn-link">Sign out</button></span>
+  </div>
   <div class="powered-by">
     <span class="powered-by-label">Powered by</span>
     <img src="../truck-calculator/erogn-logo.png" alt="Erogn Tools" class="erogn-logo">
   </div>
 </header>
+
+<div id="statusToast" class="status-toast hidden"></div>
 
 <main id="app">
 
@@ -26,7 +32,7 @@
   <section id="listView" class="view">
     <div class="panel-header-row">
       <h2>Projects</h2>
-      <button class="btn-primary" id="newProjectBtn">+ New Project</button>
+      <button class="btn-primary editor-only hidden" id="newProjectBtn">+ New Project</button>
     </div>
     <div id="projectGrid" class="project-grid"></div>
   </section>
@@ -41,9 +47,10 @@
           <p id="detailClient" class="detail-client"></p>
         </div>
         <div class="detail-actions">
-          <select id="detailStatus" class="status-select"></select>
-          <button class="btn-secondary" id="editProjectBtn">Edit Project</button>
-          <button class="btn-danger" id="deleteProjectBtn">Delete</button>
+          <select id="detailStatus" class="status-select hidden"></select>
+          <span id="detailStatusBadge" class="status-badge hidden"></span>
+          <button class="btn-secondary editor-only hidden" id="editProjectBtn">Edit Project</button>
+          <button class="btn-danger editor-only hidden" id="deleteProjectBtn">Delete</button>
         </div>
       </div>
       <p id="detailDescription" class="detail-description"></p>
@@ -59,7 +66,7 @@
     <div class="tab-panel" data-tab-panel="gantt">
       <div class="panel-header-row">
         <h3>Schedule</h3>
-        <button class="btn-secondary" id="addTaskBtn">+ Add Task</button>
+        <button class="btn-secondary editor-only hidden" id="addTaskBtn">+ Add Task</button>
       </div>
       <div id="ganttWrap" class="gantt-wrap"></div>
     </div>
@@ -68,7 +75,7 @@
     <div class="tab-panel hidden" data-tab-panel="delays">
       <div class="panel-header-row">
         <h3>Delays</h3>
-        <button class="btn-secondary" id="addDelayBtn">+ Log Delay</button>
+        <button class="btn-secondary editor-only hidden" id="addDelayBtn">+ Log Delay</button>
       </div>
       <div id="delaysList" class="log-list"></div>
     </div>
@@ -77,7 +84,7 @@
     <div class="tab-panel hidden" data-tab-panel="notes">
       <div class="panel-header-row">
         <h3>Notes</h3>
-        <button class="btn-secondary" id="addNoteBtn">+ Add Note</button>
+        <button class="btn-secondary editor-only hidden" id="addNoteBtn">+ Add Note</button>
       </div>
       <div id="notesList" class="log-list"></div>
     </div>

@@ -56,9 +56,42 @@ body {
   padding: 6px 10px;
 }
 .back-to-hub:hover { color: white; border-color: white; }
-.powered-by { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+.powered-by { flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
 .powered-by-label { font-size: 0.7rem; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
 .erogn-logo { height: 28px; width: auto; border-radius: 3px; }
+
+.edit-auth { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; }
+.editor-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(244, 180, 0, 0.15);
+  color: var(--brand-yellow);
+  border: 1px solid rgba(244, 180, 0, 0.4);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.editor-badge .btn-link { color: rgba(255, 255, 255, 0.7); font-weight: 400; text-decoration: underline; }
+.editor-badge .btn-link:hover { color: white; }
+
+.status-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  background: var(--brand-black);
+  color: white;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.status-toast.info { background: var(--accent); }
+.status-toast.success { background: var(--status-on_track); }
+.status-toast.error { background: var(--status-delayed); }
 
 main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .view.hidden { display: none; }
@@ -261,6 +294,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   box-shadow: 0 20px 50px rgba(0,0,0,0.3);
 }
 .modal h3 { margin: 0 0 14px; font-size: 1.05rem; }
+.modal-error { color: var(--status-delayed); font-size: 0.82rem; margin: -6px 0 12px; }
 .modal-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .modal-field label { font-size: 0.8rem; font-weight: 600; color: var(--text-dim); }
 .modal-field input, .modal-field select, .modal-field textarea {

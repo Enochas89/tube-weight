@@ -1,12 +1,14 @@
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "projectStatus.v1";
+  const API_URL = "/api/data";
+  const AUTH_KEY = "projectStatus.editPassword";
   const STATUS_LABELS = { on_track: "On Track", at_risk: "At Risk", delayed: "Delayed", complete: "Complete", on_hold: "On Hold" };
   const TASK_STATUS_COLOR = { not_started: "#8a97a8", in_progress: "#1f5fa8", delayed: "#b3261e", complete: "#1a7f37" };
 
   let state = { projects: [] };
   let currentProjectId = null;
+  let isEditor = false;
 
   // ---------- utility ----------
   function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
@@ -25,42 +27,114 @@
   }
   function getProject(id) { return state.projects.find((p) => p.id === id); }
 
-  // ---------- persistence ----------
-  function save() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore quota errors */ }
+  // ---------- status toast ----------
+  const toastEl = document.getElementById("statusToast");
+  let toastTimer = null;
+  function showStatus(msg, type, sticky) {
+    clearTimeout(toastTimer);
+    toastEl.textContent = msg;
+    toastEl.className = "status-toast " + type;
+    if (!sticky) {
+      toastTimer = setTimeout(() => toastEl.classList.add("hidden"), 2200);
+    }
   }
-  function load() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (raw && Array.isArray(raw.projects)) state = raw;
-    } catch (e) { /* ignore */ }
+  function hideStatus() { toastEl.classList.add("hidden"); }
 
-    if (state.projects.length === 0) {
-      seedExample();
+  // ---------- auth ----------
+  function getStoredPassword() { return localStorage.getItem(AUTH_KEY) || ""; }
+  function setStoredPassword(pw) {
+    if (pw) localStorage.setItem(AUTH_KEY, pw);
+    else localStorage.removeItem(AUTH_KEY);
+  }
+
+  async function verifyPassword(pw) {
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw, data: null }),
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
     }
   }
 
-  function seedExample() {
-    const start = todayStr();
-    const plus = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
-    state.projects.push({
-      id: uid(),
-      name: "Example Retube Job",
-      client: "Sample Client, Inc.",
-      status: "on_track",
-      startDate: start,
-      endDate: plus(30),
-      description: "A sample project so you can see how the schedule, delays, and notes work. Delete it whenever.",
-      tasks: [
-        { id: uid(), name: "Site survey & tube count", startDate: plus(0), endDate: plus(4), responsible: "J. Alvarez", status: "complete", progress: 100 },
-        { id: uid(), name: "Order tubes & materials", startDate: plus(3), endDate: plus(10), responsible: "M. Chen", status: "in_progress", progress: 60 },
-        { id: uid(), name: "Crate & ship", startDate: plus(9), endDate: plus(14), responsible: "M. Chen", status: "not_started", progress: 0 },
-        { id: uid(), name: "Retube on site", startDate: plus(14), endDate: plus(26), responsible: "Field Crew", status: "not_started", progress: 0 },
-        { id: uid(), name: "Final inspection", startDate: plus(26), endDate: plus(30), responsible: "J. Alvarez", status: "not_started", progress: 0 },
-      ],
-      delays: [],
-      notes: [{ id: uid(), date: start, author: "System", text: "Project created." }],
+  function updateEditorUI() {
+    document.getElementById("signInBtn").classList.toggle("hidden", isEditor);
+    document.getElementById("editorBadge").classList.toggle("hidden", !isEditor);
+    document.querySelectorAll(".editor-only").forEach((el) => el.classList.toggle("hidden", !isEditor));
+    if (currentProjectId) renderDetail(getProject(currentProjectId));
+    else renderList();
+  }
+
+  document.getElementById("signInBtn").addEventListener("click", () => {
+    const body = `
+      <div class="modal-field"><label>Edit password</label><input type="password" id="f-password" autocomplete="off"></div>
+      <p class="modal-error hidden" id="f-password-error">Incorrect password.</p>
+    `;
+    openModal("Sign In to Edit", body, async () => {
+      const pw = document.getElementById("f-password").value;
+      const ok = await verifyPassword(pw);
+      if (!ok) {
+        document.getElementById("f-password-error").classList.remove("hidden");
+        return false;
+      }
+      setStoredPassword(pw);
+      isEditor = true;
+      updateEditorUI();
+      showStatus("Signed in", "success");
     });
+  });
+
+  document.getElementById("signOutBtn").addEventListener("click", () => {
+    setStoredPassword("");
+    isEditor = false;
+    updateEditorUI();
+    showStatus("Signed out", "info");
+  });
+
+  // ---------- persistence ----------
+  async function loadRemote() {
+    showStatus("Loading…", "info", true);
+    try {
+      const res = await fetch(API_URL);
+      if (!res.ok) throw new Error("load failed");
+      const data = await res.json();
+      state = (data && Array.isArray(data.projects)) ? data : { projects: [] };
+      hideStatus();
+    } catch (e) {
+      state = { projects: [] };
+      showStatus("Could not load data — check your connection and reload the page.", "error", true);
+    }
+  }
+
+  async function saveRemote() {
+    showStatus("Saving…", "info", true);
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: getStoredPassword(), data: state }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        isEditor = false;
+        setStoredPassword("");
+        updateEditorUI();
+        showStatus("Your edit session expired — sign in again to keep editing.", "error", true);
+        return false;
+      }
+      if (!res.ok) {
+        showStatus(result.error || "Save failed.", "error", true);
+        return false;
+      }
+      showStatus("Saved", "success");
+      return true;
+    } catch (e) {
+      showStatus("Save failed — check your connection and try again.", "error", true);
+      return false;
+    }
   }
 
   // ---------- routing ----------
@@ -72,6 +146,7 @@
       if (!p) { location.hash = ""; return; }
       showDetail(p);
     } else {
+      currentProjectId = null;
       showList();
     }
   }
@@ -97,7 +172,7 @@
   function renderList() {
     const grid = document.getElementById("projectGrid");
     if (state.projects.length === 0) {
-      grid.innerHTML = `<div class="empty-state">No projects yet. Click "+ New Project" to add one.</div>`;
+      grid.innerHTML = `<div class="empty-state">No projects yet.${isEditor ? ' Click "+ New Project" to add one.' : " Check back once the project manager has added one."}</div>`;
       return;
     }
     grid.innerHTML = state.projects.map((p) => {
@@ -133,14 +208,27 @@
     document.getElementById("detailDescription").textContent = p.description || "";
 
     const statusSelect = document.getElementById("detailStatus");
-    statusSelect.innerHTML = Object.entries(STATUS_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
-    statusSelect.value = p.status;
-    statusSelect.className = "status-select " + p.status;
-    statusSelect.onchange = () => {
-      p.status = statusSelect.value;
+    const statusBadgeReadonly = document.getElementById("detailStatusBadge");
+    if (isEditor) {
+      statusSelect.classList.remove("hidden");
+      statusBadgeReadonly.classList.add("hidden");
+      statusSelect.innerHTML = Object.entries(STATUS_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+      statusSelect.value = p.status;
       statusSelect.className = "status-select " + p.status;
-      save();
-    };
+      statusSelect.onchange = async () => {
+        const prev = p.status;
+        p.status = statusSelect.value;
+        statusSelect.className = "status-select " + p.status;
+        const ok = await saveRemote();
+        if (!ok) { p.status = prev; statusSelect.value = prev; statusSelect.className = "status-select " + prev; }
+        renderList();
+      };
+    } else {
+      statusSelect.classList.add("hidden");
+      statusBadgeReadonly.classList.remove("hidden");
+      statusBadgeReadonly.textContent = STATUS_LABELS[p.status];
+      statusBadgeReadonly.className = "status-badge " + p.status;
+    }
 
     renderGantt(p);
     renderDelays(p);
@@ -149,10 +237,12 @@
 
   document.getElementById("backToListBtn").addEventListener("click", () => { location.hash = ""; });
   document.getElementById("editProjectBtn").addEventListener("click", () => openProjectModal(getProject(currentProjectId)));
-  document.getElementById("deleteProjectBtn").addEventListener("click", () => {
+  document.getElementById("deleteProjectBtn").addEventListener("click", async () => {
     if (!confirm("Delete this project? This can't be undone.")) return;
+    const removed = state.projects.find((p) => p.id === currentProjectId);
     state.projects = state.projects.filter((p) => p.id !== currentProjectId);
-    save();
+    const ok = await saveRemote();
+    if (!ok) { state.projects.push(removed); return; }
     location.hash = "";
   });
 
@@ -171,7 +261,7 @@
   function renderGantt(p) {
     const wrap = document.getElementById("ganttWrap");
     if (!p.tasks.length) {
-      wrap.innerHTML = `<div class="gantt-empty">No tasks yet. Click "+ Add Task" to build the schedule.</div>`;
+      wrap.innerHTML = `<div class="gantt-empty">No tasks yet.${isEditor ? ' Click "+ Add Task" to build the schedule.' : ""}</div>`;
       return;
     }
 
@@ -205,15 +295,17 @@
       const width = Math.max(right - left, 0.8);
       const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
       const hasDelay = p.delays.some((d) => d.taskId === t.id);
+      const actions = isEditor ? `
+            <span class="task-actions">
+              <button class="btn-icon" data-edit-task="${t.id}" title="Edit">&#9998;</button>
+              <button class="btn-icon" data-delete-task="${t.id}" title="Delete">&times;</button>
+            </span>` : "";
       return `
         <div class="gantt-row">
           <div class="gantt-label">
             <span class="task-name">${escapeHtml(t.name)}</span>
             <span class="task-owner">${escapeHtml(t.responsible || "Unassigned")}</span>
-            <span class="task-actions">
-              <button class="btn-icon" data-edit-task="${t.id}" title="Edit">&#9998;</button>
-              <button class="btn-icon" data-delete-task="${t.id}" title="Delete">&times;</button>
-            </span>
+            ${actions}
           </div>
           <div class="gantt-track">
             <div class="gantt-months">${monthLinesHtml}${todayLine}</div>
@@ -233,25 +325,33 @@
       ${rows}
     </div>`;
 
-    wrap.querySelectorAll("[data-edit-task], [data-open-task]").forEach((el) => {
-      el.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const id = el.dataset.editTask || el.dataset.openTask;
-        openTaskModal(p, p.tasks.find((t) => t.id === id));
+    if (isEditor) {
+      wrap.querySelectorAll("[data-edit-task], [data-open-task]").forEach((el) => {
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const id = el.dataset.editTask || el.dataset.openTask;
+          openTaskModal(p, p.tasks.find((t) => t.id === id));
+        });
       });
-    });
-    wrap.querySelectorAll("[data-delete-task]").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (!confirm("Delete this task?")) return;
-        p.tasks = p.tasks.filter((t) => t.id !== btn.dataset.deleteTask);
-        p.delays.forEach((d) => { if (d.taskId === btn.dataset.deleteTask) d.taskId = null; });
-        save();
-        renderGantt(p);
-        renderDelays(p);
-        renderList();
+      wrap.querySelectorAll("[data-delete-task]").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!confirm("Delete this task?")) return;
+          const removedTask = p.tasks.find((t) => t.id === btn.dataset.deleteTask);
+          p.tasks = p.tasks.filter((t) => t.id !== btn.dataset.deleteTask);
+          const affectedDelays = p.delays.filter((d) => d.taskId === btn.dataset.deleteTask);
+          affectedDelays.forEach((d) => { d.taskId = null; });
+          const ok = await saveRemote();
+          if (!ok) {
+            p.tasks.push(removedTask);
+            affectedDelays.forEach((d) => { d.taskId = removedTask.id; });
+          }
+          renderGantt(p);
+          renderDelays(p);
+          renderList();
+        });
       });
-    });
+    }
   }
 
   document.getElementById("addTaskBtn").addEventListener("click", () => openTaskModal(getProject(currentProjectId)));
@@ -263,23 +363,28 @@
     const sorted = [...p.delays].sort((a, b) => b.date.localeCompare(a.date));
     list.innerHTML = sorted.map((d) => {
       const task = p.tasks.find((t) => t.id === d.taskId);
+      const del = isEditor ? `<button class="btn-icon" data-delete-delay="${d.id}" title="Delete">&times;</button>` : "";
       return `
         <div class="log-item delay">
           <div class="log-item-head">
             <span class="log-item-meta">${fmtDate(d.date)}${task ? " &bull; " + escapeHtml(task.name) : ""}${d.days ? " &bull; " + d.days + " day(s)" : ""}</span>
-            <button class="btn-icon" data-delete-delay="${d.id}" title="Delete">&times;</button>
+            ${del}
           </div>
           <div class="log-item-text">${escapeHtml(d.reason)}</div>
         </div>`;
     }).join("");
-    list.querySelectorAll("[data-delete-delay]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        p.delays = p.delays.filter((d) => d.id !== btn.dataset.deleteDelay);
-        save();
-        renderDelays(p);
-        renderGantt(p);
+    if (isEditor) {
+      list.querySelectorAll("[data-delete-delay]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const removed = p.delays.find((d) => d.id === btn.dataset.deleteDelay);
+          p.delays = p.delays.filter((d) => d.id !== btn.dataset.deleteDelay);
+          const ok = await saveRemote();
+          if (!ok) p.delays.push(removed);
+          renderDelays(p);
+          renderGantt(p);
+        });
       });
-    });
+    }
   }
   document.getElementById("addDelayBtn").addEventListener("click", () => openDelayModal(getProject(currentProjectId)));
 
@@ -288,21 +393,28 @@
     const list = document.getElementById("notesList");
     if (!p.notes.length) { list.innerHTML = `<div class="empty-state">No notes yet.</div>`; return; }
     const sorted = [...p.notes].sort((a, b) => b.date.localeCompare(a.date));
-    list.innerHTML = sorted.map((n) => `
+    list.innerHTML = sorted.map((n) => {
+      const del = isEditor ? `<button class="btn-icon" data-delete-note="${n.id}" title="Delete">&times;</button>` : "";
+      return `
       <div class="log-item note">
         <div class="log-item-head">
           <span class="log-item-meta">${fmtDate(n.date)}${n.author ? " &bull; " + escapeHtml(n.author) : ""}</span>
-          <button class="btn-icon" data-delete-note="${n.id}" title="Delete">&times;</button>
+          ${del}
         </div>
         <div class="log-item-text">${escapeHtml(n.text)}</div>
-      </div>`).join("");
-    list.querySelectorAll("[data-delete-note]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        p.notes = p.notes.filter((n) => n.id !== btn.dataset.deleteNote);
-        save();
-        renderNotes(p);
+      </div>`;
+    }).join("");
+    if (isEditor) {
+      list.querySelectorAll("[data-delete-note]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const removed = p.notes.find((n) => n.id === btn.dataset.deleteNote);
+          p.notes = p.notes.filter((n) => n.id !== btn.dataset.deleteNote);
+          const ok = await saveRemote();
+          if (!ok) p.notes.push(removed);
+          renderNotes(p);
+        });
       });
-    });
+    }
   }
   document.getElementById("addNoteBtn").addEventListener("click", () => openNoteModal(getProject(currentProjectId)));
 
@@ -321,7 +433,16 @@
     modalTitle.textContent = title;
     modalBody.innerHTML = bodyHtml;
     modalBackdrop.classList.remove("hidden");
-    modalSaveBtn.onclick = () => { if (onSave() !== false) closeModal(); };
+    modalSaveBtn.onclick = async () => {
+      modalSaveBtn.disabled = true;
+      let result;
+      try {
+        result = await onSave();
+      } finally {
+        modalSaveBtn.disabled = false;
+      }
+      if (result !== false) closeModal();
+    };
   }
 
   function openProjectModal(project) {
@@ -335,16 +456,18 @@
       </div>
       <div class="modal-field"><label>Description</label><textarea id="f-desc">${escapeHtml(project?.description || "")}</textarea></div>
     `;
-    openModal(isEdit ? "Edit Project" : "New Project", body, () => {
+    openModal(isEdit ? "Edit Project" : "New Project", body, async () => {
       const name = document.getElementById("f-name").value.trim();
       if (!name) { alert("Project name is required."); return false; }
       if (isEdit) {
+        const prev = { ...project };
         project.name = name;
         project.client = document.getElementById("f-client").value.trim();
         project.startDate = document.getElementById("f-start").value;
         project.endDate = document.getElementById("f-end").value;
         project.description = document.getElementById("f-desc").value.trim();
-        save();
+        const ok = await saveRemote();
+        if (!ok) { Object.assign(project, prev); return false; }
         renderDetail(project);
         renderList();
       } else {
@@ -357,7 +480,8 @@
           tasks: [], delays: [], notes: [],
         };
         state.projects.push(p);
-        save();
+        const ok = await saveRemote();
+        if (!ok) { state.projects.pop(); return false; }
         renderList();
         location.hash = "project/" + p.id;
       }
@@ -385,7 +509,7 @@
         <div class="modal-field"><label>Progress (%)</label><input type="number" id="f-progress" min="0" max="100" value="${task?.progress ?? 0}"></div>
       </div>
     `;
-    openModal(isEdit ? "Edit Task" : "Add Task", body, () => {
+    openModal(isEdit ? "Edit Task" : "Add Task", body, async () => {
       const name = document.getElementById("f-name").value.trim();
       const startDate = document.getElementById("f-start").value;
       const endDate = document.getElementById("f-end").value;
@@ -397,9 +521,15 @@
         status: document.getElementById("f-status").value,
         progress: Math.max(0, Math.min(100, Math.round(num(document.getElementById("f-progress").value)))),
       };
-      if (isEdit) Object.assign(task, vals);
+      let prev = null;
+      if (isEdit) { prev = { ...task }; Object.assign(task, vals); }
       else project.tasks.push({ id: uid(), ...vals });
-      save();
+      const ok = await saveRemote();
+      if (!ok) {
+        if (isEdit) Object.assign(task, prev);
+        else project.tasks.pop();
+        return false;
+      }
       renderGantt(project);
       renderList();
     });
@@ -416,17 +546,19 @@
       <div class="modal-field"><label>Days delayed (optional)</label><input type="number" id="f-days" min="0" value="0"></div>
       <div class="modal-field"><label>Reason</label><textarea id="f-reason" placeholder="What caused the delay?"></textarea></div>
     `;
-    openModal("Log Delay", body, () => {
+    openModal("Log Delay", body, async () => {
       const reason = document.getElementById("f-reason").value.trim();
       if (!reason) { alert("Please describe the delay."); return false; }
-      project.delays.push({
+      const entry = {
         id: uid(),
         date: document.getElementById("f-date").value || todayStr(),
         taskId: document.getElementById("f-task").value || null,
         days: Math.max(0, Math.round(num(document.getElementById("f-days").value))),
         reason,
-      });
-      save();
+      };
+      project.delays.push(entry);
+      const ok = await saveRemote();
+      if (!ok) { project.delays.pop(); return false; }
       renderDelays(project);
       renderGantt(project);
     });
@@ -438,21 +570,27 @@
       <div class="modal-field"><label>Author</label><input type="text" id="f-author" placeholder="Your name"></div>
       <div class="modal-field"><label>Note</label><textarea id="f-text" placeholder="What's the update?"></textarea></div>
     `;
-    openModal("Add Note", body, () => {
+    openModal("Add Note", body, async () => {
       const text = document.getElementById("f-text").value.trim();
       if (!text) { alert("Note can't be empty."); return false; }
-      project.notes.push({
+      const entry = {
         id: uid(),
         date: document.getElementById("f-date").value || todayStr(),
         author: document.getElementById("f-author").value.trim(),
         text,
-      });
-      save();
+      };
+      project.notes.push(entry);
+      const ok = await saveRemote();
+      if (!ok) { project.notes.pop(); return false; }
       renderNotes(project);
     });
   }
 
   // ---------- init ----------
-  load();
-  route();
+  (async () => {
+    isEditor = !!getStoredPassword();
+    await loadRemote();
+    updateEditorUI();
+    route();
+  })();
 })();
