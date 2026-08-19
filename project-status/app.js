@@ -29,6 +29,57 @@
   }
   function getProject(id) { return state.projects.find((p) => p.id === id); }
 
+  function addDays(dateStr, n) {
+    return new Date(new Date(dateStr + "T00:00:00").getTime() + n * 86400000).toISOString().slice(0, 10);
+  }
+  function daysBetween(a, b) {
+    return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / 86400000);
+  }
+  function taskDuration(t) {
+    return t.duration || Math.max(1, daysBetween(t.startDate, t.endDate) + 1);
+  }
+
+  // Tasks that (transitively) depend on taskId — used to keep the
+  // predecessor picker from offering a choice that would create a cycle.
+  function descendantsOf(project, taskId, visited) {
+    visited = visited || new Set();
+    project.tasks.forEach((t) => {
+      if ((t.predecessors || []).includes(taskId) && !visited.has(t.id)) {
+        visited.add(t.id);
+        descendantsOf(project, t.id, visited);
+      }
+    });
+    return visited;
+  }
+  function successorsOf(project, taskId) {
+    return project.tasks.filter((t) => (t.predecessors || []).includes(taskId));
+  }
+
+  // Pushes every task's start/end forward to sit right after its latest
+  // predecessor finishes. Repeats to a fixed point so changes cascade through
+  // chains (A -> B -> C) — safe for any dependency DAG since each pass
+  // resolves one more hop, and it's a no-op once nothing moves.
+  function recalcSchedule(project) {
+    const byId = {};
+    project.tasks.forEach((t) => { byId[t.id] = t; });
+    for (let pass = 0; pass <= project.tasks.length; pass++) {
+      let changed = false;
+      project.tasks.forEach((t) => {
+        const preds = (t.predecessors || []).map((id) => byId[id]).filter(Boolean);
+        if (!preds.length) return;
+        const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
+        const newStart = new Date(latestEnd + 86400000).toISOString().slice(0, 10);
+        const newEnd = addDays(newStart, taskDuration(t) - 1);
+        if (t.startDate !== newStart || t.endDate !== newEnd) {
+          t.startDate = newStart;
+          t.endDate = newEnd;
+          changed = true;
+        }
+      });
+      if (!changed) break;
+    }
+  }
+
   function initials(name) {
     const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
     if (!parts.length) return "?";
@@ -550,6 +601,14 @@
         ? `<span class="avatar" style="background:${avatarColor(t.responsible)}" title="${escapeHtml(t.responsible)}">${initials(t.responsible)}</span><span class="task-owner">${escapeHtml(t.responsible)}</span>`
         : `<span class="task-owner unassigned">Unassigned</span>`;
 
+      const preds = (t.predecessors || []).map((id) => p.tasks.find((pt) => pt.id === id)).filter(Boolean);
+      const succs = successorsOf(p, t.id);
+      const linksHtml = (preds.length || succs.length) ? `
+          <div class="task-card-links">
+            ${preds.length ? `<span>After: ${preds.map((pt) => escapeHtml(pt.name)).join(", ")}</span>` : ""}
+            ${succs.length ? `<span>Blocks: ${succs.map((st) => escapeHtml(st.name)).join(", ")}</span>` : ""}
+          </div>` : "";
+
       const entries = taskSubEntries(p, t.id);
       const entriesHtml = entries.map((e) => {
         const del = isEditor ? `<button class="btn-icon" data-delete-${e.kind}="${e.id}" title="Delete">&times;</button>` : "";
@@ -585,7 +644,8 @@
             <div class="progress-bar"><div class="progress-bar-fill" style="width:${t.progress || 0}%;"></div></div>
             <span class="task-card-pct">${t.progress || 0}%</span>
           </div>
-          <div class="task-card-dates">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)}</div>
+          <div class="task-card-dates">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)} &bull; ${taskDuration(t)} day${taskDuration(t) === 1 ? "" : "s"}</div>
+          ${linksHtml}
           ${entries.length || isEditor ? `<div class="task-card-sub">${entriesHtml}${subActions}</div>` : ""}
         </div>`;
     }).join("");
@@ -598,17 +658,23 @@
     wrap.querySelectorAll("[data-delete-task]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         if (!confirm("Delete this task?")) return;
-        const removedTask = p.tasks.find((t) => t.id === btn.dataset.deleteTask);
-        p.tasks = p.tasks.filter((t) => t.id !== btn.dataset.deleteTask);
-        const affectedDelays = p.delays.filter((d) => d.taskId === btn.dataset.deleteTask);
+        const removedId = btn.dataset.deleteTask;
+        const removedTask = p.tasks.find((t) => t.id === removedId);
+        p.tasks = p.tasks.filter((t) => t.id !== removedId);
+        const affectedDelays = p.delays.filter((d) => d.taskId === removedId);
         affectedDelays.forEach((d) => { d.taskId = null; });
-        const affectedNotes = p.notes.filter((n) => n.taskId === btn.dataset.deleteTask);
+        const affectedNotes = p.notes.filter((n) => n.taskId === removedId);
         affectedNotes.forEach((n) => { n.taskId = null; });
+        const affectedPredTasks = p.tasks.filter((t) => (t.predecessors || []).includes(removedId));
+        affectedPredTasks.forEach((t) => { t.predecessors = t.predecessors.filter((id) => id !== removedId); });
+        recalcSchedule(p);
         const ok = await saveRemote();
         if (!ok) {
           p.tasks.push(removedTask);
           affectedDelays.forEach((d) => { d.taskId = removedTask.id; });
           affectedNotes.forEach((n) => { n.taskId = removedTask.id; });
+          affectedPredTasks.forEach((t) => { t.predecessors.push(removedId); });
+          recalcSchedule(p);
         }
         renderTaskList(p);
         renderDelays(p);
@@ -786,11 +852,24 @@
 
   function openTaskModal(project, task) {
     const isEdit = !!task;
+    const blocked = isEdit ? descendantsOf(project, task.id) : new Set();
+    const candidates = project.tasks.filter((t) => t.id !== task?.id && !blocked.has(t.id));
+    const selectedPreds = new Set(task?.predecessors || []);
+    const predCheckboxes = candidates.length
+      ? candidates.map((t) => `
+          <label class="checkbox-row"><input type="checkbox" class="f-predecessor" value="${t.id}" ${selectedPreds.has(t.id) ? "checked" : ""}> ${escapeHtml(t.name)}</label>`).join("")
+      : `<p class="modal-hint">No other tasks to depend on yet.</p>`;
+    const defaultDuration = isEdit ? taskDuration(task) : 1;
+
     const body = `
       <div class="modal-field"><label>Task name</label><input type="text" id="f-name" value="${escapeHtml(task?.name || "")}"></div>
       <div class="modal-row">
         <div class="modal-field"><label>Start date</label><input type="date" id="f-start" value="${task?.startDate || todayStr()}"></div>
-        <div class="modal-field"><label>End date</label><input type="date" id="f-end" value="${task?.endDate || todayStr()}"></div>
+        <div class="modal-field"><label>Duration (days)</label><input type="number" id="f-duration" min="1" value="${defaultDuration}"></div>
+      </div>
+      <div class="modal-field">
+        <label>Predecessors <span class="modal-label-hint">(starts after these finish)</span></label>
+        <div class="checkbox-list">${predCheckboxes}</div>
       </div>
       <div class="modal-field"><label>Responsible</label><input type="text" id="f-owner" value="${escapeHtml(task?.responsible || "")}" placeholder="Who owns this task"></div>
       <div class="modal-row">
@@ -807,28 +886,45 @@
     `;
     openModal(isEdit ? "Edit Task" : "Add Task", body, async () => {
       const name = document.getElementById("f-name").value.trim();
-      const startDate = document.getElementById("f-start").value;
-      const endDate = document.getElementById("f-end").value;
-      if (!name || !startDate || !endDate) { alert("Task name, start, and end dates are required."); return false; }
-      if (endDate < startDate) { alert("End date can't be before start date."); return false; }
+      const duration = Math.max(1, Math.round(num(document.getElementById("f-duration").value)) || 1);
+      const predecessors = Array.from(document.querySelectorAll(".f-predecessor:checked")).map((el) => el.value);
+      let startDate = document.getElementById("f-start").value;
+      if (!name || !startDate) { alert("Task name and start date are required."); return false; }
+      if (predecessors.length) {
+        const latestEnd = Math.max(...predecessors.map((id) => new Date(project.tasks.find((t) => t.id === id).endDate + "T00:00:00").getTime()));
+        startDate = new Date(latestEnd + 86400000).toISOString().slice(0, 10);
+      }
+      const endDate = addDays(startDate, duration - 1);
       const vals = {
-        name, startDate, endDate,
+        name, startDate, endDate, duration, predecessors,
         responsible: document.getElementById("f-owner").value.trim(),
         status: document.getElementById("f-status").value,
         progress: Math.max(0, Math.min(100, Math.round(num(document.getElementById("f-progress").value)))),
       };
       let prev = null;
+      let addedTask = null;
       if (isEdit) { prev = { ...task }; Object.assign(task, vals); }
-      else project.tasks.push({ id: uid(), ...vals });
+      else { addedTask = { id: uid(), ...vals }; project.tasks.push(addedTask); }
+      recalcSchedule(project);
       const ok = await saveRemote();
       if (!ok) {
         if (isEdit) Object.assign(task, prev);
         else project.tasks.pop();
+        recalcSchedule(project);
         return false;
       }
       renderTaskList(project);
       renderList();
     });
+
+    const startInput = document.getElementById("f-start");
+    const syncStartDisabled = () => {
+      const hasPreds = document.querySelectorAll(".f-predecessor:checked").length > 0;
+      startInput.disabled = hasPreds;
+      startInput.title = hasPreds ? "Auto-calculated from predecessor end date" : "";
+    };
+    document.querySelectorAll(".f-predecessor").forEach((cb) => cb.addEventListener("change", syncStartDisabled));
+    syncStartDisabled();
     document.getElementById("f-status").value = isEdit ? task.status : "not_started";
   }
 

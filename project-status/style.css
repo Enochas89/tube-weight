@@ -248,6 +248,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .task-card-progress .progress-bar-fill { border-radius: 999px; background: #00c875; transition: width 0.15s ease; }
 .task-card-pct { font-size: 0.78rem; font-weight: 700; color: var(--text-dim); min-width: 34px; text-align: right; }
 .task-card-dates { margin-top: 6px; font-size: 0.78rem; color: var(--text-dim); }
+.task-card-links { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; font-size: 0.76rem; color: var(--text-dim); }
 
 .task-card-sub { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
 .task-sub-item { border-left: 3px solid var(--border); background: var(--bg); border-radius: 6px; padding: 8px 10px; }
@@ -319,6 +320,17 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .modal-row { display: flex; gap: 10px; }
 .modal-row .modal-field { flex: 1; min-width: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.modal-label-hint { font-weight: 400; text-transform: none; color: var(--text-dim); }
+.checkbox-list {
+  max-height: 140px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.checkbox-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 0.88rem; font-weight: 400; }
+.checkbox-row input { width: auto; flex-shrink: 0; }
+.modal-hint { margin: 4px 0; font-size: 0.82rem; color: var(--text-dim); }
 
 footer { text-align: center; color: var(--text-dim); font-size: 0.78rem; padding: 20px; }
 
