@@ -216,43 +216,67 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .gantt-wrap {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 12px;
   overflow: auto;
   max-height: 65vh;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
 }
 .gantt-empty { padding: 30px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
 .gantt-grid { display: grid; min-width: 720px; }
-.gantt-row { display: grid; grid-template-columns: 220px 1fr; border-bottom: 1px solid var(--border); }
+.gantt-row { display: grid; grid-template-columns: 230px 1fr; border-bottom: 1px solid var(--border); }
 .gantt-row:last-child { border-bottom: none; }
+.gantt-row:not(.header-row):nth-child(even) { background: #fbfcfe; }
+.gantt-row:not(.header-row):nth-child(even) .gantt-label { background: #fbfcfe; }
+.gantt-row:not(.header-row):hover { background: #f0f6ff; }
+.gantt-row:not(.header-row):hover .gantt-label { background: #f0f6ff; }
 .gantt-row.header-row {
   background: #fafbfc;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--text-dim);
   text-transform: uppercase;
+  letter-spacing: 0.02em;
   position: sticky;
   top: 0;
   z-index: 5;
   box-shadow: 0 1px 0 var(--border);
 }
 .gantt-label {
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   position: sticky;
   left: 0;
   z-index: 3;
   background: var(--panel);
+  transition: background 0.1s ease;
 }
-.gantt-row.header-row .gantt-label { background: #fafbfc; z-index: 6; }
-.gantt-label .task-name { font-size: 0.85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gantt-row.header-row .gantt-label { background: #fafbfc; z-index: 6; padding: 10px 12px; }
+.task-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.gantt-label .task-name { font-size: 0.85rem; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-owner-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
 .gantt-label .task-owner { font-size: 0.74rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gantt-label .task-owner.unassigned { font-style: italic; opacity: 0.7; }
 .gantt-label .task-actions { display: flex; gap: 4px; margin-top: 2px; }
-.gantt-track { position: relative; min-height: 44px; }
+.gantt-track { position: relative; min-height: 48px; }
 .gantt-months { position: relative; height: 100%; }
 .gantt-week-line {
   position: absolute;
@@ -284,16 +308,31 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .gantt-bar {
   position: absolute;
   top: 10px;
-  height: 24px;
-  border-radius: 5px;
+  height: 28px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   overflow: hidden;
   cursor: pointer;
-  min-width: 6px;
+  min-width: 10px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.18);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
-.gantt-bar-fill { position: absolute; top: 0; bottom: 0; left: 0; background: rgba(255,255,255,0.35); }
-.gantt-bar-text { position: relative; padding: 0 8px; font-size: 0.72rem; color: white; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gantt-bar:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(16, 24, 40, 0.22); }
+.gantt-bar-fill { position: absolute; top: 0; bottom: 0; left: 0; background: rgba(255, 255, 255, 0.32); }
+.gantt-bar-text { position: relative; padding: 0 8px; font-size: 0.74rem; color: white; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15); }
+.gantt-bar-pct {
+  position: relative;
+  margin-left: auto;
+  padding: 1px 6px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: white;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 999px;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
 .gantt-bar.delay-flag::after { content: "⚠"; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; }
 
 /* ---------- delay/note logs ---------- */

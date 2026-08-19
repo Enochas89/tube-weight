@@ -4,7 +4,9 @@
   const API_URL = "/api/data";
   const AUTH_KEY = "projectStatus.editPassword";
   const STATUS_LABELS = { on_track: "On Track", at_risk: "At Risk", delayed: "Delayed", complete: "Complete", on_hold: "On Hold" };
-  const TASK_STATUS_COLOR = { not_started: "#8a97a8", in_progress: "#1f5fa8", delayed: "#b3261e", complete: "#1a7f37" };
+  // Monday/ClickUp-style vibrant status colors rather than muted ones.
+  const TASK_STATUS_COLOR = { not_started: "#c4c4c4", in_progress: "#fdab3d", delayed: "#e2445c", complete: "#00c875" };
+  const AVATAR_PALETTE = ["#579bfc", "#a25ddc", "#ff642e", "#fdab3d", "#00c875", "#66ccff", "#e2445c", "#7e5efd"];
 
   let state = { projects: [] };
   let currentProjectId = null;
@@ -26,6 +28,19 @@
     return div.innerHTML;
   }
   function getProject(id) { return state.projects.find((p) => p.id === id); }
+
+  function initials(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "?";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  function avatarColor(name) {
+    const s = String(name || "");
+    let hash = 0;
+    for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+    return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+  }
 
   async function copyLink(url) {
     try {
@@ -552,11 +567,17 @@
               <button class="btn-icon" data-edit-task="${t.id}" title="Edit">&#9998;</button>
               <button class="btn-icon" data-delete-task="${t.id}" title="Delete">&times;</button>
             </span>` : "";
+      const owner = t.responsible
+        ? `<span class="avatar" style="background:${avatarColor(t.responsible)}" title="${escapeHtml(t.responsible)}">${initials(t.responsible)}</span><span class="task-owner">${escapeHtml(t.responsible)}</span>`
+        : `<span class="task-owner unassigned">Unassigned</span>`;
       return `
         <div class="gantt-row">
           <div class="gantt-label">
-            <span class="task-name">${escapeHtml(t.name)}</span>
-            <span class="task-owner">${escapeHtml(t.responsible || "Unassigned")}</span>
+            <div class="task-name-row">
+              <span class="status-dot" style="background:${color}"></span>
+              <span class="task-name">${escapeHtml(t.name)}</span>
+            </div>
+            <div class="task-owner-row">${owner}</div>
             ${actions}
           </div>
           <div class="gantt-track">
@@ -564,6 +585,7 @@
             <div class="gantt-bar ${hasDelay ? "delay-flag" : ""}" data-open-task="${t.id}" style="left:${left.toFixed(2)}%; width:${width.toFixed(2)}%; background:${color};" title="${escapeHtml(t.name)}: ${fmtDate(t.startDate)} → ${fmtDate(t.endDate)} (${t.progress || 0}%)">
               <div class="gantt-bar-fill" style="width:${t.progress || 0}%"></div>
               <span class="gantt-bar-text">${escapeHtml(t.name)}</span>
+              <span class="gantt-bar-pct">${t.progress || 0}%</span>
             </div>
           </div>
         </div>`;
