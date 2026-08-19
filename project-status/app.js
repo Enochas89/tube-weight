@@ -216,6 +216,7 @@
             </div>
             <span class="status-badge ${p.status}">${STATUS_LABELS[p.status]}</span>
           </div>
+          <p class="project-card-dates">${fmtDate(p.startDate)} &rarr; ${fmtDate(p.endDate)}</p>
           <div class="progress-bar"><div class="progress-bar-fill" style="width:${progress}%"></div></div>
           <div class="project-card-meta">
             <span>${p.tasks.length} task${p.tasks.length === 1 ? "" : "s"}</span>

@@ -147,6 +147,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .project-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .project-card h3 { margin: 0; font-size: 1.05rem; }
 .project-card .client { margin: 2px 0 0; font-size: 0.82rem; color: var(--text-dim); }
+.project-card-dates { margin: 0; font-size: 0.78rem; color: var(--text-dim); }
 .progress-bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
 .progress-bar-fill { height: 100%; background: var(--accent); }
 .project-card-meta { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-dim); }
