@@ -190,6 +190,24 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   border-radius: 4px;
   padding: 1px 6px;
 }
+.calendar-strip-bracket {
+  position: absolute;
+  left: 2px;
+  width: 2px;
+  background: var(--border);
+  border-radius: 1px;
+}
+.calendar-strip-bracket::before,
+.calendar-strip-bracket::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 5px;
+  height: 2px;
+  background: var(--border);
+}
+.calendar-strip-bracket::before { top: 0; }
+.calendar-strip-bracket::after { bottom: 0; }
 .calendar-strip-marker.is-today .calendar-strip-marker-label {
   font-weight: 700;
   color: var(--brand-black);
@@ -392,7 +410,9 @@ footer { text-align: center; color: var(--text-dim); font-size: 0.78rem; padding
 
   .project-grid { grid-template-columns: 1fr; }
 
-  .calendar-strip { display: none; }
+  #detailView { gap: 6px; }
+  .calendar-strip { flex-basis: 26px; }
+  .calendar-strip-marker-label { font-size: 0.64rem; padding: 1px 3px; }
   .detail-header { padding: 14px 16px; }
   .detail-title-row { flex-direction: column; align-items: stretch; }
   .detail-actions { justify-content: flex-start; }

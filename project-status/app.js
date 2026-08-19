@@ -547,10 +547,26 @@
       return (r.top + r.bottom) / 2 - stripRect.top;
     });
 
-    let html = p.tasks.map((t, i) => `
-      <div class="calendar-strip-marker" style="top:${Math.max(0, positions[i]).toFixed(0)}px;">
-        <span class="calendar-strip-marker-label">${new Date(t.startDate + "T00:00:00").getDate()}</span>
-      </div>`).join("");
+    // Group tasks that share a start date so they get one label with a
+    // bracket spanning both tiles, instead of two identical numbers.
+    const groups = {};
+    p.tasks.forEach((t, i) => {
+      (groups[t.startDate] = groups[t.startDate] || []).push(i);
+    });
+    let html = Object.values(groups).map((idxs) => {
+      const day = new Date(p.tasks[idxs[0]].startDate + "T00:00:00").getDate();
+      const groupTops = idxs.map((i) => Math.max(0, positions[i]));
+      const top = Math.min(...groupTops);
+      const bottom = Math.max(...groupTops);
+      const mid = (top + bottom) / 2;
+      const bracket = idxs.length > 1
+        ? `<div class="calendar-strip-bracket" style="top:${top.toFixed(0)}px; height:${(bottom - top).toFixed(0)}px;"></div>`
+        : "";
+      return `${bracket}
+        <div class="calendar-strip-marker" style="top:${mid.toFixed(0)}px;">
+          <span class="calendar-strip-marker-label">${day}</span>
+        </div>`;
+    }).join("");
 
     const todayMs = new Date(todayStr() + "T00:00:00").getTime();
     const activeIndex = p.tasks.findIndex((t) =>
