@@ -876,6 +876,7 @@
               <span>${trav.delays.length ? trav.delays.length + " delay" + (trav.delays.length === 1 ? "" : "s") : "No delays"}</span>
               <span>${progress}%</span>
             </div>
+            <button class="btn-secondary card-open-btn" type="button">Open &rarr;</button>
           </div>`;
       }).join("");
     }
