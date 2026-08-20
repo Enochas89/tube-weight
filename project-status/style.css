@@ -279,6 +279,9 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   font-weight: 700;
   letter-spacing: -0.02em;
 }
+.avatar-group { display: flex; align-items: center; flex-shrink: 0; }
+.avatar-group .avatar { border: 2px solid var(--panel); margin-left: -6px; }
+.avatar-group .avatar:first-child { margin-left: 0; }
 .task-owner { font-size: 0.8rem; color: var(--text-dim); }
 .task-owner.unassigned { font-style: italic; opacity: 0.7; }
 .task-card-progress { display: flex; align-items: center; gap: 10px; margin-top: 12px; }

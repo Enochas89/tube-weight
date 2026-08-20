@@ -142,6 +142,11 @@
     for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
     return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
   }
+  // "Responsible" holds one or more names separated by commas/semicolons —
+  // multiple assignees on a task, not just one.
+  function parseNames(str) {
+    return String(str || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+  }
 
   async function copyLink(url) {
     try {
@@ -971,8 +976,9 @@
               <button class="btn-icon" data-edit-task="${t.id}" title="Edit">&#9998;</button>
               <button class="btn-icon" data-delete-task="${t.id}" title="Delete">&times;</button>
             </span>` : "";
-      const owner = t.responsible
-        ? `<span class="avatar" style="background:${avatarColor(t.responsible)}" title="${escapeHtml(t.responsible)}">${initials(t.responsible)}</span><span class="task-owner">${escapeHtml(t.responsible)}</span>`
+      const ownerNames = parseNames(t.responsible);
+      const owner = ownerNames.length
+        ? `<span class="avatar-group">${ownerNames.map((n) => `<span class="avatar" style="background:${avatarColor(n)}" title="${escapeHtml(n)}">${initials(n)}</span>`).join("")}</span><span class="task-owner">${ownerNames.map((n) => escapeHtml(n)).join(", ")}</span>`
         : `<span class="task-owner unassigned">Unassigned</span>`;
 
       // Predecessors/successors can live in a different traveler within the
@@ -1317,7 +1323,7 @@
         <label>Predecessors <span class="modal-label-hint">(starts after these finish — can be in any traveler)</span></label>
         <div class="checkbox-list">${predCheckboxes}</div>
       </div>
-      <div class="modal-field"><label>Responsible</label><input type="text" id="f-owner" value="${escapeHtml(task?.responsible || "")}" placeholder="Who owns this task"></div>
+      <div class="modal-field"><label>Responsible <span class="modal-label-hint">(separate multiple people with commas)</span></label><input type="text" id="f-owner" value="${escapeHtml(task?.responsible || "")}" placeholder="e.g. Jane Doe, Sam Lee"></div>
       <div class="modal-row">
         <div class="modal-field"><label>Status</label>
           <select id="f-status">
