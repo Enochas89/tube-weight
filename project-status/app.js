@@ -693,42 +693,93 @@
     return tasks;
   }
 
-  // Single-sheet import (legacy path) — used when the workbook has exactly
-  // one sheet with recognizable task columns.
-  function parseExcelWorkbook(arrayBuffer) {
-    if (typeof XLSX === "undefined") throw new Error("Excel import library failed to load — try reloading the page.");
-    const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
-    const sheetName = wb.SheetNames[0];
-    if (!sheetName) throw new Error("This workbook has no sheets.");
-    const sheet = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-    if (!rows.length) throw new Error(`The "${sheetName}" sheet has no data rows.`);
-    const tasks = parseSheetRows(rows, sheetName);
-    if (tasks === null) {
-      const headers = Object.keys(rows[0]);
-      throw new Error(`Couldn't find the required columns in "${sheetName}" — need a task name column, plus either start/finish date columns or a duration column. Found: ${headers.join(", ")}`);
+  // Recognizes RetubeCo's actual shop-traveler layout: a header row
+  // somewhere in the sheet containing "OPER" (not necessarily row 1), an
+  // operation-number column that must be numeric, a description column,
+  // and a work-center column. Rows without a numeric op number are section
+  // headers or sub-tables (e.g. a tolerance table) and are skipped. No
+  // dates/durations exist in this format, so every op defaults to 1 day and
+  // auto-chains sequentially (handled by the caller via _predecessorNames).
+  function parseRetubeCoTravelerSheet(rows2D, fallbackName) {
+    let headerIdx = -1;
+    let opCol = -1;
+    for (let i = 0; i < rows2D.length; i++) {
+      const row = rows2D[i] || [];
+      const idx = row.findIndex((c) => String(c || "").toUpperCase().includes("OPER"));
+      if (idx !== -1) { headerIdx = i; opCol = idx; break; }
     }
-    tasks.forEach((t) => { delete t._predecessorNames; delete t.duration; });
-    const projectName = sheetName && normalizeHeader(sheetName) !== "sheet1" ? sheetName : "Imported Project";
-    return { projectName, tasks };
+    if (headerIdx === -1) return null;
+    const header = (rows2D[headerIdx] || []).map((c) => String(c || "").toUpperCase());
+    let descCol = header.findIndex((h) => h.includes("DESCRIPTION"));
+    if (descCol === -1) descCol = opCol + 1;
+    let workCenterCol = header.findIndex((h) => h.includes("WORK") && h.includes("CENTER"));
+    if (workCenterCol === -1) workCenterCol = header.findIndex((h) => h.includes("CENTER"));
+
+    let travelerName = fallbackName;
+    for (const row of rows2D) {
+      const idx = (row || []).findIndex((c) => String(c || "").toUpperCase().includes("TRAVELER NUMBER"));
+      if (idx === -1) continue;
+      for (let j = idx + 1; j < row.length; j++) {
+        if (row[j] !== null && row[j] !== undefined && String(row[j]).trim()) { travelerName = String(row[j]).trim(); break; }
+      }
+      break;
+    }
+
+    const tasks = [];
+    for (let i = headerIdx + 1; i < rows2D.length; i++) {
+      const row = rows2D[i] || [];
+      const opNo = row[opCol];
+      const desc = row[descCol];
+      if (typeof opNo !== "number" || !desc || !String(desc).trim()) continue;
+      const startDate = todayStr();
+      tasks.push({
+        name: String(desc).trim().replace(/\s*\n\s*/g, " "),
+        startDate, endDate: startDate, duration: 1,
+        responsible: workCenterCol !== -1 ? String(row[workCenterCol] || "").trim() : "",
+        status: "not_started", progress: 0,
+        _predecessorNames: [],
+      });
+    }
+    if (!tasks.length) return null;
+    return { name: travelerName, tasks };
   }
 
-  // Multi-sheet import — every sheet with recognizable task columns becomes
-  // its own traveler; sheets that don't look like a task list are skipped.
-  function parseExcelWorkbookMultiSheet(arrayBuffer) {
-    if (typeof XLSX === "undefined") throw new Error("Excel import library failed to load — try reloading the page.");
-    const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+  // Extracts one traveler per matching sheet from a single workbook, trying
+  // the simple Task-Name/Start-Finish-or-Duration format first and falling
+  // back to the raw RetubeCo traveler layout. Sheets matching neither (e.g.
+  // a "Shop Order - Traveler Cover" sheet) are silently skipped.
+  function extractTravelersFromWorkbook(wb, baseName) {
     const travelers = [];
     wb.SheetNames.forEach((sheetName) => {
       const sheet = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-      if (!rows.length) return;
-      const tasks = parseSheetRows(rows, sheetName);
-      if (tasks === null || !tasks.length) return;
-      travelers.push({ name: sheetName, tasks });
+      const rowsObj = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      let tasks = rowsObj.length ? parseSheetRows(rowsObj, sheetName) : null;
+      let name = sheetName;
+      if (!tasks || !tasks.length) {
+        const rows2D = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+        const fallback = wb.SheetNames.length > 1 ? baseName + " – " + sheetName : baseName;
+        const parsed = parseRetubeCoTravelerSheet(rows2D, fallback);
+        if (parsed) { tasks = parsed.tasks; name = parsed.name; }
+      }
+      if (tasks && tasks.length) travelers.push({ name, tasks });
     });
+    return travelers;
+  }
+
+  // Reads one or more uploaded workbooks and returns every traveler found
+  // across all of them — lets a user select all of their separate shop
+  // traveler files at once instead of needing them combined into one workbook.
+  async function extractTravelersFromFiles(fileList) {
+    if (typeof XLSX === "undefined") throw new Error("Excel import library failed to load — try reloading the page.");
+    const travelers = [];
+    for (const file of Array.from(fileList)) {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", cellDates: true });
+      const baseName = file.name.replace(/\.(xlsx|xls)$/i, "");
+      travelers.push(...extractTravelersFromWorkbook(wb, baseName));
+    }
     if (!travelers.length) {
-      throw new Error("No sheets with a task name column (plus start/finish dates or a duration column) were found in this workbook.");
+      throw new Error("No sheets with a task name column (plus start/finish dates or a duration column), and no shop-traveler-style OPER. NO. layout, were found in the selected file(s).");
     }
     return travelers;
   }
@@ -737,19 +788,12 @@
     document.getElementById("importExcelInput").click();
   });
   document.getElementById("importExcelInput").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
+    const files = Array.from(e.target.files);
     e.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
     try {
-      const buf = await file.arrayBuffer();
-      const travelersData = parseExcelWorkbookMultiSheet(buf);
-      if (travelersData.length === 1) {
-        const parsed = { projectName: travelersData[0].name, tasks: travelersData[0].tasks };
-        parsed.tasks.forEach((t) => { delete t._predecessorNames; delete t.duration; });
-        openImportConfirmModal(parsed, "Excel", null);
-      } else {
-        openMultiTravelerImportModal(travelersData, "Excel");
-      }
+      const travelersData = await extractTravelersFromFiles(files);
+      openMultiTravelerImportModal(travelersData, "Excel");
     } catch (err) {
       alert("Couldn't import that file: " + err.message);
     }
@@ -758,49 +802,40 @@
     document.getElementById("importExcelInputTraveler").click();
   });
   document.getElementById("importExcelInputTraveler").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
+    const files = Array.from(e.target.files);
     e.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
     try {
-      const buf = await file.arrayBuffer();
-      const travelersData = parseExcelWorkbookMultiSheet(buf);
+      const travelersData = await extractTravelersFromFiles(files);
       const project = getProject(currentProjectId);
-      if (travelersData.length === 1) {
-        const parsed = { projectName: travelersData[0].name, tasks: travelersData[0].tasks };
-        parsed.tasks.forEach((t) => { delete t._predecessorNames; delete t.duration; });
-        openImportConfirmModalForTraveler(parsed, "Excel", null, project);
-      } else {
-        // Multiple sheets while already inside a project: add one traveler
-        // per sheet to THIS project instead of creating a new one.
-        const totalTasks = travelersData.reduce((a, t) => a + t.tasks.length, 0);
-        const names = travelersData.map((t) => escapeHtml(t.name)).join(", ");
-        const body = `<p style="font-size:0.9rem;">Found ${travelersData.length} travelers (${totalTasks} tasks total): ${names}.</p><p style="font-size:0.85rem;color:var(--text-dim);">Each sheet will be added as its own traveler to <strong>${escapeHtml(project.name)}</strong>.</p>`;
-        openModal("Import from Excel", body, async () => {
-          const newTravelers = travelersData.map((t) => ({
-            id: uid(), name: t.name, description: "", status: "on_track",
-            tasks: t.tasks.map((tk) => ({ id: uid(), ...tk, predecessors: [] })),
-            delays: [], notes: [],
-          }));
-          const nameToId = {};
-          allTasks(project).forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; });
-          newTravelers.forEach((trav) => trav.tasks.forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; }));
-          newTravelers.forEach((trav) => {
-            trav.tasks.forEach((t, i) => {
-              if (t._predecessorNames && t._predecessorNames.length) {
-                t.predecessors = t._predecessorNames.map((n) => nameToId[n.trim().toLowerCase()]).filter(Boolean);
-              } else if (i > 0) {
-                t.predecessors = [trav.tasks[i - 1].id];
-              }
-              delete t._predecessorNames;
-            });
+      const totalTasks = travelersData.reduce((a, t) => a + t.tasks.length, 0);
+      const names = travelersData.map((t) => escapeHtml(t.name)).join(", ");
+      const body = `<p style="font-size:0.9rem;">Found ${travelersData.length} traveler${travelersData.length === 1 ? "" : "s"} (${totalTasks} tasks total): ${names}.</p><p style="font-size:0.85rem;color:var(--text-dim);">${travelersData.length === 1 ? "It" : "Each"} will be added as ${travelersData.length === 1 ? "a" : "its own"} traveler to <strong>${escapeHtml(project.name)}</strong>.</p>`;
+      openModal("Import from Excel", body, async () => {
+        const newTravelers = travelersData.map((t) => ({
+          id: uid(), name: t.name, description: "", status: "on_track",
+          tasks: t.tasks.map((tk) => ({ id: uid(), ...tk, predecessors: [] })),
+          delays: [], notes: [],
+        }));
+        const nameToId = {};
+        allTasks(project).forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; });
+        newTravelers.forEach((trav) => trav.tasks.forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; }));
+        newTravelers.forEach((trav) => {
+          trav.tasks.forEach((t, i) => {
+            if (t._predecessorNames && t._predecessorNames.length) {
+              t.predecessors = t._predecessorNames.map((n) => nameToId[n.trim().toLowerCase()]).filter(Boolean);
+            } else if (i > 0) {
+              t.predecessors = [trav.tasks[i - 1].id];
+            }
+            delete t._predecessorNames;
           });
-          project.travelers.push(...newTravelers);
-          recalcSchedule(project);
-          const ok = await saveRemote();
-          if (!ok) { newTravelers.forEach(() => project.travelers.pop()); return false; }
-          renderTravelerList(project);
         });
-      }
+        project.travelers.push(...newTravelers);
+        recalcSchedule(project);
+        const ok = await saveRemote();
+        if (!ok) { newTravelers.forEach(() => project.travelers.pop()); return false; }
+        renderTravelerList(project);
+      });
     } catch (err) {
       alert("Couldn't import that file: " + err.message);
     }
