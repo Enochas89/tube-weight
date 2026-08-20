@@ -377,6 +377,9 @@
     }
     return "";
   }
+  function directChildren(el, tag) {
+    return Array.from(el.children).filter((c) => c.localName === tag);
+  }
 
   function parseMsProjectXml(xmlText) {
     const dom = new DOMParser().parseFromString(xmlText, "application/xml");
@@ -431,16 +434,36 @@
     }
 
     const normalizedProjectName = projectName.trim().toLowerCase();
-    const tasks = [];
+
+    // A task is a summary/rollup (not a real work item) if explicitly
+    // flagged, or if the next task nests one level deeper (i.e. has
+    // children) — some MSP exports don't set <Summary>1</Summary> reliably.
+    function isSummaryRow(rt, i) {
+      if (rt.explicitSummary) return true;
+      const next = rawTasks[i + 1];
+      return !!(next && rt.outlineLevel !== null && next.outlineLevel !== null && next.outlineLevel > rt.outlineLevel);
+    }
+
+    const uidToName = {};
+    const groups = [];
+    let currentGroup = null;
     rawTasks.forEach((rt, i) => {
       const t = rt.el;
       if (!rt.uid || rt.uid === "0") return; // UID 0 is the whole-project rollup, not a real task
-      if (rt.explicitSummary) return;
-      const next = rawTasks[i + 1];
-      if (next && rt.outlineLevel !== null && next.outlineLevel !== null && next.outlineLevel > rt.outlineLevel) return; // has children -> it's a summary row
-
       const name = directChildText(t, "Name");
       if (name.trim().toLowerCase() === normalizedProjectName) return; // rollup row named after the project itself
+
+      if (isSummaryRow(rt, i)) {
+        // A top-level (outline 1) summary starts a new traveler group; a
+        // deeper summary (sub-phase within a traveler) doesn't split further
+        // — its children just fold into the current group.
+        if (rt.outlineLevel === 1 || !currentGroup) {
+          currentGroup = { name: name || "Traveler " + (groups.length + 1), tasks: [] };
+          groups.push(currentGroup);
+        }
+        return;
+      }
+
       const start = directChildText(t, "Start");
       const finish = directChildText(t, "Finish");
       if (!name || !start || !finish) return;
@@ -451,72 +474,69 @@
       const pct = Math.max(0, Math.min(100, Math.round(num(directChildText(t, "PercentComplete")))));
       const status = pct >= 100 ? "complete" : pct > 0 ? "in_progress" : "not_started";
       const responsible = (taskResources[rt.uid] || []).join(", ");
+      const predecessorUids = directChildren(t, "PredecessorLink").map((pl) => directChildText(pl, "PredecessorUID")).filter(Boolean);
 
-      tasks.push({ name, startDate, endDate, responsible, status, progress: pct });
+      const task = { name, startDate, endDate, responsible, status, progress: pct, _predecessorUids: predecessorUids };
+      uidToName[rt.uid] = name;
+      if (!currentGroup) { currentGroup = { name: projectName, tasks: [] }; groups.push(currentGroup); }
+      currentGroup.tasks.push(task);
     });
 
-    return { projectName, tasks };
+    // Resolve predecessor UIDs to names now that every task's name is known,
+    // matching the same _predecessorNames convention the Excel importer uses
+    // so both paths share one resolution/auto-chain step at import time.
+    const travelers = groups.filter((g) => g.tasks.length).map((g) => ({
+      name: g.name,
+      tasks: g.tasks.map((t) => {
+        const predecessorNames = t._predecessorUids.map((u) => uidToName[u]).filter(Boolean);
+        const { _predecessorUids, ...rest } = t;
+        return { ...rest, _predecessorNames: predecessorNames };
+      }),
+    }));
+
+    return { projectName, travelers };
   }
 
-  // Creates a brand-new project with a single traveler holding the imported
-  // tasks. Used by the top-level "Import from..." buttons on the Projects list.
-  function openImportConfirmModal(parsed, sourceLabel, extraNote) {
-    const count = parsed.tasks.length;
-    const body = `
-      <div class="modal-field"><label>Project name</label><input type="text" id="f-name" value="${escapeHtml(parsed.projectName)}"></div>
-      <div class="modal-field"><label>Client</label><input type="text" id="f-client" value=""></div>
-      <p style="font-size:0.85rem;color:var(--text-dim);margin:-6px 0 12px;">Found ${count} task${count === 1 ? "" : "s"} to import${extraNote ? " — " + escapeHtml(extraNote) : ""}.</p>
-    `;
-    openModal(`Import from ${sourceLabel}`, body, async () => {
-      const name = document.getElementById("f-name").value.trim();
-      if (!name) { alert("Project name is required."); return false; }
-      const dates = parsed.tasks.map((t) => [t.startDate, t.endDate]).flat();
-      const p = {
-        id: uid(), name, client: document.getElementById("f-client").value.trim(),
-        status: "on_track",
-        startDate: dates.length ? dates.reduce((a, b) => (b < a ? b : a)) : todayStr(),
-        endDate: dates.length ? dates.reduce((a, b) => (b > a ? b : a)) : "",
-        description: `Imported from ${sourceLabel} (${count} task${count === 1 ? "" : "s"}).`,
-        travelers: [{
-          id: uid(),
-          name: parsed.projectName,
-          description: "",
-          status: "on_track",
-          tasks: parsed.tasks.map((t) => ({ id: uid(), ...t })),
-          delays: [], notes: [],
-        }],
-      };
-      state.projects.push(p);
-      const ok = await saveRemote();
-      if (!ok) { state.projects.pop(); return false; }
-      renderList();
-      location.hash = "project/" + p.id;
+  // Resolves each task's _predecessorNames (set by either import parser)
+  // into real predecessor ids, auto-chaining sequentially within its own
+  // traveler wherever no explicit predecessor was given. Shared by both the
+  // new-project and add-to-existing-project import paths.
+  function resolvePredecessorNames(travelers, existingProject) {
+    const nameToId = {};
+    if (existingProject) allTasks(existingProject).forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; });
+    travelers.forEach((trav) => trav.tasks.forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; }));
+    travelers.forEach((trav) => {
+      trav.tasks.forEach((t, i) => {
+        if (t._predecessorNames && t._predecessorNames.length) {
+          t.predecessors = t._predecessorNames.map((n) => nameToId[n.trim().toLowerCase()]).filter(Boolean);
+        } else if (i > 0) {
+          t.predecessors = [trav.tasks[i - 1].id];
+        }
+        delete t._predecessorNames;
+      });
     });
   }
 
-  // Adds a new traveler holding the imported tasks to an EXISTING project.
-  // Used by the "Import from..." buttons within a project's traveler list.
-  function openImportConfirmModalForTraveler(parsed, sourceLabel, extraNote, project) {
-    const count = parsed.tasks.length;
-    const body = `
-      <div class="modal-field"><label>Traveler name</label><input type="text" id="f-name" value="${escapeHtml(parsed.projectName)}"></div>
-      <p style="font-size:0.85rem;color:var(--text-dim);margin:-6px 0 12px;">Found ${count} task${count === 1 ? "" : "s"} to import${extraNote ? " — " + escapeHtml(extraNote) : ""}.</p>
-    `;
+  // Adds one traveler per {name, tasks} entry to an EXISTING project. Used
+  // by the "Import from..." buttons within a project's traveler list, for
+  // both MS Project and Excel sources.
+  function openAddTravelersToProjectModal(project, travelersData, sourceLabel) {
+    const totalTasks = travelersData.reduce((a, t) => a + t.tasks.length, 0);
+    const names = travelersData.map((t) => escapeHtml(t.name)).join(", ");
+    const single = travelersData.length === 1;
+    const body = `<p style="font-size:0.9rem;">Found ${travelersData.length} traveler${single ? "" : "s"} (${totalTasks} tasks total): ${names}.</p><p style="font-size:0.85rem;color:var(--text-dim);">${single ? "It" : "Each"} will be added as ${single ? "a" : "its own"} traveler to <strong>${escapeHtml(project.name)}</strong>.</p>`;
     openModal(`Import from ${sourceLabel}`, body, async () => {
-      const name = document.getElementById("f-name").value.trim();
-      if (!name) { alert("Traveler name is required."); return false; }
-      const trav = {
-        id: uid(), name,
-        description: `Imported from ${sourceLabel} (${count} task${count === 1 ? "" : "s"}).`,
-        status: "on_track",
-        tasks: parsed.tasks.map((t) => ({ id: uid(), ...t })),
+      const newTravelers = travelersData.map((t) => ({
+        id: uid(), name: t.name, description: "", status: "on_track",
+        tasks: t.tasks.map((tk) => ({ id: uid(), ...tk, predecessors: [] })),
         delays: [], notes: [],
-      };
-      project.travelers.push(trav);
+      }));
+      resolvePredecessorNames(newTravelers, project);
+      project.travelers.push(...newTravelers);
+      recalcSchedule(project);
       const ok = await saveRemote();
-      if (!ok) { project.travelers.pop(); return false; }
+      if (!ok) { newTravelers.forEach(() => project.travelers.pop()); return false; }
       renderTravelerList(project);
-      location.hash = "project/" + project.id + "/traveler/" + trav.id;
     });
   }
 
@@ -543,19 +563,7 @@
         tasks: t.tasks.map((tk) => ({ id: uid(), ...tk, predecessors: [] })),
         delays: [], notes: [],
       }));
-
-      const nameToId = {};
-      travelers.forEach((trav) => trav.tasks.forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; }));
-      travelers.forEach((trav) => {
-        trav.tasks.forEach((t, i) => {
-          if (t._predecessorNames && t._predecessorNames.length) {
-            t.predecessors = t._predecessorNames.map((n) => nameToId[n.trim().toLowerCase()]).filter(Boolean);
-          } else if (i > 0) {
-            t.predecessors = [trav.tasks[i - 1].id];
-          }
-          delete t._predecessorNames;
-        });
-      });
+      resolvePredecessorNames(travelers, null);
 
       const p = {
         id: uid(), name, client: document.getElementById("f-client").value.trim(),
@@ -583,11 +591,11 @@
     try {
       const text = await file.text();
       const parsed = parseMsProjectXml(text);
-      if (!parsed.tasks.length) {
+      if (!parsed.travelers.length) {
         alert("No importable tasks found in that file. Summary rows are skipped automatically, so this can happen if every row is a summary task.");
         return;
       }
-      openImportConfirmModal(parsed, "Microsoft Project", "summary/rollup rows are skipped");
+      openMultiTravelerImportModal(parsed.travelers, "Microsoft Project");
     } catch (err) {
       alert("Couldn't import that file: " + err.message);
     }
@@ -602,11 +610,11 @@
     try {
       const text = await file.text();
       const parsed = parseMsProjectXml(text);
-      if (!parsed.tasks.length) {
+      if (!parsed.travelers.length) {
         alert("No importable tasks found in that file. Summary rows are skipped automatically, so this can happen if every row is a summary task.");
         return;
       }
-      openImportConfirmModalForTraveler(parsed, "Microsoft Project", "summary/rollup rows are skipped", getProject(currentProjectId));
+      openAddTravelersToProjectModal(getProject(currentProjectId), parsed.travelers, "Microsoft Project");
     } catch (err) {
       alert("Couldn't import that file: " + err.message);
     }
@@ -807,35 +815,7 @@
     if (!files.length) return;
     try {
       const travelersData = await extractTravelersFromFiles(files);
-      const project = getProject(currentProjectId);
-      const totalTasks = travelersData.reduce((a, t) => a + t.tasks.length, 0);
-      const names = travelersData.map((t) => escapeHtml(t.name)).join(", ");
-      const body = `<p style="font-size:0.9rem;">Found ${travelersData.length} traveler${travelersData.length === 1 ? "" : "s"} (${totalTasks} tasks total): ${names}.</p><p style="font-size:0.85rem;color:var(--text-dim);">${travelersData.length === 1 ? "It" : "Each"} will be added as ${travelersData.length === 1 ? "a" : "its own"} traveler to <strong>${escapeHtml(project.name)}</strong>.</p>`;
-      openModal("Import from Excel", body, async () => {
-        const newTravelers = travelersData.map((t) => ({
-          id: uid(), name: t.name, description: "", status: "on_track",
-          tasks: t.tasks.map((tk) => ({ id: uid(), ...tk, predecessors: [] })),
-          delays: [], notes: [],
-        }));
-        const nameToId = {};
-        allTasks(project).forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; });
-        newTravelers.forEach((trav) => trav.tasks.forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; }));
-        newTravelers.forEach((trav) => {
-          trav.tasks.forEach((t, i) => {
-            if (t._predecessorNames && t._predecessorNames.length) {
-              t.predecessors = t._predecessorNames.map((n) => nameToId[n.trim().toLowerCase()]).filter(Boolean);
-            } else if (i > 0) {
-              t.predecessors = [trav.tasks[i - 1].id];
-            }
-            delete t._predecessorNames;
-          });
-        });
-        project.travelers.push(...newTravelers);
-        recalcSchedule(project);
-        const ok = await saveRemote();
-        if (!ok) { newTravelers.forEach(() => project.travelers.pop()); return false; }
-        renderTravelerList(project);
-      });
+      openAddTravelersToProjectModal(getProject(currentProjectId), travelersData, "Excel");
     } catch (err) {
       alert("Couldn't import that file: " + err.message);
     }
