@@ -44,20 +44,53 @@
     <div id="projectGrid" class="project-grid"></div>
   </section>
 
-  <!-- ===================== PROJECT DETAIL VIEW ===================== -->
-  <section id="detailView" class="view hidden">
+  <!-- ===================== TRAVELER LIST (within a project) ===================== -->
+  <section id="travelerListView" class="view hidden">
     <div class="detail-header">
-      <button class="btn-link" id="backToListBtn">&larr; All Projects</button>
+      <button class="btn-link" id="backToProjectsBtn">&larr; All Projects</button>
       <div class="detail-title-row">
         <div>
-          <h2 id="detailName">Project Name</h2>
+          <h2 id="travelerListProjectName">Project Name</h2>
+          <p id="travelerListProjectClient" class="detail-client"></p>
+        </div>
+        <div class="detail-actions">
+          <select id="travelerListProjectStatus" class="status-select hidden"></select>
+          <span id="travelerListProjectStatusBadge" class="status-badge hidden"></span>
+          <button class="btn-secondary" id="shareProjectListBtn">Share Link</button>
+          <button class="btn-secondary editor-only hidden" id="editProjectFromListBtn">Edit Project</button>
+          <button class="btn-danger editor-only hidden" id="deleteProjectFromListBtn">Delete</button>
+        </div>
+      </div>
+      <p id="travelerListProjectDescription" class="detail-description"></p>
+    </div>
+
+    <div class="panel-header-row">
+      <h3>Travelers</h3>
+      <div class="header-row-actions">
+        <button class="btn-secondary editor-only hidden" id="importMspTravelerBtn">Import from MS Project</button>
+        <input type="file" id="importFileInputTraveler" accept=".xml" class="hidden">
+        <button class="btn-secondary editor-only hidden" id="importExcelTravelerBtn">Import from Excel</button>
+        <input type="file" id="importExcelInputTraveler" accept=".xlsx,.xls" class="hidden">
+        <button class="btn-primary editor-only hidden" id="newTravelerBtn">+ New Traveler</button>
+      </div>
+    </div>
+    <div id="travelerGrid" class="project-grid"></div>
+  </section>
+
+  <!-- ===================== TRAVELER DETAIL VIEW ===================== -->
+  <section id="detailView" class="view hidden">
+    <div class="detail-header">
+      <button class="btn-link" id="backToListBtn">&larr; Back to Travelers</button>
+      <div class="detail-title-row">
+        <div>
+          <h2 id="detailName">Traveler Name</h2>
           <p id="detailClient" class="detail-client"></p>
         </div>
         <div class="detail-actions">
           <select id="detailStatus" class="status-select hidden"></select>
           <span id="detailStatusBadge" class="status-badge hidden"></span>
           <button class="btn-secondary" id="shareProjectBtn">Share Link</button>
-          <button class="btn-secondary editor-only hidden" id="editProjectBtn">Edit Project</button>
+          <button class="btn-secondary editor-only hidden" id="editProjectBtn">Edit Traveler</button>
           <button class="btn-danger editor-only hidden" id="deleteProjectBtn">Delete</button>
         </div>
       </div>

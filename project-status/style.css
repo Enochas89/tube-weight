@@ -368,6 +368,8 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   padding: 6px 10px;
 }
 .checkbox-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 0.88rem; font-weight: 400; }
+.checkbox-group-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-dim); margin: 8px 0 2px; }
+.checkbox-group-label:first-child { margin-top: 0; }
 .checkbox-row input { width: auto; flex-shrink: 0; }
 .modal-hint { margin: 4px 0; font-size: 0.82rem; color: var(--text-dim); }
 

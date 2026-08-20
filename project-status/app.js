@@ -10,6 +10,7 @@
 
   let state = { projects: [] };
   let currentProjectId = null;
+  let currentTravelerId = null;
   let isEditor = false;
 
   // ---------- utility ----------
@@ -28,6 +29,28 @@
     return div.innerHTML;
   }
   function getProject(id) { return state.projects.find((p) => p.id === id); }
+  function getTraveler(project, id) { return project ? project.travelers.find((t) => t.id === id) : null; }
+  function allTasks(project) { return project.travelers.flatMap((t) => t.tasks); }
+
+  // Projects created before travelers existed carried tasks/delays/notes
+  // directly — wrap them into a single "General" traveler so old data keeps
+  // working without a manual migration step.
+  function migrateProject(p) {
+    if (!Array.isArray(p.travelers)) {
+      p.travelers = [{
+        id: uid(),
+        name: "General",
+        description: "",
+        status: p.status || "on_track",
+        tasks: Array.isArray(p.tasks) ? p.tasks : [],
+        delays: Array.isArray(p.delays) ? p.delays : [],
+        notes: Array.isArray(p.notes) ? p.notes : [],
+      }];
+      delete p.tasks;
+      delete p.delays;
+      delete p.notes;
+    }
+  }
 
   function addDays(dateStr, n) {
     return new Date(new Date(dateStr + "T00:00:00").getTime() + n * 86400000).toISOString().slice(0, 10);
@@ -63,9 +86,11 @@
 
   // Tasks that (transitively) depend on taskId — used to keep the
   // predecessor picker from offering a choice that would create a cycle.
+  // Predecessors can cross traveler boundaries within the same project, so
+  // this walks every task in the project, not just one traveler's.
   function descendantsOf(project, taskId, visited) {
     visited = visited || new Set();
-    project.tasks.forEach((t) => {
+    allTasks(project).forEach((t) => {
       if ((t.predecessors || []).includes(taskId) && !visited.has(t.id)) {
         visited.add(t.id);
         descendantsOf(project, t.id, visited);
@@ -74,19 +99,22 @@
     return visited;
   }
   function successorsOf(project, taskId) {
-    return project.tasks.filter((t) => (t.predecessors || []).includes(taskId));
+    return allTasks(project).filter((t) => (t.predecessors || []).includes(taskId));
   }
 
   // Pushes every task's start/end forward to sit right after its latest
   // predecessor finishes. Repeats to a fixed point so changes cascade through
   // chains (A -> B -> C) — safe for any dependency DAG since each pass
-  // resolves one more hop, and it's a no-op once nothing moves.
+  // resolves one more hop, and it's a no-op once nothing moves. Operates
+  // across the whole project (all travelers) since predecessors can cross
+  // traveler boundaries.
   function recalcSchedule(project) {
+    const all = allTasks(project);
     const byId = {};
-    project.tasks.forEach((t) => { byId[t.id] = t; });
-    for (let pass = 0; pass <= project.tasks.length; pass++) {
+    all.forEach((t) => { byId[t.id] = t; });
+    for (let pass = 0; pass <= all.length; pass++) {
       let changed = false;
-      project.tasks.forEach((t) => {
+      all.forEach((t) => {
         const preds = (t.predecessors || []).map((id) => byId[id]).filter(Boolean);
         if (!preds.length) return;
         const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
@@ -126,8 +154,11 @@
   document.getElementById("shareListBtn").addEventListener("click", () => {
     copyLink(location.origin + location.pathname);
   });
-  document.getElementById("shareProjectBtn").addEventListener("click", () => {
+  document.getElementById("shareProjectListBtn").addEventListener("click", () => {
     copyLink(location.origin + location.pathname + "#project/" + currentProjectId);
+  });
+  document.getElementById("shareProjectBtn").addEventListener("click", () => {
+    copyLink(location.origin + location.pathname + "#project/" + currentProjectId + "/traveler/" + currentTravelerId);
   });
 
   // ---------- status toast ----------
@@ -167,8 +198,7 @@
     document.getElementById("signInBtn").classList.toggle("hidden", isEditor);
     document.getElementById("editorBadge").classList.toggle("hidden", !isEditor);
     document.querySelectorAll(".editor-only").forEach((el) => el.classList.toggle("hidden", !isEditor));
-    if (currentProjectId) renderDetail(getProject(currentProjectId));
-    else renderList();
+    route();
   }
 
   document.getElementById("signInBtn").addEventListener("click", () => {
@@ -205,6 +235,7 @@
       if (!res.ok) throw new Error("load failed");
       const data = await res.json();
       state = (data && Array.isArray(data.projects)) ? data : { projects: [] };
+      state.projects.forEach(migrateProject);
       hideStatus();
     } catch (e) {
       state = { projects: [] };
@@ -243,32 +274,60 @@
   // ---------- routing ----------
   function route() {
     const hash = location.hash.slice(1);
-    if (hash.startsWith("project/")) {
-      currentProjectId = hash.slice(8);
-      const p = getProject(currentProjectId);
-      if (!p) { location.hash = ""; return; }
-      showDetail(p);
-    } else {
-      currentProjectId = null;
-      showList();
+    const travelerMatch = hash.match(/^project\/([^/]+)\/traveler\/([^/]+)$/);
+    if (travelerMatch) {
+      const p = getProject(travelerMatch[1]);
+      const trav = p && getTraveler(p, travelerMatch[2]);
+      if (!p || !trav) { location.hash = p ? "project/" + p.id : ""; return; }
+      currentProjectId = p.id;
+      currentTravelerId = trav.id;
+      showTravelerDetail(p, trav);
+      return;
     }
+    const projectMatch = hash.match(/^project\/([^/]+)$/);
+    if (projectMatch) {
+      const p = getProject(projectMatch[1]);
+      if (!p) { location.hash = ""; return; }
+      currentProjectId = p.id;
+      currentTravelerId = null;
+      showTravelerList(p);
+      return;
+    }
+    currentProjectId = null;
+    currentTravelerId = null;
+    showList();
   }
   window.addEventListener("hashchange", route);
 
-  function showList() {
-    document.getElementById("listView").classList.remove("hidden");
+  function hideAllViews() {
+    document.getElementById("listView").classList.add("hidden");
+    document.getElementById("travelerListView").classList.add("hidden");
     document.getElementById("detailView").classList.add("hidden");
+  }
+  function showList() {
+    hideAllViews();
+    document.getElementById("listView").classList.remove("hidden");
     renderList();
   }
-  function showDetail(p) {
-    document.getElementById("listView").classList.add("hidden");
+  function showTravelerList(p) {
+    hideAllViews();
+    document.getElementById("travelerListView").classList.remove("hidden");
+    renderTravelerList(p);
+  }
+  function showTravelerDetail(p, trav) {
+    hideAllViews();
     document.getElementById("detailView").classList.remove("hidden");
-    renderDetail(p);
+    renderTravelerDetail(p, trav);
   }
 
-  // ---------- list view ----------
+  // ---------- project list view ----------
   function projectProgress(p) {
-    const counted = p.tasks.filter((t) => !t.noScheduleImpact);
+    const counted = allTasks(p).filter((t) => !t.noScheduleImpact);
+    if (!counted.length) return 0;
+    return Math.round(counted.reduce((a, t) => a + (t.progress || 0), 0) / counted.length);
+  }
+  function travelerProgress(trav) {
+    const counted = trav.tasks.filter((t) => !t.noScheduleImpact);
     if (!counted.length) return 0;
     return Math.round(counted.reduce((a, t) => a + (t.progress || 0), 0) / counted.length);
   }
@@ -281,6 +340,8 @@
     }
     grid.innerHTML = state.projects.map((p) => {
       const progress = projectProgress(p);
+      const taskCount = allTasks(p).length;
+      const travelerCount = p.travelers.length;
       return `
         <div class="project-card" data-id="${p.id}">
           <div class="project-card-top">
@@ -293,8 +354,8 @@
           <p class="project-card-dates">${fmtDate(p.startDate)} &rarr; ${fmtDate(p.endDate)}</p>
           <div class="progress-bar"><div class="progress-bar-fill" style="width:${progress}%"></div></div>
           <div class="project-card-meta">
-            <span>${p.tasks.length} task${p.tasks.length === 1 ? "" : "s"}</span>
-            <span>${p.delays.length ? p.delays.length + " delay" + (p.delays.length === 1 ? "" : "s") : "No delays"}</span>
+            <span>${travelerCount} traveler${travelerCount === 1 ? "" : "s"}</span>
+            <span>${taskCount} task${taskCount === 1 ? "" : "s"}</span>
             <span>${progress}%</span>
           </div>
         </div>`;
@@ -397,6 +458,8 @@
     return { projectName, tasks };
   }
 
+  // Creates a brand-new project with a single traveler holding the imported
+  // tasks. Used by the top-level "Import from..." buttons on the Projects list.
   function openImportConfirmModal(parsed, sourceLabel, extraNote) {
     const count = parsed.tasks.length;
     const body = `
@@ -414,9 +477,94 @@
         startDate: dates.length ? dates.reduce((a, b) => (b < a ? b : a)) : todayStr(),
         endDate: dates.length ? dates.reduce((a, b) => (b > a ? b : a)) : "",
         description: `Imported from ${sourceLabel} (${count} task${count === 1 ? "" : "s"}).`,
+        travelers: [{
+          id: uid(),
+          name: parsed.projectName,
+          description: "",
+          status: "on_track",
+          tasks: parsed.tasks.map((t) => ({ id: uid(), ...t })),
+          delays: [], notes: [],
+        }],
+      };
+      state.projects.push(p);
+      const ok = await saveRemote();
+      if (!ok) { state.projects.pop(); return false; }
+      renderList();
+      location.hash = "project/" + p.id;
+    });
+  }
+
+  // Adds a new traveler holding the imported tasks to an EXISTING project.
+  // Used by the "Import from..." buttons within a project's traveler list.
+  function openImportConfirmModalForTraveler(parsed, sourceLabel, extraNote, project) {
+    const count = parsed.tasks.length;
+    const body = `
+      <div class="modal-field"><label>Traveler name</label><input type="text" id="f-name" value="${escapeHtml(parsed.projectName)}"></div>
+      <p style="font-size:0.85rem;color:var(--text-dim);margin:-6px 0 12px;">Found ${count} task${count === 1 ? "" : "s"} to import${extraNote ? " — " + escapeHtml(extraNote) : ""}.</p>
+    `;
+    openModal(`Import from ${sourceLabel}`, body, async () => {
+      const name = document.getElementById("f-name").value.trim();
+      if (!name) { alert("Traveler name is required."); return false; }
+      const trav = {
+        id: uid(), name,
+        description: `Imported from ${sourceLabel} (${count} task${count === 1 ? "" : "s"}).`,
+        status: "on_track",
         tasks: parsed.tasks.map((t) => ({ id: uid(), ...t })),
         delays: [], notes: [],
       };
+      project.travelers.push(trav);
+      const ok = await saveRemote();
+      if (!ok) { project.travelers.pop(); return false; }
+      renderTravelerList(project);
+      location.hash = "project/" + project.id + "/traveler/" + trav.id;
+    });
+  }
+
+  // One workbook, multiple travelers: each sheet with a name/duration/predecessor
+  // column becomes its own traveler under a single new project. Predecessors
+  // reference other tasks BY NAME (matched across the whole workbook, so a
+  // traveler's first task can depend on another traveler's last one); any
+  // task without an explicit predecessor auto-chains after the previous row
+  // in its own sheet.
+  function openMultiTravelerImportModal(travelersData, sourceLabel) {
+    const totalTasks = travelersData.reduce((a, t) => a + t.tasks.length, 0);
+    const names = travelersData.map((t) => escapeHtml(t.name)).join(", ");
+    const body = `
+      <div class="modal-field"><label>Project name</label><input type="text" id="f-name" value=""></div>
+      <div class="modal-field"><label>Client</label><input type="text" id="f-client" value=""></div>
+      <p style="font-size:0.85rem;color:var(--text-dim);margin:-6px 0 12px;">Found ${travelersData.length} traveler${travelersData.length === 1 ? "" : "s"} (${totalTasks} tasks total): ${names}.</p>
+    `;
+    openModal(`Import from ${sourceLabel}`, body, async () => {
+      const name = document.getElementById("f-name").value.trim();
+      if (!name) { alert("Project name is required."); return false; }
+
+      const travelers = travelersData.map((t) => ({
+        id: uid(), name: t.name, description: "", status: "on_track",
+        tasks: t.tasks.map((tk) => ({ id: uid(), ...tk, predecessors: [] })),
+        delays: [], notes: [],
+      }));
+
+      const nameToId = {};
+      travelers.forEach((trav) => trav.tasks.forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; }));
+      travelers.forEach((trav) => {
+        trav.tasks.forEach((t, i) => {
+          if (t._predecessorNames && t._predecessorNames.length) {
+            t.predecessors = t._predecessorNames.map((n) => nameToId[n.trim().toLowerCase()]).filter(Boolean);
+          } else if (i > 0) {
+            t.predecessors = [trav.tasks[i - 1].id];
+          }
+          delete t._predecessorNames;
+        });
+      });
+
+      const p = {
+        id: uid(), name, client: document.getElementById("f-client").value.trim(),
+        status: "on_track",
+        startDate: todayStr(), endDate: "",
+        description: `Imported from ${sourceLabel} (${travelersData.length} travelers, ${totalTasks} tasks).`,
+        travelers,
+      };
+      recalcSchedule(p);
       state.projects.push(p);
       const ok = await saveRemote();
       if (!ok) { state.projects.pop(); return false; }
@@ -444,6 +592,25 @@
       alert("Couldn't import that file: " + err.message);
     }
   });
+  document.getElementById("importMspTravelerBtn").addEventListener("click", () => {
+    document.getElementById("importFileInputTraveler").click();
+  });
+  document.getElementById("importFileInputTraveler").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = parseMsProjectXml(text);
+      if (!parsed.tasks.length) {
+        alert("No importable tasks found in that file. Summary rows are skipped automatically, so this can happen if every row is a summary task.");
+        return;
+      }
+      openImportConfirmModalForTraveler(parsed, "Microsoft Project", "summary/rollup rows are skipped", getProject(currentProjectId));
+    } catch (err) {
+      alert("Couldn't import that file: " + err.message);
+    }
+  });
 
   // ---------- Excel import ----------
   const EXCEL_HEADER_ALIASES = {
@@ -452,6 +619,8 @@
     finish: ["finish", "end", "end date", "finish date", "due", "due date"],
     percent: ["% complete", "percent complete", "% work complete", "progress", "complete", "% done"],
     responsible: ["resource names", "resource", "resources", "assigned to", "responsible", "owner", "assignee"],
+    duration: ["duration (days)", "duration", "days"],
+    predecessors: ["predecessors", "predecessor", "predecessor task names", "depends on"],
   };
 
   function normalizeHeader(h) { return String(h || "").trim().toLowerCase().replace(/\s+/g, " "); }
@@ -479,32 +648,32 @@
     return null;
   }
 
-  function parseExcelWorkbook(arrayBuffer) {
-    if (typeof XLSX === "undefined") throw new Error("Excel import library failed to load — try reloading the page.");
-    const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
-    const sheetName = wb.SheetNames[0];
-    if (!sheetName) throw new Error("This workbook has no sheets.");
-    const sheet = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-    if (!rows.length) throw new Error(`The "${sheetName}" sheet has no data rows.`);
-
+  function parseSheetRows(rows, sheetName) {
     const headers = Object.keys(rows[0]);
     const nameKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.name);
     const startKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.start);
     const finishKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.finish);
     const percentKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.percent);
     const responsibleKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.responsible);
-
-    if (!nameKey || !startKey || !finishKey) {
-      throw new Error(`Couldn't find the required columns in "${sheetName}" — need a task name column, a start date column, and a finish/end date column. Found: ${headers.join(", ")}`);
-    }
+    const durationKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.duration);
+    const predKey = findColumnKey(headers, EXCEL_HEADER_ALIASES.predecessors);
+    if (!nameKey) return null;
+    // Dates are only required when there's no Duration column to fall back
+    // on — a duration + predecessor chain can schedule itself with no dates
+    // in the sheet at all.
+    if (!durationKey && (!startKey || !finishKey)) return null;
 
     const tasks = [];
     rows.forEach((row) => {
       const name = String(row[nameKey] || "").trim();
-      const startDate = excelDateToYMD(row[startKey]);
-      const endDate = excelDateToYMD(row[finishKey]);
-      if (!name || !startDate || !endDate) return;
+      if (!name) return;
+      let startDate = startKey ? excelDateToYMD(row[startKey]) : null;
+      let endDate = finishKey ? excelDateToYMD(row[finishKey]) : null;
+      let duration = durationKey ? Math.max(1, Math.round(num(row[durationKey])) || 1) : null;
+      if (!durationKey && (!startDate || !endDate)) return;
+      if (!startDate) startDate = todayStr();
+      if (!duration) duration = Math.max(1, daysBetween(startDate, endDate || startDate) + 1);
+      if (!endDate) endDate = addDays(startDate, duration - 1);
 
       let pct = 0;
       if (percentKey) {
@@ -515,12 +684,53 @@
       pct = Math.max(0, Math.min(100, pct));
       const status = pct >= 100 ? "complete" : pct > 0 ? "in_progress" : "not_started";
       const responsible = responsibleKey ? String(row[responsibleKey] || "").trim() : "";
+      const predecessorNames = predKey
+        ? String(row[predKey] || "").split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
 
-      tasks.push({ name, startDate, endDate, responsible, status, progress: pct });
+      tasks.push({ name, startDate, endDate, duration, responsible, status, progress: pct, _predecessorNames: predecessorNames });
     });
+    return tasks;
+  }
 
+  // Single-sheet import (legacy path) — used when the workbook has exactly
+  // one sheet with recognizable task columns.
+  function parseExcelWorkbook(arrayBuffer) {
+    if (typeof XLSX === "undefined") throw new Error("Excel import library failed to load — try reloading the page.");
+    const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    const sheetName = wb.SheetNames[0];
+    if (!sheetName) throw new Error("This workbook has no sheets.");
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    if (!rows.length) throw new Error(`The "${sheetName}" sheet has no data rows.`);
+    const tasks = parseSheetRows(rows, sheetName);
+    if (tasks === null) {
+      const headers = Object.keys(rows[0]);
+      throw new Error(`Couldn't find the required columns in "${sheetName}" — need a task name column, plus either start/finish date columns or a duration column. Found: ${headers.join(", ")}`);
+    }
+    tasks.forEach((t) => { delete t._predecessorNames; delete t.duration; });
     const projectName = sheetName && normalizeHeader(sheetName) !== "sheet1" ? sheetName : "Imported Project";
     return { projectName, tasks };
+  }
+
+  // Multi-sheet import — every sheet with recognizable task columns becomes
+  // its own traveler; sheets that don't look like a task list are skipped.
+  function parseExcelWorkbookMultiSheet(arrayBuffer) {
+    if (typeof XLSX === "undefined") throw new Error("Excel import library failed to load — try reloading the page.");
+    const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    const travelers = [];
+    wb.SheetNames.forEach((sheetName) => {
+      const sheet = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      if (!rows.length) return;
+      const tasks = parseSheetRows(rows, sheetName);
+      if (tasks === null || !tasks.length) return;
+      travelers.push({ name: sheetName, tasks });
+    });
+    if (!travelers.length) {
+      throw new Error("No sheets with a task name column (plus start/finish dates or a duration column) were found in this workbook.");
+    }
+    return travelers;
   }
 
   document.getElementById("importExcelBtn").addEventListener("click", () => {
@@ -532,25 +742,78 @@
     if (!file) return;
     try {
       const buf = await file.arrayBuffer();
-      const parsed = parseExcelWorkbook(buf);
-      if (!parsed.tasks.length) {
-        alert("No importable rows found in that sheet. Each row needs a task name, a start date, and a finish/end date.");
-        return;
+      const travelersData = parseExcelWorkbookMultiSheet(buf);
+      if (travelersData.length === 1) {
+        const parsed = { projectName: travelersData[0].name, tasks: travelersData[0].tasks };
+        parsed.tasks.forEach((t) => { delete t._predecessorNames; delete t.duration; });
+        openImportConfirmModal(parsed, "Excel", null);
+      } else {
+        openMultiTravelerImportModal(travelersData, "Excel");
       }
-      openImportConfirmModal(parsed, "Excel", null);
+    } catch (err) {
+      alert("Couldn't import that file: " + err.message);
+    }
+  });
+  document.getElementById("importExcelTravelerBtn").addEventListener("click", () => {
+    document.getElementById("importExcelInputTraveler").click();
+  });
+  document.getElementById("importExcelInputTraveler").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const travelersData = parseExcelWorkbookMultiSheet(buf);
+      const project = getProject(currentProjectId);
+      if (travelersData.length === 1) {
+        const parsed = { projectName: travelersData[0].name, tasks: travelersData[0].tasks };
+        parsed.tasks.forEach((t) => { delete t._predecessorNames; delete t.duration; });
+        openImportConfirmModalForTraveler(parsed, "Excel", null, project);
+      } else {
+        // Multiple sheets while already inside a project: add one traveler
+        // per sheet to THIS project instead of creating a new one.
+        const totalTasks = travelersData.reduce((a, t) => a + t.tasks.length, 0);
+        const names = travelersData.map((t) => escapeHtml(t.name)).join(", ");
+        const body = `<p style="font-size:0.9rem;">Found ${travelersData.length} travelers (${totalTasks} tasks total): ${names}.</p><p style="font-size:0.85rem;color:var(--text-dim);">Each sheet will be added as its own traveler to <strong>${escapeHtml(project.name)}</strong>.</p>`;
+        openModal("Import from Excel", body, async () => {
+          const newTravelers = travelersData.map((t) => ({
+            id: uid(), name: t.name, description: "", status: "on_track",
+            tasks: t.tasks.map((tk) => ({ id: uid(), ...tk, predecessors: [] })),
+            delays: [], notes: [],
+          }));
+          const nameToId = {};
+          allTasks(project).forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; });
+          newTravelers.forEach((trav) => trav.tasks.forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; }));
+          newTravelers.forEach((trav) => {
+            trav.tasks.forEach((t, i) => {
+              if (t._predecessorNames && t._predecessorNames.length) {
+                t.predecessors = t._predecessorNames.map((n) => nameToId[n.trim().toLowerCase()]).filter(Boolean);
+              } else if (i > 0) {
+                t.predecessors = [trav.tasks[i - 1].id];
+              }
+              delete t._predecessorNames;
+            });
+          });
+          project.travelers.push(...newTravelers);
+          recalcSchedule(project);
+          const ok = await saveRemote();
+          if (!ok) { newTravelers.forEach(() => project.travelers.pop()); return false; }
+          renderTravelerList(project);
+        });
+      }
     } catch (err) {
       alert("Couldn't import that file: " + err.message);
     }
   });
 
-  // ---------- detail view ----------
-  function renderDetail(p) {
-    document.getElementById("detailName").textContent = p.name;
-    document.getElementById("detailClient").textContent = p.client || "";
-    document.getElementById("detailDescription").textContent = p.description || "";
+  // ---------- traveler list (within a project) ----------
+  function renderTravelerList(p) {
+    document.getElementById("travelerListProjectName").textContent = p.name;
+    document.getElementById("travelerListProjectClient").textContent = p.client || "";
+    document.getElementById("travelerListProjectDescription").textContent = p.description || "";
 
-    const statusSelect = document.getElementById("detailStatus");
-    const statusBadgeReadonly = document.getElementById("detailStatusBadge");
+    const statusSelect = document.getElementById("travelerListProjectStatus");
+    const statusBadgeReadonly = document.getElementById("travelerListProjectStatusBadge");
     if (isEditor) {
       statusSelect.classList.remove("hidden");
       statusBadgeReadonly.classList.add("hidden");
@@ -572,20 +835,91 @@
       statusBadgeReadonly.className = "status-badge " + p.status;
     }
 
-    renderTaskList(p);
-    renderDelays(p);
-    renderNotes(p);
+    const grid = document.getElementById("travelerGrid");
+    if (!p.travelers.length) {
+      grid.innerHTML = `<div class="empty-state">No travelers yet.${isEditor ? ' Click "+ New Traveler" to add one, or import from MS Project/Excel.' : ""}</div>`;
+    } else {
+      grid.innerHTML = p.travelers.map((trav) => {
+        const progress = travelerProgress(trav);
+        return `
+          <div class="project-card" data-traveler-id="${trav.id}">
+            <div class="project-card-top">
+              <div>
+                <h3>${escapeHtml(trav.name)}</h3>
+                <p class="client">${escapeHtml(trav.description || "—")}</p>
+              </div>
+              <span class="status-badge ${trav.status}">${STATUS_LABELS[trav.status]}</span>
+            </div>
+            <div class="progress-bar"><div class="progress-bar-fill" style="width:${progress}%"></div></div>
+            <div class="project-card-meta">
+              <span>${trav.tasks.length} task${trav.tasks.length === 1 ? "" : "s"}</span>
+              <span>${trav.delays.length ? trav.delays.length + " delay" + (trav.delays.length === 1 ? "" : "s") : "No delays"}</span>
+              <span>${progress}%</span>
+            </div>
+          </div>`;
+      }).join("");
+    }
+    grid.querySelectorAll("[data-traveler-id]").forEach((card) => {
+      card.addEventListener("click", () => { location.hash = "project/" + p.id + "/traveler/" + card.dataset.travelerId; });
+    });
   }
 
-  document.getElementById("backToListBtn").addEventListener("click", () => { location.hash = ""; });
-  document.getElementById("editProjectBtn").addEventListener("click", () => openProjectModal(getProject(currentProjectId)));
-  document.getElementById("deleteProjectBtn").addEventListener("click", async () => {
-    if (!confirm("Delete this project? This can't be undone.")) return;
+  document.getElementById("backToProjectsBtn").addEventListener("click", () => { location.hash = ""; });
+  document.getElementById("editProjectFromListBtn").addEventListener("click", () => openProjectModal(getProject(currentProjectId)));
+  document.getElementById("deleteProjectFromListBtn").addEventListener("click", async () => {
+    if (!confirm("Delete this project and all its travelers? This can't be undone.")) return;
     const removed = state.projects.find((p) => p.id === currentProjectId);
     state.projects = state.projects.filter((p) => p.id !== currentProjectId);
     const ok = await saveRemote();
     if (!ok) { state.projects.push(removed); return; }
     location.hash = "";
+  });
+  document.getElementById("newTravelerBtn").addEventListener("click", () => openTravelerModal(getProject(currentProjectId)));
+
+  // ---------- traveler detail view ----------
+  function renderTravelerDetail(p, trav) {
+    document.getElementById("detailName").textContent = trav.name;
+    document.getElementById("detailClient").textContent = "Part of " + p.name;
+    document.getElementById("detailDescription").textContent = trav.description || "";
+
+    const statusSelect = document.getElementById("detailStatus");
+    const statusBadgeReadonly = document.getElementById("detailStatusBadge");
+    if (isEditor) {
+      statusSelect.classList.remove("hidden");
+      statusBadgeReadonly.classList.add("hidden");
+      statusSelect.innerHTML = Object.entries(STATUS_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+      statusSelect.value = trav.status;
+      statusSelect.className = "status-select " + trav.status;
+      statusSelect.onchange = async () => {
+        const prev = trav.status;
+        trav.status = statusSelect.value;
+        statusSelect.className = "status-select " + trav.status;
+        const ok = await saveRemote();
+        if (!ok) { trav.status = prev; statusSelect.value = prev; statusSelect.className = "status-select " + prev; }
+        renderTravelerList(p);
+      };
+    } else {
+      statusSelect.classList.add("hidden");
+      statusBadgeReadonly.classList.remove("hidden");
+      statusBadgeReadonly.textContent = STATUS_LABELS[trav.status];
+      statusBadgeReadonly.className = "status-badge " + trav.status;
+    }
+
+    renderTaskList(p, trav);
+    renderDelays(p, trav);
+    renderNotes(p, trav);
+  }
+
+  document.getElementById("backToListBtn").addEventListener("click", () => { location.hash = "project/" + currentProjectId; });
+  document.getElementById("editProjectBtn").addEventListener("click", () => openTravelerModal(getProject(currentProjectId), getTraveler(getProject(currentProjectId), currentTravelerId)));
+  document.getElementById("deleteProjectBtn").addEventListener("click", async () => {
+    if (!confirm("Delete this traveler? This can't be undone.")) return;
+    const p = getProject(currentProjectId);
+    const removed = p.travelers.find((t) => t.id === currentTravelerId);
+    p.travelers = p.travelers.filter((t) => t.id !== currentTravelerId);
+    const ok = await saveRemote();
+    if (!ok) { p.travelers.push(removed); return; }
+    location.hash = "project/" + currentProjectId;
   });
 
   document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -600,21 +934,21 @@
   });
 
   // ---------- task list ----------
-  function taskSubEntries(p, taskId) {
-    const delays = p.delays.filter((d) => d.taskId === taskId).map((d) => ({ ...d, kind: "delay" }));
-    const notes = p.notes.filter((n) => n.taskId === taskId).map((n) => ({ ...n, kind: "note" }));
+  function taskSubEntries(trav, taskId) {
+    const delays = trav.delays.filter((d) => d.taskId === taskId).map((d) => ({ ...d, kind: "delay" }));
+    const notes = trav.notes.filter((n) => n.taskId === taskId).map((n) => ({ ...n, kind: "note" }));
     return [...delays, ...notes].sort((a, b) => b.date.localeCompare(a.date));
   }
 
-  function renderTaskList(p) {
+  function renderTaskList(project, trav) {
     const wrap = document.getElementById("taskListWrap");
-    if (!p.tasks.length) {
+    if (!trav.tasks.length) {
       wrap.innerHTML = `<div class="empty-state">No tasks yet.${isEditor ? ' Click "+ Add Task" to get started.' : ""}</div>`;
       return;
     }
 
     const todayMs = new Date(todayStr() + "T00:00:00").getTime();
-    wrap.innerHTML = p.tasks.map((t) => {
+    wrap.innerHTML = trav.tasks.map((t) => {
       const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
       const isToday = todayMs >= new Date(t.startDate + "T00:00:00").getTime() && todayMs <= new Date(t.endDate + "T00:00:00").getTime();
       const actions = isEditor ? `
@@ -626,15 +960,23 @@
         ? `<span class="avatar" style="background:${avatarColor(t.responsible)}" title="${escapeHtml(t.responsible)}">${initials(t.responsible)}</span><span class="task-owner">${escapeHtml(t.responsible)}</span>`
         : `<span class="task-owner unassigned">Unassigned</span>`;
 
-      const preds = (t.predecessors || []).map((id) => p.tasks.find((pt) => pt.id === id)).filter(Boolean);
-      const succs = successorsOf(p, t.id);
+      // Predecessors/successors can live in a different traveler within the
+      // same project, so they're looked up project-wide and tagged with
+      // their traveler's name when they're not this task's own traveler.
+      const preds = (t.predecessors || []).map((id) => allTasks(project).find((pt) => pt.id === id)).filter(Boolean);
+      const succs = successorsOf(project, t.id);
+      const labelFor = (other) => {
+        const ownerTrav = project.travelers.find((tr) => tr.tasks.includes(other));
+        const cross = ownerTrav && ownerTrav.id !== trav.id ? ` (${escapeHtml(ownerTrav.name)})` : "";
+        return escapeHtml(other.name) + cross;
+      };
       const linksHtml = (preds.length || succs.length) ? `
           <div class="task-card-links">
-            ${preds.length ? `<span>After: ${preds.map((pt) => escapeHtml(pt.name)).join(", ")}</span>` : ""}
-            ${succs.length ? `<span>Blocks: ${succs.map((st) => escapeHtml(st.name)).join(", ")}</span>` : ""}
+            ${preds.length ? `<span>After: ${preds.map(labelFor).join(", ")}</span>` : ""}
+            ${succs.length ? `<span>Blocks: ${succs.map(labelFor).join(", ")}</span>` : ""}
           </div>` : "";
 
-      const entries = taskSubEntries(p, t.id);
+      const entries = taskSubEntries(trav, t.id);
       const entriesHtml = entries.map((e) => {
         const del = isEditor ? `<button class="btn-icon" data-delete-${e.kind}="${e.id}" title="Delete">&times;</button>` : "";
         const meta = e.kind === "delay"
@@ -682,77 +1024,81 @@
 
     wrap.querySelectorAll("[data-edit-task]").forEach((el) => {
       el.addEventListener("click", () => {
-        openTaskModal(p, p.tasks.find((t) => t.id === el.dataset.editTask));
+        openTaskModal(project, trav, trav.tasks.find((t) => t.id === el.dataset.editTask));
       });
     });
     wrap.querySelectorAll("[data-delete-task]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         if (!confirm("Delete this task?")) return;
         const removedId = btn.dataset.deleteTask;
-        const removedTask = p.tasks.find((t) => t.id === removedId);
-        p.tasks = p.tasks.filter((t) => t.id !== removedId);
-        const affectedDelays = p.delays.filter((d) => d.taskId === removedId);
+        const removedTask = trav.tasks.find((t) => t.id === removedId);
+        trav.tasks = trav.tasks.filter((t) => t.id !== removedId);
+        const affectedDelays = trav.delays.filter((d) => d.taskId === removedId);
         affectedDelays.forEach((d) => { d.taskId = null; });
-        const affectedNotes = p.notes.filter((n) => n.taskId === removedId);
+        const affectedNotes = trav.notes.filter((n) => n.taskId === removedId);
         affectedNotes.forEach((n) => { n.taskId = null; });
-        const affectedPredTasks = p.tasks.filter((t) => (t.predecessors || []).includes(removedId));
+        const affectedPredTasks = allTasks(project).filter((t) => (t.predecessors || []).includes(removedId));
         affectedPredTasks.forEach((t) => { t.predecessors = t.predecessors.filter((id) => id !== removedId); });
-        recalcSchedule(p);
+        recalcSchedule(project);
         const ok = await saveRemote();
         if (!ok) {
-          p.tasks.push(removedTask);
+          trav.tasks.push(removedTask);
           affectedDelays.forEach((d) => { d.taskId = removedTask.id; });
           affectedNotes.forEach((n) => { n.taskId = removedTask.id; });
           affectedPredTasks.forEach((t) => { t.predecessors.push(removedId); });
-          recalcSchedule(p);
+          recalcSchedule(project);
         }
-        renderTaskList(p);
-        renderDelays(p);
-        renderNotes(p);
+        renderTaskList(project, trav);
+        renderDelays(project, trav);
+        renderNotes(project, trav);
         renderList();
+        renderTravelerList(project);
       });
     });
     wrap.querySelectorAll("[data-add-delay-task]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        openDelayModal(p, p.tasks.find((t) => t.id === btn.dataset.addDelayTask));
+        openDelayModal(project, trav, trav.tasks.find((t) => t.id === btn.dataset.addDelayTask));
       });
     });
     wrap.querySelectorAll("[data-add-note-task]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        openNoteModal(p, p.tasks.find((t) => t.id === btn.dataset.addNoteTask));
+        openNoteModal(project, trav, trav.tasks.find((t) => t.id === btn.dataset.addNoteTask));
       });
     });
     wrap.querySelectorAll("[data-delete-delay]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const removed = p.delays.find((d) => d.id === btn.dataset.deleteDelay);
-        p.delays = p.delays.filter((d) => d.id !== btn.dataset.deleteDelay);
+        const removed = trav.delays.find((d) => d.id === btn.dataset.deleteDelay);
+        trav.delays = trav.delays.filter((d) => d.id !== btn.dataset.deleteDelay);
         const ok = await saveRemote();
-        if (!ok) p.delays.push(removed);
-        renderTaskList(p);
-        renderDelays(p);
+        if (!ok) trav.delays.push(removed);
+        renderTaskList(project, trav);
+        renderDelays(project, trav);
       });
     });
     wrap.querySelectorAll("[data-delete-note]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const removed = p.notes.find((n) => n.id === btn.dataset.deleteNote);
-        p.notes = p.notes.filter((n) => n.id !== btn.dataset.deleteNote);
+        const removed = trav.notes.find((n) => n.id === btn.dataset.deleteNote);
+        trav.notes = trav.notes.filter((n) => n.id !== btn.dataset.deleteNote);
         const ok = await saveRemote();
-        if (!ok) p.notes.push(removed);
-        renderTaskList(p);
-        renderNotes(p);
+        if (!ok) trav.notes.push(removed);
+        renderTaskList(project, trav);
+        renderNotes(project, trav);
       });
     });
   }
 
-  document.getElementById("addTaskBtn").addEventListener("click", () => openTaskModal(getProject(currentProjectId)));
+  document.getElementById("addTaskBtn").addEventListener("click", () => {
+    const p = getProject(currentProjectId);
+    openTaskModal(p, getTraveler(p, currentTravelerId));
+  });
 
   // ---------- Delays ----------
-  function renderDelays(p) {
+  function renderDelays(project, trav) {
     const list = document.getElementById("delaysList");
-    if (!p.delays.length) { list.innerHTML = `<div class="empty-state">No delays logged.</div>`; return; }
-    const sorted = [...p.delays].sort((a, b) => b.date.localeCompare(a.date));
+    if (!trav.delays.length) { list.innerHTML = `<div class="empty-state">No delays logged.</div>`; return; }
+    const sorted = [...trav.delays].sort((a, b) => b.date.localeCompare(a.date));
     list.innerHTML = sorted.map((d) => {
-      const task = p.tasks.find((t) => t.id === d.taskId);
+      const task = trav.tasks.find((t) => t.id === d.taskId);
       const del = isEditor ? `<button class="btn-icon" data-delete-delay="${d.id}" title="Delete">&times;</button>` : "";
       return `
         <div class="log-item delay">
@@ -766,25 +1112,28 @@
     if (isEditor) {
       list.querySelectorAll("[data-delete-delay]").forEach((btn) => {
         btn.addEventListener("click", async () => {
-          const removed = p.delays.find((d) => d.id === btn.dataset.deleteDelay);
-          p.delays = p.delays.filter((d) => d.id !== btn.dataset.deleteDelay);
+          const removed = trav.delays.find((d) => d.id === btn.dataset.deleteDelay);
+          trav.delays = trav.delays.filter((d) => d.id !== btn.dataset.deleteDelay);
           const ok = await saveRemote();
-          if (!ok) p.delays.push(removed);
-          renderDelays(p);
-          renderTaskList(p);
+          if (!ok) trav.delays.push(removed);
+          renderDelays(project, trav);
+          renderTaskList(project, trav);
         });
       });
     }
   }
-  document.getElementById("addDelayBtn").addEventListener("click", () => openDelayModal(getProject(currentProjectId)));
+  document.getElementById("addDelayBtn").addEventListener("click", () => {
+    const p = getProject(currentProjectId);
+    openDelayModal(p, getTraveler(p, currentTravelerId));
+  });
 
   // ---------- Notes ----------
-  function renderNotes(p) {
+  function renderNotes(project, trav) {
     const list = document.getElementById("notesList");
-    if (!p.notes.length) { list.innerHTML = `<div class="empty-state">No notes yet.</div>`; return; }
-    const sorted = [...p.notes].sort((a, b) => b.date.localeCompare(a.date));
+    if (!trav.notes.length) { list.innerHTML = `<div class="empty-state">No notes yet.</div>`; return; }
+    const sorted = [...trav.notes].sort((a, b) => b.date.localeCompare(a.date));
     list.innerHTML = sorted.map((n) => {
-      const task = p.tasks.find((t) => t.id === n.taskId);
+      const task = trav.tasks.find((t) => t.id === n.taskId);
       const del = isEditor ? `<button class="btn-icon" data-delete-note="${n.id}" title="Delete">&times;</button>` : "";
       return `
       <div class="log-item note">
@@ -798,17 +1147,20 @@
     if (isEditor) {
       list.querySelectorAll("[data-delete-note]").forEach((btn) => {
         btn.addEventListener("click", async () => {
-          const removed = p.notes.find((n) => n.id === btn.dataset.deleteNote);
-          p.notes = p.notes.filter((n) => n.id !== btn.dataset.deleteNote);
+          const removed = trav.notes.find((n) => n.id === btn.dataset.deleteNote);
+          trav.notes = trav.notes.filter((n) => n.id !== btn.dataset.deleteNote);
           const ok = await saveRemote();
-          if (!ok) p.notes.push(removed);
-          renderNotes(p);
-          renderTaskList(p);
+          if (!ok) trav.notes.push(removed);
+          renderNotes(project, trav);
+          renderTaskList(project, trav);
         });
       });
     }
   }
-  document.getElementById("addNoteBtn").addEventListener("click", () => openNoteModal(getProject(currentProjectId)));
+  document.getElementById("addNoteBtn").addEventListener("click", () => {
+    const p = getProject(currentProjectId);
+    openNoteModal(p, getTraveler(p, currentTravelerId));
+  });
 
   // ---------- modal system ----------
   const modalBackdrop = document.getElementById("modalBackdrop");
@@ -870,7 +1222,7 @@
         recalcSchedule(project);
         const ok = await saveRemote();
         if (!ok) { Object.assign(project, prev); return false; }
-        renderDetail(project);
+        renderTravelerList(project);
         renderList();
       } else {
         const p = {
@@ -880,7 +1232,7 @@
           endDate: document.getElementById("f-end").value,
           description: document.getElementById("f-desc").value.trim(),
           excludeSat, excludeSun,
-          tasks: [], delays: [], notes: [],
+          travelers: [],
         };
         state.projects.push(p);
         const ok = await saveRemote();
@@ -891,15 +1243,53 @@
     });
   }
 
-  function openTaskModal(project, task) {
+  function openTravelerModal(project, traveler) {
+    const isEdit = !!traveler;
+    const body = `
+      <div class="modal-field"><label>Traveler name</label><input type="text" id="f-name" value="${escapeHtml(traveler?.name || "")}"></div>
+      <div class="modal-field"><label>Description</label><textarea id="f-desc">${escapeHtml(traveler?.description || "")}</textarea></div>
+      <div class="modal-field"><label>Status</label>
+        <select id="f-status">${Object.entries(STATUS_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+      </div>
+    `;
+    openModal(isEdit ? "Edit Traveler" : "New Traveler", body, async () => {
+      const name = document.getElementById("f-name").value.trim();
+      if (!name) { alert("Traveler name is required."); return false; }
+      const description = document.getElementById("f-desc").value.trim();
+      const status = document.getElementById("f-status").value;
+      if (isEdit) {
+        const prev = { ...traveler };
+        traveler.name = name;
+        traveler.description = description;
+        traveler.status = status;
+        const ok = await saveRemote();
+        if (!ok) { Object.assign(traveler, prev); return false; }
+        renderTravelerList(project);
+        if (currentTravelerId === traveler.id) renderTravelerDetail(project, traveler);
+      } else {
+        const trav = { id: uid(), name, description, status, tasks: [], delays: [], notes: [] };
+        project.travelers.push(trav);
+        const ok = await saveRemote();
+        if (!ok) { project.travelers.pop(); return false; }
+        renderTravelerList(project);
+        location.hash = "project/" + project.id + "/traveler/" + trav.id;
+      }
+    });
+    document.getElementById("f-status").value = isEdit ? traveler.status : "on_track";
+  }
+
+  function openTaskModal(project, trav, task) {
     const isEdit = !!task;
     const blocked = isEdit ? descendantsOf(project, task.id) : new Set();
-    const candidates = project.tasks.filter((t) => t.id !== task?.id && !blocked.has(t.id));
     const selectedPreds = new Set(task?.predecessors || []);
-    const predCheckboxes = candidates.length
-      ? candidates.map((t) => `
-          <label class="checkbox-row"><input type="checkbox" class="f-predecessor" value="${t.id}" ${selectedPreds.has(t.id) ? "checked" : ""}> ${escapeHtml(t.name)}</label>`).join("")
-      : `<p class="modal-hint">No other tasks to depend on yet.</p>`;
+    const groupsHtml = project.travelers.map((otherTrav) => {
+      const candidates = otherTrav.tasks.filter((t) => t.id !== task?.id && !blocked.has(t.id));
+      if (!candidates.length) return "";
+      return `<div class="checkbox-group-label">${escapeHtml(otherTrav.name)}</div>` + candidates.map((t) => `
+          <label class="checkbox-row"><input type="checkbox" class="f-predecessor" value="${t.id}" ${selectedPreds.has(t.id) ? "checked" : ""}> ${escapeHtml(t.name)}</label>`).join("");
+    }).join("");
+    const hasCandidates = project.travelers.some((ot) => ot.tasks.some((t) => t.id !== task?.id && !blocked.has(t.id)));
+    const predCheckboxes = hasCandidates ? groupsHtml : `<p class="modal-hint">No other tasks to depend on yet.</p>`;
     const defaultDuration = isEdit ? taskDuration(task) : 1;
 
     const body = `
@@ -909,7 +1299,7 @@
         <div class="modal-field"><label>Duration (days)</label><input type="number" id="f-duration" min="1" value="${defaultDuration}"></div>
       </div>
       <div class="modal-field">
-        <label>Predecessors <span class="modal-label-hint">(starts after these finish)</span></label>
+        <label>Predecessors <span class="modal-label-hint">(starts after these finish — can be in any traveler)</span></label>
         <div class="checkbox-list">${predCheckboxes}</div>
       </div>
       <div class="modal-field"><label>Responsible</label><input type="text" id="f-owner" value="${escapeHtml(task?.responsible || "")}" placeholder="Who owns this task"></div>
@@ -933,7 +1323,8 @@
       let startDate = document.getElementById("f-start").value;
       if (!name || !startDate) { alert("Task name and start date are required."); return false; }
       if (predecessors.length) {
-        const latestEnd = Math.max(...predecessors.map((id) => new Date(project.tasks.find((t) => t.id === id).endDate + "T00:00:00").getTime()));
+        const all = allTasks(project);
+        const latestEnd = Math.max(...predecessors.map((id) => new Date(all.find((t) => t.id === id).endDate + "T00:00:00").getTime()));
         startDate = nextWorkDay(new Date(latestEnd + 86400000).toISOString().slice(0, 10), project);
       }
       const endDate = endDateForDuration(startDate, duration, project);
@@ -947,17 +1338,18 @@
       let prev = null;
       let addedTask = null;
       if (isEdit) { prev = { ...task }; Object.assign(task, vals); }
-      else { addedTask = { id: uid(), ...vals }; project.tasks.push(addedTask); }
+      else { addedTask = { id: uid(), ...vals }; trav.tasks.push(addedTask); }
       recalcSchedule(project);
       const ok = await saveRemote();
       if (!ok) {
         if (isEdit) Object.assign(task, prev);
-        else project.tasks.pop();
+        else trav.tasks.pop();
         recalcSchedule(project);
         return false;
       }
-      renderTaskList(project);
+      renderTaskList(project, trav);
       renderList();
+      renderTravelerList(project);
     });
 
     const startInput = document.getElementById("f-start");
@@ -971,8 +1363,8 @@
     document.getElementById("f-status").value = isEdit ? task.status : "not_started";
   }
 
-  function openDelayModal(project, presetTask) {
-    const taskOptions = project.tasks.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
+  function openDelayModal(project, trav, presetTask) {
+    const taskOptions = trav.tasks.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
     const body = `
       <div class="modal-field"><label>Date</label><input type="date" id="f-date" value="${todayStr()}"></div>
       <div class="modal-field"><label>Related task (optional)</label>
@@ -991,17 +1383,17 @@
         days: Math.max(0, Math.round(num(document.getElementById("f-days").value))),
         reason,
       };
-      project.delays.push(entry);
+      trav.delays.push(entry);
       const ok = await saveRemote();
-      if (!ok) { project.delays.pop(); return false; }
-      renderDelays(project);
-      renderTaskList(project);
+      if (!ok) { trav.delays.pop(); return false; }
+      renderDelays(project, trav);
+      renderTaskList(project, trav);
     });
     if (presetTask) document.getElementById("f-task").value = presetTask.id;
   }
 
-  function openNoteModal(project, presetTask) {
-    const taskOptions = project.tasks.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
+  function openNoteModal(project, trav, presetTask) {
+    const taskOptions = trav.tasks.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
     const body = `
       <div class="modal-field"><label>Date</label><input type="date" id="f-date" value="${todayStr()}"></div>
       <div class="modal-field"><label>Related task (optional)</label>
@@ -1020,11 +1412,11 @@
         author: document.getElementById("f-author").value.trim(),
         text,
       };
-      project.notes.push(entry);
+      trav.notes.push(entry);
       const ok = await saveRemote();
-      if (!ok) { project.notes.pop(); return false; }
-      renderNotes(project);
-      renderTaskList(project);
+      if (!ok) { trav.notes.pop(); return false; }
+      renderNotes(project, trav);
+      renderTaskList(project, trav);
     });
     if (presetTask) document.getElementById("f-task").value = presetTask.id;
   }
