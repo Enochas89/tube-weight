@@ -164,6 +164,30 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .progress-bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
 .progress-bar-fill { height: 100%; background: var(--accent); }
 .project-card-meta { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-dim); }
+.notes-hover-wrap { position: relative; }
+.notes-hover-label { border-bottom: 1px dotted var(--text-dim); cursor: default; }
+.notes-preview {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 240px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.18);
+  padding: 10px 12px;
+  z-index: 20;
+  text-align: left;
+  white-space: normal;
+}
+.notes-hover-wrap:hover .notes-preview { display: block; }
+.notes-preview-item { padding: 5px 0; border-top: 1px solid var(--border); }
+.notes-preview-item:first-child { border-top: none; padding-top: 0; }
+.notes-preview-meta { font-size: 0.72rem; color: var(--text-dim); }
+.notes-preview-text { font-size: 0.82rem; color: var(--text); margin-top: 2px; }
+.notes-preview-more { font-size: 0.72rem; color: var(--text-dim); font-style: italic; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
 .empty-state { color: var(--text-dim); font-size: 0.9rem; padding: 30px; text-align: center; border: 1px dashed var(--border); border-radius: var(--radius); }
 
 .status-badge {

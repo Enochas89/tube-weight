@@ -686,6 +686,30 @@
   });
 
   // ---------- traveler list (within a project) ----------
+  // The note count in a traveler tile's meta row doubles as a hover target —
+  // hovering it (desktop) shows the most recent notes without opening the
+  // traveler. Plain "No notes" stays a non-interactive span when there's
+  // nothing to preview.
+  function notesMetaHtml(trav) {
+    if (!trav.notes.length) return `<span>No notes</span>`;
+    const sorted = [...trav.notes].sort((a, b) => b.date.localeCompare(a.date));
+    const shown = sorted.slice(0, 4);
+    const more = sorted.length - shown.length;
+    const itemsHtml = shown.map((n) => `
+      <div class="notes-preview-item">
+        <span class="notes-preview-meta">${fmtDate(n.date)}${n.author ? " &bull; " + escapeHtml(n.author) : ""}</span>
+        <div class="notes-preview-text">${escapeHtml(n.text)}</div>
+      </div>`).join("");
+    return `
+      <span class="notes-hover-wrap">
+        <span class="notes-hover-label">${trav.notes.length} note${trav.notes.length === 1 ? "" : "s"}</span>
+        <div class="notes-preview">
+          ${itemsHtml}
+          ${more > 0 ? `<div class="notes-preview-more">+${more} more — open the traveler to see all</div>` : ""}
+        </div>
+      </span>`;
+  }
+
   function renderTravelerList(p) {
     document.getElementById("travelerListProjectName").textContent = p.name;
     document.getElementById("travelerListProjectClient").textContent = p.client || "";
@@ -737,7 +761,7 @@
             <div class="project-card-meta">
               <span>${trav.tasks.length} task${trav.tasks.length === 1 ? "" : "s"}</span>
               <span>${trav.delays.length ? trav.delays.length + " delay" + (trav.delays.length === 1 ? "" : "s") : "No delays"}</span>
-              <span>${trav.notes.length ? trav.notes.length + " note" + (trav.notes.length === 1 ? "" : "s") : "No notes"}</span>
+              ${notesMetaHtml(trav)}
               <span>${progress}%</span>
             </div>
             <div class="card-actions-row">
