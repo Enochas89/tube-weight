@@ -34,7 +34,7 @@
   .tv-main { padding: 30px 40px; }
   .tv-empty { text-align: center; color: var(--tv-dim); font-size: 1.6rem; margin-top: 100px; }
   .tv-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 22px; align-items: start;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 22px; align-items: start;
   }
   .tv-project {
     background: var(--tv-panel); border: 1px solid var(--tv-border); border-radius: 16px;
@@ -62,17 +62,23 @@
   .tv-check-bg { stroke: #3a3f4a; }
   .tv-check-fill { stroke: var(--status-on_track); transition: clip-path 0.4s ease; }
 
-  .tv-trav-list { display: flex; flex-direction: column; gap: 2px; margin-left: 6px; }
+  .tv-trav-list {
+    display: flex; flex-direction: column; margin-left: 6px;
+    max-height: 300px; overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, black 78%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 0%, black 78%, transparent 100%);
+  }
   .tv-trav-row {
-    display: flex; align-items: center; gap: 10px; padding: 9px 4px;
-    border-top: 1px solid var(--tv-border); transition: opacity 0.3s ease;
+    display: flex; align-items: flex-start; gap: 10px; padding: 8px 4px;
+    border-top: 1px solid var(--tv-border);
   }
   .tv-trav-row:first-child { border-top: none; }
-  .tv-trav-row.faded { opacity: 0.4; }
-  .tv-trav-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .tv-trav-name { flex: 1; font-size: 1rem; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tv-trav-people { font-size: 0.85rem; color: var(--tv-dim); max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tv-trav-pct { font-size: 0.9rem; color: var(--tv-dim); font-variant-numeric: tabular-nums; width: 38px; text-align: right; flex-shrink: 0; }
+  .tv-trav-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+  .tv-trav-info { flex: 1; min-width: 0; }
+  .tv-trav-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .tv-trav-name { font-size: 0.98rem; font-weight: 600; overflow-wrap: break-word; }
+  .tv-trav-people { font-size: 0.82rem; color: var(--tv-dim); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tv-trav-pct { font-size: 0.85rem; color: var(--tv-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 
   .tv-footer { text-align: center; padding: 16px; color: var(--tv-dim); font-size: 0.85rem; }
 </style>
@@ -121,12 +127,17 @@
     });
     return Array.from(names);
   }
-  // Active work first, then not-yet-started, then completed (faded) last —
-  // whatever needs eyes on it right now floats to the top of the list.
-  function travelerRank(status) {
-    if (status === "complete") return 2;
-    if (status === "on_hold") return 1;
-    return 0;
+  // Judge activity by actual logged progress, not just the status label —
+  // a traveler sitting at 0% isn't really "active" even if its status was
+  // never explicitly set to on_hold (e.g. older imports). Active (progress
+  // > 0, not complete) ranks first, not-yet-started (0%) ranks second,
+  // complete ranks last and is filtered out of the list entirely (its
+  // checkmark is the only trace left of it).
+  function travelerRank(t) {
+    const pct = travelerProgress(t);
+    if (t.status === "complete" || pct >= 100) return 2;
+    if (pct > 0) return 0;
+    return 1;
   }
 
   function checkmarkHtml(pct) {
@@ -149,7 +160,7 @@
 
     // Projects with active work bubble to the front; quiet projects (nothing
     // in progress right now) settle toward the back.
-    const projectHasActive = (p) => p.travelers.some((t) => travelerRank(t.status) === 0);
+    const projectHasActive = (p) => p.travelers.some((t) => travelerRank(t) === 0);
     const sortedProjects = [...projects].sort((a, b) => {
       const ar = projectHasActive(a) ? 0 : 1;
       const br = projectHasActive(b) ? 0 : 1;
@@ -162,8 +173,11 @@
       const checkTravelers = [...project.travelers].sort((a, b) => a.name.localeCompare(b.name));
       const checksHtml = checkTravelers.map((t) => checkmarkHtml(travelerProgress(t))).join("");
 
-      const listTravelers = [...project.travelers].sort((a, b) =>
-        travelerRank(a.status) - travelerRank(b.status) || a.name.localeCompare(b.name));
+      // Completed travelers drop out of the list entirely — their
+      // checkmark above is the only trace left of them.
+      const listTravelers = project.travelers
+        .filter((t) => travelerRank(t) !== 2)
+        .sort((a, b) => travelerRank(a) - travelerRank(b) || a.name.localeCompare(b.name));
       const projectPct = Math.round(project.travelers.reduce((a, t) => a + travelerProgress(t), 0) / project.travelers.length);
 
       const rowsHtml = listTravelers.map((t) => {
@@ -171,13 +185,17 @@
         const pct = travelerProgress(t);
         const people = travelerPeople(t);
         return `
-          <div class="tv-trav-row ${t.status === "complete" ? "faded" : ""}">
+          <div class="tv-trav-row">
             <span class="tv-trav-dot" style="background:${color}"></span>
-            <span class="tv-trav-name">${escapeHtml(t.name)}</span>
-            ${people.length ? `<span class="tv-trav-people">${escapeHtml(people.join(", "))}</span>` : ""}
-            <span class="tv-trav-pct">${pct}%</span>
+            <div class="tv-trav-info">
+              <div class="tv-trav-top">
+                <span class="tv-trav-name">${escapeHtml(t.name)}</span>
+                <span class="tv-trav-pct">${pct}%</span>
+              </div>
+              ${people.length ? `<div class="tv-trav-people">${escapeHtml(people.join(", "))}</div>` : ""}
+            </div>
           </div>`;
-      }).join("");
+      }).join("") || `<div class="tv-trav-row tv-trav-done"><span class="tv-trav-dot" style="background:${STATUS_COLOR.complete}"></span><span class="tv-trav-name">All travelers complete</span></div>`;
 
       const projectColor = STATUS_COLOR[project.status] || STATUS_COLOR.on_track;
       const travelerCount = project.travelers.length;
