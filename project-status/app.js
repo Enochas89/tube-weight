@@ -700,6 +700,7 @@
     } else {
       grid.innerHTML = p.travelers.map((trav) => {
         const progress = travelerProgress(trav);
+        const deleteBtn = isEditor ? `<button class="btn-icon card-delete-btn" type="button" data-delete-traveler="${trav.id}" title="Delete traveler">&times;</button>` : "";
         return `
           <div class="project-card" data-traveler-id="${trav.id}">
             <div class="project-card-top">
@@ -707,7 +708,10 @@
                 <h3>${escapeHtml(trav.name)}</h3>
                 <p class="client">${escapeHtml(trav.description || "—")}</p>
               </div>
-              <span class="status-badge ${trav.status}">${STATUS_LABELS[trav.status]}</span>
+              <div class="project-card-top-actions">
+                <span class="status-badge ${trav.status}">${STATUS_LABELS[trav.status]}</span>
+                ${deleteBtn}
+              </div>
             </div>
             <div class="progress-bar"><div class="progress-bar-fill" style="width:${progress}%"></div></div>
             <div class="project-card-meta">
@@ -721,6 +725,19 @@
     }
     grid.querySelectorAll("[data-traveler-id]").forEach((card) => {
       card.addEventListener("click", () => { location.hash = "project/" + p.id + "/traveler/" + card.dataset.travelerId; });
+    });
+    grid.querySelectorAll("[data-delete-traveler]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const travelerId = btn.dataset.deleteTraveler;
+        const trav = p.travelers.find((t) => t.id === travelerId);
+        if (!confirm(`Delete "${trav.name}"? This can't be undone.`)) return;
+        p.travelers = p.travelers.filter((t) => t.id !== travelerId);
+        const ok = await saveRemote();
+        if (!ok) { p.travelers.push(trav); return; }
+        renderTravelerList(p);
+        renderList();
+      });
     });
   }
 
