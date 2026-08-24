@@ -717,14 +717,25 @@
             <div class="project-card-meta">
               <span>${trav.tasks.length} task${trav.tasks.length === 1 ? "" : "s"}</span>
               <span>${trav.delays.length ? trav.delays.length + " delay" + (trav.delays.length === 1 ? "" : "s") : "No delays"}</span>
+              <span>${trav.notes.length ? trav.notes.length + " note" + (trav.notes.length === 1 ? "" : "s") : "No notes"}</span>
               <span>${progress}%</span>
             </div>
-            <button class="btn-secondary card-open-btn" type="button">Open &rarr;</button>
+            <div class="card-actions-row">
+              <button class="btn-secondary card-open-btn" type="button">Open &rarr;</button>
+              ${isEditor ? `<button class="btn-chip" type="button" data-note-traveler="${trav.id}">+ Note</button>` : ""}
+            </div>
           </div>`;
       }).join("");
     }
     grid.querySelectorAll("[data-traveler-id]").forEach((card) => {
       card.addEventListener("click", () => { location.hash = "project/" + p.id + "/traveler/" + card.dataset.travelerId; });
+    });
+    grid.querySelectorAll("[data-note-traveler]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const trav = p.travelers.find((t) => t.id === btn.dataset.noteTraveler);
+        openNoteModal(p, trav);
+      });
     });
     grid.querySelectorAll("[data-delete-traveler]").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
@@ -1295,6 +1306,7 @@
       if (!ok) { trav.notes.pop(); return false; }
       renderNotes(project, trav);
       renderTaskList(project, trav);
+      if (!currentTravelerId) renderTravelerList(project);
     });
     if (presetTask) document.getElementById("f-task").value = presetTask.id;
   }

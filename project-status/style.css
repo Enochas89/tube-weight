@@ -153,7 +153,8 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   gap: 10px;
 }
 .project-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.08); border-color: var(--accent); }
-.card-open-btn { width: 100%; text-align: center; margin-top: 2px; }
+.card-actions-row { display: flex; gap: 8px; margin-top: 2px; }
+.card-open-btn { flex: 1; text-align: center; }
 .project-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .project-card-top-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .card-delete-btn { font-size: 1.1rem; line-height: 1; }
