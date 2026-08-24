@@ -193,7 +193,7 @@ module.exports = async function handler(req, res) {
                 : [];
               return { id: crypto.randomUUID(), name, startDate, endDate, duration, responsible, status, progress, predecessorNames };
             }).filter(Boolean);
-            return { id: crypto.randomUUID(), name: travName, description: "", status: "on_track", tasks, delays: [], notes: [] };
+            return { id: crypto.randomUUID(), name: travName, description: "", status: "on_hold", tasks, delays: [], notes: [] };
           }).filter((t) => t.tasks.length);
 
           if (!newTravelers.length) throw new Error("No valid tasks found in the uploaded file(s).");
@@ -224,6 +224,51 @@ module.exports = async function handler(req, res) {
         res.status(200).json({ ok: true });
       } catch (err) {
         res.status(500).json({ error: "Failed to add travelers: " + err.message });
+      }
+      return;
+    }
+
+    // Same unauthenticated boundary again: this can ONLY move ONE already-
+    // existing traveler from "on_hold" to "on_track" and set who's on its
+    // first task — it can't create, edit, or delete anything else. Used by
+    // the "search a traveler number and start it" flow on the shop floor.
+    if (body.action === "claimTraveler") {
+      const projectId = String(body.projectId || "").slice(0, 200);
+      const travelerId = String(body.travelerId || "").slice(0, 200);
+      const responsible = String(body.responsible || "").trim().slice(0, 300);
+      if (!projectId || !travelerId) {
+        res.status(400).json({ error: "Missing traveler." });
+        return;
+      }
+      try {
+        let conflict = null;
+        await withRedis(async (client) => {
+          const raw = await client.get(KV_KEY);
+          const data = raw ? JSON.parse(raw) : { projects: [] };
+          const project = (data.projects || []).find((p) => p.id === projectId);
+          const trav = project && (project.travelers || []).find((t) => t.id === travelerId);
+          if (!project || !trav) { conflict = "That traveler no longer exists."; return; }
+          if (trav.status !== "on_hold") { conflict = "Someone already started this traveler."; return; }
+
+          const today = new Date().toISOString().slice(0, 10);
+          trav.status = "on_track";
+          const firstTask = trav.tasks[0];
+          if (firstTask) {
+            firstTask.status = "in_progress";
+            firstTask.responsible = responsible;
+            firstTask.startDate = today;
+            firstTask.endDate = addDays(today, taskDuration(firstTask) - 1);
+          }
+          recalcSchedule(project);
+          await client.set(KV_KEY, JSON.stringify(data));
+        });
+        if (conflict) {
+          res.status(409).json({ error: conflict });
+          return;
+        }
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to start traveler: " + err.message });
       }
       return;
     }

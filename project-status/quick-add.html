@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Add a Traveler — Fab Shop Floor</title>
+<title>Start a Traveler — Fab Shop Floor</title>
 <link rel="stylesheet" href="style.css">
 <style>
   body { background: var(--brand-black); }
@@ -44,15 +44,59 @@
     background: var(--accent); color: white; border: none; cursor: pointer; font-weight: 700;
   }
   .qa-file-submit:disabled { opacity: 0.6; }
+  .qa-search-wrap { position: relative; }
+  .qa-results {
+    margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    max-height: 260px; overflow-y: auto;
+  }
+  .qa-result {
+    display: block; width: 100%; text-align: left; padding: 12px 14px; background: white;
+    border: none; border-bottom: 1px solid var(--border); cursor: pointer; font-family: inherit;
+  }
+  .qa-result:last-child { border-bottom: none; }
+  .qa-result:hover, .qa-result:active { background: var(--accent-dim); }
+  .qa-result-name { font-weight: 700; font-size: 0.98rem; }
+  .qa-result-project { font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; }
+  .qa-hint-row { font-size: 0.85rem; color: var(--text-dim); padding: 8px 2px; text-align: center; }
+  .qa-selected {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    background: var(--accent-dim); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  .qa-selected-name { font-weight: 700; }
+  .qa-selected-change { background: none; border: none; color: var(--accent); font-weight: 600; cursor: pointer; font-family: inherit; }
 </style>
 </head>
 <body>
 <div class="qa-wrap">
   <div class="qa-header">
     <img src="../truck-calculator/logo.png" alt="RetubeCo, Inc.">
-    <h1>Add a Traveler</h1>
+    <h1>Start a Traveler</h1>
     <p>Fab Shop Floor</p>
   </div>
+
+  <div class="qa-card">
+    <form id="qaClaimForm">
+      <div class="qa-field" id="qaSearchField">
+        <label for="qaSearch">Enter the traveler number</label>
+        <div class="qa-search-wrap">
+          <input type="text" id="qaSearch" placeholder="e.g. 11322-1" autocomplete="off">
+          <div class="qa-results hidden" id="qaResults"></div>
+        </div>
+      </div>
+      <div class="qa-selected hidden" id="qaSelected">
+        <span class="qa-selected-name" id="qaSelectedName"></span>
+        <button type="button" class="qa-selected-change" id="qaChangeBtn">Change</button>
+      </div>
+      <div class="qa-field">
+        <label for="qaClaimResponsible">Who's performing the work? <span class="qa-hint">(separate multiple names with commas)</span></label>
+        <input type="text" id="qaClaimResponsible" required placeholder="e.g. Jane Doe, Sam Lee" autocomplete="off">
+      </div>
+      <button type="submit" class="qa-submit" id="qaClaimSubmitBtn" disabled>Start This Traveler</button>
+      <div class="qa-message" id="qaClaimMessage"></div>
+    </form>
+  </div>
+
+  <div class="qa-divider">Or log new work</div>
 
   <div class="qa-card">
     <form id="qaForm">
@@ -73,7 +117,7 @@
     </form>
   </div>
 
-  <div class="qa-divider">Or</div>
+  <div class="qa-divider">Or upload a spreadsheet</div>
 
   <div class="qa-card">
     <form id="qaFileForm">
@@ -95,6 +139,122 @@
 <script src="vendor/xlsx.core.min.js"></script>
 <script src="excel-parser.js"></script>
 <script>
+  // ---------- Start a Planned Traveler (search + claim) ----------
+  const claimForm = document.getElementById("qaClaimForm");
+  const searchField = document.getElementById("qaSearchField");
+  const searchInput = document.getElementById("qaSearch");
+  const resultsEl = document.getElementById("qaResults");
+  const selectedEl = document.getElementById("qaSelected");
+  const selectedNameEl = document.getElementById("qaSelectedName");
+  const changeBtn = document.getElementById("qaChangeBtn");
+  const claimResponsible = document.getElementById("qaClaimResponsible");
+  const claimSubmitBtn = document.getElementById("qaClaimSubmitBtn");
+  const claimMsg = document.getElementById("qaClaimMessage");
+
+  let selectedTraveler = null;
+  let searchDebounce = null;
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str ?? "";
+    return div.innerHTML;
+  }
+
+  async function fetchClaimable(query) {
+    const res = await fetch("/api/data");
+    const data = await res.json();
+    const q = query.trim().toLowerCase();
+    const matches = [];
+    (data.projects || []).forEach((p) => {
+      (p.travelers || []).forEach((t) => {
+        if (t.status !== "on_hold") return;
+        if (q && !t.name.toLowerCase().includes(q)) return;
+        matches.push({ projectId: p.id, projectName: p.name, travelerId: t.id, travelerName: t.name });
+      });
+    });
+    return matches.slice(0, 20);
+  }
+
+  function renderResults(matches) {
+    if (!matches.length) {
+      resultsEl.innerHTML = `<div class="qa-hint-row">No matching traveler waiting to start.</div>`;
+    } else {
+      resultsEl.innerHTML = matches.map((m, i) => `
+        <button type="button" class="qa-result" data-idx="${i}">
+          <div class="qa-result-name">${escapeHtml(m.travelerName)}</div>
+          <div class="qa-result-project">${escapeHtml(m.projectName)}</div>
+        </button>`).join("");
+      resultsEl.querySelectorAll(".qa-result").forEach((btn) => {
+        btn.addEventListener("click", () => selectTraveler(matches[Number(btn.dataset.idx)]));
+      });
+    }
+    resultsEl.classList.remove("hidden");
+  }
+
+  function selectTraveler(m) {
+    selectedTraveler = m;
+    searchField.classList.add("hidden");
+    resultsEl.classList.add("hidden");
+    selectedEl.classList.remove("hidden");
+    selectedNameEl.textContent = `${m.travelerName} — ${m.projectName}`;
+    claimSubmitBtn.disabled = false;
+  }
+
+  function clearSelection() {
+    selectedTraveler = null;
+    searchField.classList.remove("hidden");
+    selectedEl.classList.add("hidden");
+    searchInput.value = "";
+    resultsEl.classList.add("hidden");
+    resultsEl.innerHTML = "";
+    claimSubmitBtn.disabled = true;
+    searchInput.focus();
+  }
+
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchDebounce);
+    const q = searchInput.value;
+    searchDebounce = setTimeout(async () => {
+      try {
+        const matches = await fetchClaimable(q);
+        renderResults(matches);
+      } catch (err) {
+        resultsEl.innerHTML = `<div class="qa-hint-row">Couldn't load travelers — check your connection.</div>`;
+        resultsEl.classList.remove("hidden");
+      }
+    }, 300);
+  });
+
+  changeBtn.addEventListener("click", clearSelection);
+
+  claimForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!selectedTraveler) return;
+    const responsible = claimResponsible.value.trim();
+    if (!responsible) return;
+
+    claimSubmitBtn.disabled = true;
+    claimMsg.className = "qa-message";
+    claimMsg.textContent = "";
+    try {
+      const res = await fetch("/api/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "claimTraveler", projectId: selectedTraveler.projectId, travelerId: selectedTraveler.travelerId, responsible }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || "Something went wrong.");
+      claimMsg.className = "qa-message success";
+      claimMsg.textContent = `Started "${selectedTraveler.travelerName}" — it'll show up on the shop TV shortly.`;
+      claimForm.reset();
+      clearSelection();
+    } catch (err) {
+      claimMsg.className = "qa-message error";
+      claimMsg.textContent = err.message || "Couldn't start it — check your connection and try again.";
+      claimSubmitBtn.disabled = false;
+    }
+  });
+
   const form = document.getElementById("qaForm");
   const msg = document.getElementById("qaMessage");
   const submitBtn = document.getElementById("qaSubmitBtn");

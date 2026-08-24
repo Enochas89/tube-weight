@@ -532,7 +532,7 @@
     const body = `<p style="font-size:0.9rem;">Found ${travelersData.length} traveler${single ? "" : "s"} (${totalTasks} tasks total): ${names}.</p><p style="font-size:0.85rem;color:var(--text-dim);">${single ? "It" : "Each"} will be added as ${single ? "a" : "its own"} traveler to <strong>${escapeHtml(project.name)}</strong>.</p>`;
     openModal(`Import from ${sourceLabel}`, body, async () => {
       const newTravelers = travelersData.map((t) => ({
-        id: uid(), name: t.name, description: "", status: "on_track",
+        id: uid(), name: t.name, description: "", status: "on_hold",
         tasks: t.tasks.map((tk) => ({ id: uid(), ...tk, predecessors: [] })),
         delays: [], notes: [],
       }));
@@ -564,7 +564,7 @@
       if (!name) { alert("Project name is required."); return false; }
 
       const travelers = travelersData.map((t) => ({
-        id: uid(), name: t.name, description: "", status: "on_track",
+        id: uid(), name: t.name, description: "", status: "on_hold",
         tasks: t.tasks.map((tk) => ({ id: uid(), ...tk, predecessors: [] })),
         delays: [], notes: [],
       }));

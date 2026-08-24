@@ -97,7 +97,7 @@
     const entries = [];
     projects.forEach((p) => {
       (p.travelers || []).forEach((trav) => {
-        if (trav.status === "complete") return; // going/scheduled only
+        if (trav.status === "complete" || trav.status === "on_hold") return; // going/scheduled only — on_hold means "waiting to be claimed", not yet started
         entries.push({ project: p, traveler: trav });
       });
     });
