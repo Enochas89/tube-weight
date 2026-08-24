@@ -114,15 +114,38 @@
     let workCenterCol = header.findIndex((h) => h.includes("WORK") && h.includes("CENTER"));
     if (workCenterCol === -1) workCenterCol = header.findIndex((h) => h.includes("CENTER"));
 
-    let travelerName = fallbackName;
-    for (const row of rows2D) {
-      const idx = (row || []).findIndex((c) => String(c || "").toUpperCase().includes("TRAVELER NUMBER"));
-      if (idx === -1) continue;
-      for (let j = idx + 1; j < row.length; j++) {
-        if (row[j] !== null && row[j] !== undefined && String(row[j]).trim()) { travelerName = String(row[j]).trim(); break; }
+    // The traveler's display name is "<traveler number> — <part description>",
+    // e.g. "11322-1 — Fixed Tubesheet" — pulled from the "TRAVELER NUMBER:"
+    // cell and the Qty/Part#/Dwg#/DESCRIPTION row that precedes the OPER.
+    // NO. table (an exact-match "DESCRIPTION" header, so this doesn't
+    // accidentally grab "OPERATION DESCRIPTION" from the ops table instead).
+    let travelerNumber = null;
+    let partDescription = null;
+    for (let i = 0; i < rows2D.length && (travelerNumber === null || partDescription === null); i++) {
+      const row = rows2D[i] || [];
+      if (travelerNumber === null) {
+        const idx = row.findIndex((c) => String(c || "").toUpperCase().includes("TRAVELER NUMBER"));
+        if (idx !== -1) {
+          for (let j = idx + 1; j < row.length; j++) {
+            if (row[j] !== null && row[j] !== undefined && String(row[j]).trim()) { travelerNumber = String(row[j]).trim(); break; }
+          }
+        }
       }
-      break;
+      if (partDescription === null) {
+        const dCol = row.findIndex((c) => String(c || "").trim().toUpperCase() === "DESCRIPTION");
+        if (dCol !== -1) {
+          const valueRow = rows2D[i + 1] || [];
+          const val = valueRow[dCol];
+          if (val !== null && val !== undefined && String(val).trim()) {
+            partDescription = String(val).trim().replace(/\s*\n\s*/g, " ");
+          }
+        }
+      }
     }
+    let travelerName = fallbackName;
+    if (travelerNumber && partDescription) travelerName = `${travelerNumber} — ${partDescription}`;
+    else if (travelerNumber) travelerName = travelerNumber;
+    else if (partDescription) travelerName = partDescription;
 
     const tasks = [];
     for (let i = headerIdx + 1; i < rows2D.length; i++) {
