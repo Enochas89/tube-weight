@@ -32,6 +32,18 @@
   .qa-links { text-align: center; margin-top: 22px; }
   .qa-links a { color: rgba(255,255,255,0.7); font-size: 0.85rem; text-decoration: none; margin: 0 8px; }
   .qa-links a:hover { color: white; }
+  .qa-divider { text-align: center; color: rgba(255,255,255,0.5); font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin: 22px 0; }
+  .qa-file-label {
+    display: block; text-align: center; padding: 22px 16px; border: 2px dashed var(--border);
+    border-radius: 10px; color: var(--text-dim); font-size: 0.95rem; cursor: pointer;
+  }
+  .qa-file-label.has-files { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .qa-file-input { display: none; }
+  .qa-file-submit {
+    width: 100%; padding: 16px; font-size: 1.1rem; border-radius: 10px; margin-top: 14px;
+    background: var(--accent); color: white; border: none; cursor: pointer; font-weight: 700;
+  }
+  .qa-file-submit:disabled { opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -61,12 +73,27 @@
     </form>
   </div>
 
+  <div class="qa-divider">Or</div>
+
+  <div class="qa-card">
+    <form id="qaFileForm">
+      <label class="qa-file-label" id="qaFileLabel" for="qaFileInput">
+        Upload a traveler spreadsheet (.xlsx)<br>tap to choose one or more files
+      </label>
+      <input type="file" id="qaFileInput" class="qa-file-input" accept=".xlsx,.xls" multiple>
+      <button type="submit" class="qa-file-submit" id="qaFileSubmitBtn" disabled>Upload &amp; Add to the Shop TV</button>
+      <div class="qa-message" id="qaFileMessage"></div>
+    </form>
+  </div>
+
   <div class="qa-links">
     <a href="tv.html">View Shop TV</a>
     <a href="index.html">Full App (supervisors)</a>
   </div>
 </div>
 
+<script src="vendor/xlsx.core.min.js"></script>
+<script src="excel-parser.js"></script>
 <script>
   const form = document.getElementById("qaForm");
   const msg = document.getElementById("qaMessage");
@@ -98,6 +125,50 @@
       msg.textContent = err.message || "Couldn't submit — check your connection and try again.";
     } finally {
       submitBtn.disabled = false;
+    }
+  });
+
+  const fileForm = document.getElementById("qaFileForm");
+  const fileInput = document.getElementById("qaFileInput");
+  const fileLabel = document.getElementById("qaFileLabel");
+  const fileSubmitBtn = document.getElementById("qaFileSubmitBtn");
+  const fileMsg = document.getElementById("qaFileMessage");
+
+  fileInput.addEventListener("change", () => {
+    const n = fileInput.files.length;
+    fileLabel.classList.toggle("has-files", n > 0);
+    fileLabel.textContent = n ? `${n} file${n === 1 ? "" : "s"} selected — tap Upload below` : "Upload a traveler spreadsheet (.xlsx) — tap to choose one or more files";
+    fileSubmitBtn.disabled = n === 0;
+  });
+
+  fileForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const files = Array.from(fileInput.files);
+    if (!files.length) return;
+
+    fileSubmitBtn.disabled = true;
+    fileMsg.className = "qa-message";
+    fileMsg.textContent = "";
+    try {
+      const travelers = await ExcelParser.extractTravelersFromFiles(files);
+      const res = await fetch("/api/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "quickAddTravelers", travelers }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || "Something went wrong.");
+      const totalTasks = travelers.reduce((a, t) => a + t.tasks.length, 0);
+      fileMsg.className = "qa-message success";
+      fileMsg.textContent = `Added ${travelers.length} traveler${travelers.length === 1 ? "" : "s"} (${totalTasks} tasks) — it'll show up on the shop TV shortly.`;
+      fileForm.reset();
+      fileLabel.classList.remove("has-files");
+      fileLabel.textContent = "Upload a traveler spreadsheet (.xlsx) — tap to choose one or more files";
+      fileSubmitBtn.disabled = true;
+    } catch (err) {
+      fileMsg.className = "qa-message error";
+      fileMsg.textContent = err.message || "Couldn't upload — check your connection and try again.";
+      fileSubmitBtn.disabled = false;
     }
   });
 </script>
