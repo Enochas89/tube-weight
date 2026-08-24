@@ -325,6 +325,26 @@
     renderTravelerDetail(p, trav);
   }
 
+  // Polls for changes made elsewhere (another editor, the shop-floor QR
+  // flow, a claimed traveler) and re-renders whatever's currently on screen.
+  // Skipped while a modal is open so it never yanks data out from under an
+  // in-progress edit; skipped quietly (no error toast) on a failed fetch
+  // since this runs unattended in the background.
+  async function silentRefresh() {
+    if (!modalBackdrop.classList.contains("hidden")) return;
+    try {
+      const res = await fetch(API_URL);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || !Array.isArray(data.projects)) return;
+      data.projects.forEach(migrateProject);
+      state = data;
+      route();
+    } catch (e) {
+      // background poll -- fails silently, next interval will retry
+    }
+  }
+
   // ---------- project list view ----------
   function projectProgress(p) {
     const counted = allTasks(p).filter((t) => !t.noScheduleImpact);
@@ -1317,5 +1337,6 @@
     await loadRemote();
     updateEditorUI();
     route();
+    setInterval(silentRefresh, 15000);
   })();
 })();
