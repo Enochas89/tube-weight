@@ -182,7 +182,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   text-align: left;
   white-space: normal;
 }
-.notes-hover-wrap:hover .notes-preview { display: block; }
+.notes-hover-wrap:hover .notes-preview, .notes-hover-wrap.open .notes-preview { display: block; }
 .notes-preview-item { padding: 5px 0; border-top: 1px solid var(--border); }
 .notes-preview-item:first-child { border-top: none; padding-top: 0; }
 .notes-preview-meta { font-size: 0.72rem; color: var(--text-dim); }

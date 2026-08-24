@@ -781,6 +781,18 @@
         openNoteModal(p, trav);
       });
     });
+    // Hover doesn't exist on touch devices, so the notes preview also opens
+    // on tap/click — toggling one closes any other that's open, and tapping
+    // anywhere else closes it too (wired once globally, not per render).
+    grid.querySelectorAll(".notes-hover-label").forEach((label) => {
+      label.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const wrap = label.closest(".notes-hover-wrap");
+        const wasOpen = wrap.classList.contains("open");
+        document.querySelectorAll(".notes-hover-wrap.open").forEach((w) => w.classList.remove("open"));
+        if (!wasOpen) wrap.classList.add("open");
+      });
+    });
     grid.querySelectorAll("[data-delete-traveler]").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -1093,6 +1105,12 @@
   document.getElementById("addNoteBtn").addEventListener("click", () => {
     const p = getProject(currentProjectId);
     openNoteModal(p, getTraveler(p, currentTravelerId));
+  });
+
+  // Tapping/clicking anywhere outside an open notes preview closes it.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".notes-hover-wrap")) return;
+    document.querySelectorAll(".notes-hover-wrap.open").forEach((w) => w.classList.remove("open"));
   });
 
   // ---------- modal system ----------
