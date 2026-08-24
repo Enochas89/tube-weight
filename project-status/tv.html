@@ -168,9 +168,10 @@
     });
 
     main.innerHTML = `<div class="tv-grid">${sortedProjects.map((project) => {
-      // Checkmarks stay in a fixed, stable order (by name) so a traveler's
-      // position doesn't jump around as its status changes over time.
-      const checkTravelers = [...project.travelers].sort((a, b) => a.name.localeCompare(b.name));
+      // Highest progress first so any green fill clusters on the left and
+      // reads like a progress meter, ties broken by name for stability.
+      const checkTravelers = [...project.travelers].sort((a, b) =>
+        travelerProgress(b) - travelerProgress(a) || a.name.localeCompare(b.name));
       const checksHtml = checkTravelers.map((t) => checkmarkHtml(travelerProgress(t))).join("");
 
       // Completed travelers drop out of the list entirely — their
