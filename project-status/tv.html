@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shop Floor — Live</title>
+<style>
+  :root {
+    --tv-bg: #0f1115;
+    --tv-panel: #1a1d24;
+    --tv-border: #2c313c;
+    --tv-text: #f2f3f5;
+    --tv-dim: #9aa2b1;
+    --brand-yellow: #f4b400;
+    --status-on_track: #00c875;
+    --status-at_risk: #fdab3d;
+    --status-delayed: #e2445c;
+    --status-on_hold: #9aa2b1;
+    --status-in_progress: #fdab3d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--tv-bg); color: var(--tv-text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  .tv-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 24px 40px; border-bottom: 3px solid var(--brand-yellow);
+  }
+  .tv-header h1 { margin: 0; font-size: 2rem; letter-spacing: 0.02em; }
+  .tv-clock { font-size: 1.4rem; color: var(--tv-dim); font-variant-numeric: tabular-nums; }
+  .tv-main { padding: 30px 40px; }
+  .tv-empty { text-align: center; color: var(--tv-dim); font-size: 1.6rem; margin-top: 100px; }
+  .tv-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 22px;
+  }
+  .tv-card {
+    background: var(--tv-panel); border: 1px solid var(--tv-border); border-radius: 16px;
+    padding: 22px 24px; position: relative; overflow: hidden;
+  }
+  .tv-card-stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 8px; }
+  .tv-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-left: 6px; }
+  .tv-card-name { font-size: 1.3rem; font-weight: 700; line-height: 1.25; }
+  .tv-card-project { font-size: 0.95rem; color: var(--tv-dim); margin: 4px 0 0 6px; }
+  .tv-badge {
+    flex-shrink: 0; font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; padding: 5px 12px; border-radius: 999px; white-space: nowrap;
+  }
+  .tv-progress { height: 10px; border-radius: 999px; background: #2a2e38; margin: 18px 6px 6px; overflow: hidden; }
+  .tv-progress-fill { height: 100%; border-radius: 999px; background: var(--brand-yellow); }
+  .tv-card-meta { display: flex; justify-content: space-between; margin: 8px 6px 0; font-size: 0.95rem; color: var(--tv-dim); }
+  .tv-card-people { margin: 14px 6px 0; font-size: 1.05rem; }
+  .tv-card-people .label { color: var(--tv-dim); font-size: 0.85rem; display: block; margin-bottom: 2px; }
+  .tv-footer { text-align: center; padding: 16px; color: var(--tv-dim); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="tv-header">
+  <h1>Shop Floor — Live</h1>
+  <div class="tv-clock" id="tvClock"></div>
+</div>
+<div class="tv-main" id="tvMain"><div class="tv-empty">Loading…</div></div>
+<div class="tv-footer" id="tvFooter"></div>
+
+<script>
+  const STATUS_COLOR = {
+    on_track: "var(--status-on_track)",
+    at_risk: "var(--status-at_risk)",
+    delayed: "var(--status-delayed)",
+    on_hold: "var(--status-on_hold)",
+    complete: "var(--status-on_track)",
+  };
+  const STATUS_LABEL = { on_track: "On Track", at_risk: "At Risk", delayed: "Delayed", on_hold: "On Hold", complete: "Complete" };
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str ?? "";
+    return div.innerHTML;
+  }
+  function travelerProgress(trav) {
+    const counted = trav.tasks.filter((t) => !t.noScheduleImpact);
+    if (!counted.length) return 0;
+    return Math.round(counted.reduce((a, t) => a + (t.progress || 0), 0) / counted.length);
+  }
+  function travelerPeople(trav) {
+    const names = new Set();
+    trav.tasks.forEach((t) => {
+      String(t.responsible || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean).forEach((n) => names.add(n));
+    });
+    return Array.from(names);
+  }
+
+  function render(data) {
+    const main = document.getElementById("tvMain");
+    const projects = Array.isArray(data.projects) ? data.projects : [];
+    const entries = [];
+    projects.forEach((p) => {
+      (p.travelers || []).forEach((trav) => {
+        if (trav.status === "complete") return; // going/scheduled only
+        entries.push({ project: p, traveler: trav });
+      });
+    });
+
+    if (!entries.length) {
+      main.innerHTML = `<div class="tv-empty">No travelers going right now.</div>`;
+      return;
+    }
+
+    // In-progress travelers first, then everything else, alphabetical within each group.
+    const rank = (e) => (e.traveler.status === "on_track" || e.traveler.status === "at_risk" ? 0 : 1);
+    entries.sort((a, b) => rank(a) - rank(b) || a.traveler.name.localeCompare(b.traveler.name));
+
+    main.innerHTML = `<div class="tv-grid">${entries.map(({ project, traveler }) => {
+      const color = STATUS_COLOR[traveler.status] || STATUS_COLOR.on_track;
+      const progress = travelerProgress(traveler);
+      const people = travelerPeople(traveler);
+      return `
+        <div class="tv-card">
+          <div class="tv-card-stripe" style="background:${color}"></div>
+          <div class="tv-card-top">
+            <div class="tv-card-name">${escapeHtml(traveler.name)}</div>
+            <span class="tv-badge" style="background:${color}22; color:${color};">${STATUS_LABEL[traveler.status] || traveler.status}</span>
+          </div>
+          <div class="tv-card-project">${escapeHtml(project.name)}</div>
+          <div class="tv-progress"><div class="tv-progress-fill" style="width:${progress}%"></div></div>
+          <div class="tv-card-meta">
+            <span>${traveler.tasks.length} task${traveler.tasks.length === 1 ? "" : "s"}</span>
+            <span>${progress}%</span>
+          </div>
+          ${people.length ? `<div class="tv-card-people"><span class="label">Working on it</span>${escapeHtml(people.join(", "))}</div>` : ""}
+        </div>`;
+    }).join("")}</div>`;
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch("/api/data");
+      const data = await res.json();
+      render(data);
+      document.getElementById("tvFooter").textContent = "Updated " + new Date().toLocaleTimeString();
+    } catch (err) {
+      document.getElementById("tvFooter").textContent = "Couldn't refresh — retrying…";
+    }
+  }
+
+  function tickClock() {
+    document.getElementById("tvClock").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  tickClock();
+  setInterval(tickClock, 1000 * 30);
+  refresh();
+  setInterval(refresh, 15000);
+</script>
+</body>
+</html>

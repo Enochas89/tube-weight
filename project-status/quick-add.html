@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Add a Traveler — Fab Shop Floor</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { background: var(--brand-black); }
+  .qa-wrap { max-width: 480px; margin: 0 auto; padding: 24px 16px 60px; }
+  .qa-header { text-align: center; color: white; margin-bottom: 20px; }
+  .qa-header img { height: 52px; background: white; padding: 8px 12px; border-radius: 6px; margin-bottom: 14px; }
+  .qa-header h1 { margin: 0 0 6px; font-size: 1.4rem; }
+  .qa-header p { margin: 0; opacity: 0.75; font-size: 0.9rem; }
+  .qa-card { background: var(--panel); border-radius: 14px; padding: 22px 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.35); }
+  .qa-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+  .qa-field label { font-weight: 700; font-size: 1rem; }
+  .qa-field .qa-hint { font-weight: 400; font-size: 0.8rem; color: var(--text-dim); }
+  .qa-field input, .qa-field textarea {
+    font-family: inherit; font-size: 1.05rem; padding: 14px 12px;
+    border: 1px solid var(--border); border-radius: 8px; width: 100%;
+  }
+  .qa-field textarea { resize: vertical; min-height: 70px; }
+  .qa-submit {
+    width: 100%; padding: 16px; font-size: 1.1rem; border-radius: 10px;
+    background: var(--brand-black); color: white; border: none; cursor: pointer; font-weight: 700;
+  }
+  .qa-submit:disabled { opacity: 0.6; }
+  .qa-message { margin-top: 16px; padding: 12px 14px; border-radius: 8px; font-size: 0.92rem; text-align: center; display: none; }
+  .qa-message.success { display: block; background: var(--status-on_track-bg); color: var(--status-on_track); }
+  .qa-message.error { display: block; background: var(--status-delayed-bg); color: var(--status-delayed); }
+  .qa-links { text-align: center; margin-top: 22px; }
+  .qa-links a { color: rgba(255,255,255,0.7); font-size: 0.85rem; text-decoration: none; margin: 0 8px; }
+  .qa-links a:hover { color: white; }
+</style>
+</head>
+<body>
+<div class="qa-wrap">
+  <div class="qa-header">
+    <img src="../truck-calculator/logo.png" alt="RetubeCo, Inc.">
+    <h1>Add a Traveler</h1>
+    <p>Fab Shop Floor</p>
+  </div>
+
+  <div class="qa-card">
+    <form id="qaForm">
+      <div class="qa-field">
+        <label for="qaName">What are you working on?</label>
+        <input type="text" id="qaName" required placeholder="e.g. Machine tubesheets for job 11322" autocomplete="off">
+      </div>
+      <div class="qa-field">
+        <label for="qaResponsible">Who's performing the work? <span class="qa-hint">(separate multiple names with commas)</span></label>
+        <input type="text" id="qaResponsible" placeholder="e.g. Jane Doe, Sam Lee" autocomplete="off">
+      </div>
+      <div class="qa-field">
+        <label for="qaNotes">Notes <span class="qa-hint">(optional)</span></label>
+        <textarea id="qaNotes" placeholder="Anything else worth flagging"></textarea>
+      </div>
+      <button type="submit" class="qa-submit" id="qaSubmitBtn">Add to the Shop TV</button>
+      <div class="qa-message" id="qaMessage"></div>
+    </form>
+  </div>
+
+  <div class="qa-links">
+    <a href="tv.html">View Shop TV</a>
+    <a href="index.html">Full App (supervisors)</a>
+  </div>
+</div>
+
+<script>
+  const form = document.getElementById("qaForm");
+  const msg = document.getElementById("qaMessage");
+  const submitBtn = document.getElementById("qaSubmitBtn");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = document.getElementById("qaName").value.trim();
+    const responsible = document.getElementById("qaResponsible").value.trim();
+    const notes = document.getElementById("qaNotes").value.trim();
+    if (!name) return;
+
+    submitBtn.disabled = true;
+    msg.className = "qa-message";
+    msg.textContent = "";
+    try {
+      const res = await fetch("/api/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "quickAddTraveler", name, responsible, notes }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || "Something went wrong.");
+      msg.className = "qa-message success";
+      msg.textContent = "Added — it'll show up on the shop TV shortly.";
+      form.reset();
+    } catch (err) {
+      msg.className = "qa-message error";
+      msg.textContent = err.message || "Couldn't submit — check your connection and try again.";
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
