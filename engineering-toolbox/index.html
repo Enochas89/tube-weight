@@ -12,27 +12,31 @@
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#ff9f43"/>
+      <path d="M0,0 L10,5 L0,10 z" fill="#b3541e"/>
     </marker>
     <marker id="arB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#4a9eff"/>
+      <path d="M0,0 L10,5 L0,10 z" fill="#1f5fa8"/>
     </marker>
     <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#ff7a5c"/>
+      <path d="M0,0 L10,5 L0,10 z" fill="#c0392b"/>
     </marker>
+    <!-- A base fill inside the tile keeps sectioned parts reading as solid
+         material even when the drawing scales down and the hatch lines thin. -->
     <pattern id="hatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
-      <line x1="0" y1="0" x2="0" y2="7" stroke="#9fb2c6" stroke-width="1.3" opacity="0.85"/>
+      <rect width="7" height="7" fill="#e7edf3"/>
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#5b6d82" stroke-width="1.2"/>
     </pattern>
     <!-- Adjacent parts get opposing hatch angles so the joint line reads clearly,
          the same convention used on real section views. -->
     <pattern id="hatch2" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-45)">
-      <line x1="0" y1="0" x2="0" y2="7" stroke="#f4b400" stroke-width="1.3" opacity="0.75"/>
+      <rect width="7" height="7" fill="#fdf6e3"/>
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#b8860b" stroke-width="1.2"/>
     </pattern>
     <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8296ad"/><stop offset="0.5" stop-color="#5b6d82"/><stop offset="1" stop-color="#3d4c5d"/>
+      <stop offset="0" stop-color="#dfe5ec"/><stop offset="0.5" stop-color="#c3ccd7"/><stop offset="1" stop-color="#9aa8b8"/>
     </linearGradient>
     <linearGradient id="waterFlow" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#4a9eff" stop-opacity="0.15"/><stop offset="1" stop-color="#56d4dd" stop-opacity="0.35"/>
+      <stop offset="0" stop-color="#1f5fa8" stop-opacity="0.15"/><stop offset="1" stop-color="#0e7c86" stop-opacity="0.35"/>
     </linearGradient>
   </defs>
 </svg>
@@ -94,8 +98,8 @@
 
           <!-- tube cross-section (annulus, section-hatched) -->
           <path d="M210,52 a68,68 0 1,0 0.1,0 z M210,70 a50,50 0 1,1 -0.1,0 z"
-                style="fill:url(#hatch)" fill-rule="evenodd" stroke="#b9c7d6" stroke-width="2"/>
-          <circle cx="210" cy="120" r="50" fill="#0d141d" stroke="#b9c7d6" stroke-width="2"/>
+                style="fill:url(#hatch)" fill-rule="evenodd" stroke="#3d4c5d" stroke-width="2"/>
+          <circle cx="210" cy="120" r="50" fill="#ffffff" stroke="#3d4c5d" stroke-width="2"/>
           <line class="center-line" x1="118" y1="120" x2="302" y2="120"/>
           <line class="center-line" x1="210" y1="28" x2="210" y2="212"/>
 
@@ -154,8 +158,8 @@
         <svg viewBox="0 0 620 280" role="img" aria-label="Tube bore measured with inside caliper jaws and a wall thickness gauge">
           <!-- tube end view -->
           <path d="M180,42 a78,78 0 1,0 0.1,0 z M180,64 a56,56 0 1,1 -0.1,0 z"
-                style="fill:url(#hatch)" fill-rule="evenodd" stroke="#b9c7d6" stroke-width="2"/>
-          <circle cx="180" cy="120" r="56" fill="#0d141d" stroke="#b9c7d6" stroke-width="2"/>
+                style="fill:url(#hatch)" fill-rule="evenodd" stroke="#3d4c5d" stroke-width="2"/>
+          <circle cx="180" cy="120" r="56" fill="#ffffff" stroke="#3d4c5d" stroke-width="2"/>
           <line class="center-line" x1="86" y1="120" x2="274" y2="120"/>
           <line class="center-line" x1="180" y1="28" x2="180" y2="212"/>
 
@@ -177,9 +181,9 @@
 
           <!-- wall gauge detail -->
           <text class="label-text" x="330" y="52">WALL = (OD &minus; ID) / 2</text>
-          <rect class="part" x="330" y="70" width="230" height="26" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.5"/>
-          <rect x="330" y="96" width="230" height="52" fill="#0d141d" stroke="#b9c7d6" stroke-width="1.5"/>
-          <rect class="part" x="330" y="148" width="230" height="26" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.5"/>
+          <rect class="part" x="330" y="70" width="230" height="26" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="1.5"/>
+          <rect x="330" y="96" width="230" height="52" fill="#ffffff" stroke="#3d4c5d" stroke-width="1.5"/>
+          <rect class="part" x="330" y="148" width="230" height="26" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="1.5"/>
           <line class="dim-line" x1="356" y1="70" x2="356" y2="96" marker-start="url(#ar)" marker-end="url(#ar)"/>
           <text class="dim-text" x="364" y="88">t</text>
           <line class="dim-line" x1="500" y1="96" x2="500" y2="148" marker-start="url(#ar)" marker-end="url(#ar)"/>
@@ -214,12 +218,12 @@
         <svg viewBox="0 0 620 300" role="img" aria-label="Tube expander rolling a tube into a tubesheet, before and after">
           <!-- BEFORE -->
           <text class="label-text" x="20" y="24">BEFORE ROLLING</text>
-          <rect class="part" x="20" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
-          <rect class="part" x="200" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="20" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
+          <rect class="part" x="200" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
           <text class="note-text" x="18" y="188">TUBESHEET</text>
           <!-- tube walls with a visible clearance gap to the hole -->
-          <rect class="part-lt" x="72" y="52" width="128" height="16" style="fill:url(#hatch2)" stroke="#f4b400" stroke-width="1.5"/>
-          <rect class="part-lt" x="72" y="142" width="128" height="16" style="fill:url(#hatch2)" stroke="#f4b400" stroke-width="1.5"/>
+          <rect class="part-lt" x="72" y="52" width="128" height="16" style="fill:url(#hatch2)" stroke="#a87d0a" stroke-width="1.5"/>
+          <rect class="part-lt" x="72" y="142" width="128" height="16" style="fill:url(#hatch2)" stroke="#a87d0a" stroke-width="1.5"/>
           <line class="dim-line" x1="136" y1="40" x2="136" y2="52" marker-start="url(#ar)" marker-end="url(#ar)"/>
           <text class="dim-text" x="142" y="50">gap</text>
           <line class="dim-line" x1="100" y1="68" x2="100" y2="142" marker-start="url(#ar)" marker-end="url(#ar)"/>
@@ -234,11 +238,11 @@
 
           <!-- AFTER -->
           <text class="label-text" x="330" y="24">AFTER ROLLING</text>
-          <rect class="part" x="330" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
-          <rect class="part" x="510" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="330" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
+          <rect class="part" x="510" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
           <!-- tube wall thinned and pressed tight to the hole (no gap) -->
-          <rect class="part-lt" x="382" y="40" width="128" height="13" style="fill:url(#hatch2)" stroke="#3ddc97" stroke-width="2"/>
-          <rect class="part-lt" x="382" y="157" width="128" height="13" style="fill:url(#hatch2)" stroke="#3ddc97" stroke-width="2"/>
+          <rect class="part-lt" x="382" y="40" width="128" height="13" style="fill:url(#hatch2)" stroke="#2f9e6e" stroke-width="2"/>
+          <rect class="part-lt" x="382" y="157" width="128" height="13" style="fill:url(#hatch2)" stroke="#2f9e6e" stroke-width="2"/>
           <line class="dim-line" x1="410" y1="53" x2="410" y2="157" marker-start="url(#ar)" marker-end="url(#ar)"/>
           <text class="dim-text" x="416" y="108">ID₂</text>
           <text class="note-text" x="330" y="188">wall thinned, gap closed</text>
@@ -285,8 +289,8 @@
       <div class="diagram">
         <svg viewBox="0 0 620 250" role="img" aria-label="Water flowing through a tube with a flow meter">
           <!-- tube in longitudinal section -->
-          <rect class="part" x="80" y="60" width="460" height="22" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.8"/>
-          <rect class="part" x="80" y="158" width="460" height="22" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.8"/>
+          <rect class="part" x="80" y="60" width="460" height="22" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="1.8"/>
+          <rect class="part" x="80" y="158" width="460" height="22" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="1.8"/>
           <rect x="80" y="82" width="460" height="76" fill="url(#waterFlow)"/>
           <line class="center-line" x1="64" y1="120" x2="556" y2="120"/>
 
@@ -304,8 +308,8 @@
 
           <!-- flow meter clamped on the line -->
           <rect class="tool-body" x="470" y="24" width="66" height="44" rx="5"/>
-          <rect x="478" y="32" width="50" height="20" rx="2" fill="#0d141d" stroke="#56d4dd" stroke-width="1"/>
-          <text x="484" y="47" style="fill:#56d4dd;font-family:Consolas,monospace;font-size:11px;font-weight:700">GPM</text>
+          <rect x="478" y="32" width="50" height="20" rx="2" fill="#ffffff" stroke="#0e7c86" stroke-width="1"/>
+          <text x="484" y="47" style="fill:#0e7c86;font-family:Consolas,monospace;font-size:11px;font-weight:700">GPM</text>
           <line class="ext-line" x1="503" y1="68" x2="503" y2="82"/>
           <text class="note-text" x="452" y="18">FLOW METER</text>
 
@@ -346,10 +350,10 @@
       <div class="diagram">
         <svg viewBox="0 0 620 250" role="img" aria-label="Tube bundle with effective length and tape measure">
           <!-- tubesheets -->
-          <rect class="part" x="70" y="40" width="26" height="140" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
-          <rect class="part" x="500" y="40" width="26" height="140" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="70" y="40" width="26" height="140" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
+          <rect class="part" x="500" y="40" width="26" height="140" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
           <!-- tubes -->
-          <g stroke="#b9c7d6" stroke-width="1.5">
+          <g stroke="#3d4c5d" stroke-width="1.5">
             <rect class="part-lt" x="96" y="52" width="404" height="15" rx="2"/>
             <rect class="part-lt" x="96" y="78" width="404" height="15" rx="2"/>
             <rect class="part-lt" x="96" y="104" width="404" height="15" rx="2"/>
@@ -365,7 +369,7 @@
           <line class="ext-line" x1="500" y1="180" x2="500" y2="222"/>
           <text class="dim-text" x="252" y="210">EFFECTIVE LENGTH</text>
           <rect class="tool-body" x="30" y="200" width="52" height="34" rx="6"/>
-          <circle cx="56" cy="217" r="10" fill="#0d141d" stroke="#f4b400" stroke-width="2"/>
+          <circle cx="56" cy="217" r="10" fill="#ffffff" stroke="#a87d0a" stroke-width="2"/>
           <text class="note-text" x="26" y="248">TAPE</text>
 
           <!-- OD callout -->
@@ -402,32 +406,32 @@
       <div class="diagram">
         <svg viewBox="0 0 620 260" role="img" aria-label="Shell and tube exchanger with hot and cold streams and a temperature profile">
           <!-- shell -->
-          <rect class="part-dk" x="90" y="40" width="420" height="110" rx="10" stroke="#b9c7d6" stroke-width="2"/>
-          <rect class="part" x="90" y="40" width="16" height="110" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.5"/>
-          <rect class="part" x="494" y="40" width="16" height="110" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.5"/>
+          <rect class="part-dk" x="90" y="40" width="420" height="110" rx="10" stroke="#3d4c5d" stroke-width="2"/>
+          <rect class="part" x="90" y="40" width="16" height="110" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="1.5"/>
+          <rect class="part" x="494" y="40" width="16" height="110" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="1.5"/>
           <!-- tubes -->
-          <g stroke="#9fb2c6" stroke-width="1.4" fill="#55667c">
+          <g stroke="#7a8b9e" stroke-width="1.4" fill="#55667c">
             <rect x="106" y="62" width="388" height="12" rx="2"/>
             <rect x="106" y="89" width="388" height="12" rx="2"/>
             <rect x="106" y="116" width="388" height="12" rx="2"/>
           </g>
 
           <!-- hot shell-side stream (top, left to right) -->
-          <line class="flow-arrow" x1="150" y1="26" x2="250" y2="26" marker-end="url(#arR)" stroke="#ff7a5c"/>
-          <text class="dim-text" x="150" y="18" style="fill:#ff7a5c">HOT IN</text>
-          <line class="flow-arrow" x1="380" y1="26" x2="470" y2="26" marker-end="url(#arR)" stroke="#ff7a5c"/>
-          <text class="dim-text" x="384" y="18" style="fill:#ff7a5c">HOT OUT</text>
+          <line class="flow-arrow" x1="150" y1="26" x2="250" y2="26" marker-end="url(#arR)" stroke="#c0392b"/>
+          <text class="dim-text" x="150" y="18" style="fill:#c0392b">HOT IN</text>
+          <line class="flow-arrow" x1="380" y1="26" x2="470" y2="26" marker-end="url(#arR)" stroke="#c0392b"/>
+          <text class="dim-text" x="384" y="18" style="fill:#c0392b">HOT OUT</text>
 
           <!-- cold tube-side stream (bottom, right to left = counterflow) -->
           <line class="flow-arrow" x1="470" y1="168" x2="380" y2="168" marker-end="url(#arB)"/>
-          <text class="dim-text" x="410" y="186" style="fill:#4a9eff">COLD IN</text>
+          <text class="dim-text" x="410" y="186" style="fill:#1f5fa8">COLD IN</text>
           <line class="flow-arrow" x1="250" y1="168" x2="150" y2="168" marker-end="url(#arB)"/>
-          <text class="dim-text" x="150" y="186" style="fill:#4a9eff">COLD OUT</text>
+          <text class="dim-text" x="150" y="186" style="fill:#1f5fa8">COLD OUT</text>
 
           <!-- temperature profile plot -->
           <line class="ext-line" x1="90" y1="248" x2="510" y2="248"/>
-          <path d="M100,206 L500,232" stroke="#ff7a5c" stroke-width="2.5" fill="none"/>
-          <path d="M100,240 L500,214" stroke="#4a9eff" stroke-width="2.5" fill="none"/>
+          <path d="M100,206 L500,232" stroke="#c0392b" stroke-width="2.5" fill="none"/>
+          <path d="M100,240 L500,214" stroke="#1f5fa8" stroke-width="2.5" fill="none"/>
           <line class="dim-line" x1="112" y1="207" x2="112" y2="239" marker-start="url(#ar)" marker-end="url(#ar)"/>
           <text class="dim-text" x="118" y="204">ΔT₁</text>
           <line class="dim-line" x1="488" y1="215" x2="488" y2="231" marker-start="url(#ar)" marker-end="url(#ar)"/>
@@ -470,33 +474,33 @@
       <div class="diagram">
         <svg viewBox="0 0 620 230" role="img" aria-label="Flow through a heated section with inlet and outlet thermometers">
           <!-- pipe -->
-          <rect class="part" x="90" y="72" width="440" height="18" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.8"/>
-          <rect class="part" x="90" y="140" width="440" height="18" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.8"/>
+          <rect class="part" x="90" y="72" width="440" height="18" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="1.8"/>
+          <rect class="part" x="90" y="140" width="440" height="18" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="1.8"/>
           <rect x="90" y="90" width="440" height="50" fill="url(#waterFlow)"/>
           <line class="flow-arrow" x1="120" y1="115" x2="230" y2="115" marker-end="url(#arB)"/>
           <line class="flow-arrow" x1="330" y1="115" x2="440" y2="115" marker-end="url(#arB)"/>
-          <text class="dim-text" x="240" y="120" style="fill:#56d4dd">FLOW</text>
+          <text class="dim-text" x="240" y="120" style="fill:#0e7c86">FLOW</text>
 
           <!-- heat input arrows -->
-          <g stroke="#ff7a5c" stroke-width="2.5" fill="none">
+          <g stroke="#c0392b" stroke-width="2.5" fill="none">
             <line x1="200" y1="192" x2="200" y2="162" marker-end="url(#arR)"/>
             <line x1="270" y1="192" x2="270" y2="162" marker-end="url(#arR)"/>
             <line x1="340" y1="192" x2="340" y2="162" marker-end="url(#arR)"/>
             <line x1="410" y1="192" x2="410" y2="162" marker-end="url(#arR)"/>
           </g>
-          <text class="dim-text" x="248" y="212" style="fill:#ff7a5c">HEAT IN (Q)</text>
+          <text class="dim-text" x="248" y="212" style="fill:#c0392b">HEAT IN (Q)</text>
 
           <!-- inlet thermometer -->
           <rect class="tool-body" x="96" y="20" width="16" height="46" rx="8"/>
           <circle class="cold" cx="104" cy="66" r="11"/>
           <rect class="cold" x="100" y="34" width="8" height="30"/>
-          <text class="dim-text" x="72" y="16" style="fill:#4a9eff">T IN</text>
+          <text class="dim-text" x="72" y="16" style="fill:#1f5fa8">T IN</text>
 
           <!-- outlet thermometer -->
           <rect class="tool-body" x="504" y="20" width="16" height="46" rx="8"/>
           <circle class="hot" cx="512" cy="66" r="11"/>
           <rect class="hot" x="508" y="26" width="8" height="38"/>
-          <text class="dim-text" x="484" y="16" style="fill:#ff7a5c">T OUT</text>
+          <text class="dim-text" x="484" y="16" style="fill:#c0392b">T OUT</text>
 
           <text class="label-text" x="90" y="224">Q = ṁ × c&#8346; × ΔT     &#8226;     water: Q ≈ 500 × GPM × ΔT</text>
         </svg>
@@ -540,16 +544,16 @@
       <div class="diagram">
         <svg viewBox="0 0 620 240" role="img" aria-label="Bar growing in length when heated, measured with a dial indicator">
           <!-- fixed anchor -->
-          <rect class="part" x="40" y="50" width="26" height="110" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="40" y="50" width="26" height="110" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
           <text class="note-text" x="30" y="176">ANCHOR</text>
 
           <!-- cold bar -->
-          <rect class="part-dk" x="66" y="76" width="360" height="24" rx="2" stroke="#4a9eff" stroke-width="2"/>
-          <text class="dim-text" x="180" y="70" style="fill:#4a9eff">COLD — LENGTH L @ T₁</text>
+          <rect class="part-dk" x="66" y="76" width="360" height="24" rx="2" stroke="#1f5fa8" stroke-width="2"/>
+          <text class="dim-text" x="180" y="70" style="fill:#1f5fa8">COLD — LENGTH L @ T₁</text>
 
           <!-- hot bar, visibly longer -->
-          <rect class="part-dk" x="66" y="122" width="418" height="24" rx="2" stroke="#ff7a5c" stroke-width="2"/>
-          <text class="dim-text" x="180" y="166" style="fill:#ff7a5c">HOT @ T₂ — GROWS ΔL</text>
+          <rect class="part-dk" x="66" y="122" width="418" height="24" rx="2" stroke="#c0392b" stroke-width="2"/>
+          <text class="dim-text" x="180" y="166" style="fill:#c0392b">HOT @ T₂ — GROWS ΔL</text>
 
           <!-- growth dimension -->
           <line class="ext-line" x1="426" y1="76" x2="426" y2="200"/>
@@ -559,8 +563,8 @@
 
           <!-- dial indicator against the free end -->
           <circle class="tool-body" cx="540" cy="80" r="26"/>
-          <circle cx="540" cy="80" r="19" fill="#0d141d" stroke="#f4b400" stroke-width="1.5"/>
-          <line x1="540" y1="80" x2="551" y2="68" stroke="#f4b400" stroke-width="2.5"/>
+          <circle cx="540" cy="80" r="19" fill="#ffffff" stroke="#a87d0a" stroke-width="1.5"/>
+          <line x1="540" y1="80" x2="551" y2="68" stroke="#a87d0a" stroke-width="2.5"/>
           <rect class="tool-body" x="536" y="106" width="8" height="32"/>
           <text class="note-text" x="506" y="150">DIAL INDICATOR</text>
 
@@ -600,7 +604,7 @@
         <svg viewBox="0 0 620 210" role="img" aria-label="Cross sections of plate, round bar, tube, and hex bar with dimensions">
           <!-- plate -->
           <text class="label-text" x="24" y="20">PLATE / FLAT BAR</text>
-          <rect class="part" x="24" y="34" width="110" height="30" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="24" y="34" width="110" height="30" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
           <line class="dim-line" x1="24" y1="80" x2="134" y2="80" marker-start="url(#ar)" marker-end="url(#ar)"/>
           <text class="dim-text" x="66" y="96">WIDTH</text>
           <line class="dim-line" x1="146" y1="34" x2="146" y2="64" marker-start="url(#ar)" marker-end="url(#ar)"/>
@@ -608,7 +612,7 @@
 
           <!-- round bar -->
           <text class="label-text" x="216" y="20">ROUND BAR</text>
-          <circle cx="256" cy="52" r="30" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <circle cx="256" cy="52" r="30" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
           <line class="center-line" x1="216" y1="52" x2="296" y2="52"/>
           <line class="dim-line" x1="226" y1="98" x2="286" y2="98" marker-start="url(#ar)" marker-end="url(#ar)"/>
           <text class="dim-text" x="248" y="114">DIA</text>
@@ -616,8 +620,8 @@
           <!-- tube -->
           <text class="label-text" x="356" y="20">TUBE / PIPE</text>
           <path d="M396,22 a30,30 0 1,0 0.1,0 z M396,34 a18,18 0 1,1 -0.1,0 z"
-                style="fill:url(#hatch)" fill-rule="evenodd" stroke="#b9c7d6" stroke-width="2"/>
-          <circle cx="396" cy="52" r="18" fill="#0d141d" stroke="#b9c7d6" stroke-width="2"/>
+                style="fill:url(#hatch)" fill-rule="evenodd" stroke="#3d4c5d" stroke-width="2"/>
+          <circle cx="396" cy="52" r="18" fill="#ffffff" stroke="#3d4c5d" stroke-width="2"/>
           <line class="dim-line" x1="366" y1="98" x2="426" y2="98" marker-start="url(#ar)" marker-end="url(#ar)"/>
           <text class="dim-text" x="388" y="114">OD</text>
           <line class="ext-line" x1="414" y1="34" x2="466" y2="18"/>
@@ -626,7 +630,7 @@
           <!-- hex bar -->
           <text class="label-text" x="512" y="20">HEX BAR</text>
           <polygon points="546,26 572,40 572,66 546,80 520,66 520,40"
-                   style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+                   style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
           <line class="dim-line" x1="520" y1="98" x2="572" y2="98" marker-start="url(#ar)" marker-end="url(#ar)"/>
           <text class="dim-text" x="518" y="114">ACROSS FLATS</text>
 
@@ -634,8 +638,8 @@
           <line class="dim-line" x1="24" y1="150" x2="500" y2="150" marker-start="url(#ar)" marker-end="url(#ar)"/>
           <text class="dim-text" x="230" y="144">LENGTH</text>
           <rect class="tool-body" x="510" y="134" width="86" height="32" rx="5"/>
-          <rect x="518" y="142" width="70" height="16" rx="2" fill="#0d141d" stroke="#56d4dd" stroke-width="1"/>
-          <text x="524" y="155" style="fill:#56d4dd;font-family:Consolas,monospace;font-size:11px;font-weight:700">SCALE</text>
+          <rect x="518" y="142" width="70" height="16" rx="2" fill="#ffffff" stroke="#0e7c86" stroke-width="1"/>
+          <text x="524" y="155" style="fill:#0e7c86;font-family:Consolas,monospace;font-size:11px;font-weight:700">SCALE</text>
           <text class="label-text" x="24" y="188">WEIGHT = CROSS-SECTION AREA × LENGTH × DENSITY</text>
         </svg>
         <div class="diagram-caption">Cross-sectional area drives the weight for every stock shape</div>
@@ -682,13 +686,13 @@
       <div class="diagram">
         <svg viewBox="0 0 620 240" role="img" aria-label="Cylindrical tank in section with diameter and length dimensions">
           <!-- tank shell in section -->
-          <rect class="part" x="110" y="46" width="380" height="18" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
-          <rect class="part" x="110" y="152" width="380" height="18" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
-          <path class="part" d="M110,46 a26,62 0 0,0 0,124 z" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
-          <path class="part" d="M490,46 a26,62 0 0,1 0,124 z" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="110" y="46" width="380" height="18" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
+          <rect class="part" x="110" y="152" width="380" height="18" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
+          <path class="part" d="M110,46 a26,62 0 0,0 0,124 z" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
+          <path class="part" d="M490,46 a26,62 0 0,1 0,124 z" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
           <!-- contents -->
           <rect x="110" y="64" width="380" height="88" fill="url(#waterFlow)"/>
-          <line x1="110" y1="96" x2="490" y2="96" stroke="#56d4dd" stroke-width="1.5" opacity="0.6"/>
+          <line x1="110" y1="96" x2="490" y2="96" stroke="#0e7c86" stroke-width="1.5" opacity="0.6"/>
           <line class="center-line" x1="86" y1="108" x2="516" y2="108"/>
 
           <!-- ID dimension -->
@@ -703,7 +707,7 @@
 
           <!-- sight gauge -->
           <rect class="tool-body" x="522" y="52" width="14" height="112" rx="4"/>
-          <rect x="526" y="82" width="6" height="78" fill="#56d4dd"/>
+          <rect x="526" y="82" width="6" height="78" fill="#0e7c86"/>
           <text class="note-text" x="506" y="184">GAUGE</text>
 
           <text class="label-text" x="110" y="228">V = π/4 × ID² × LENGTH     &#8226;     231 in³ = 1 gal</text>
@@ -732,14 +736,14 @@
       <div class="diagram">
         <svg viewBox="0 0 620 250" role="img" aria-label="Torque wrench on a flange bolt with clamp load arrows">
           <!-- flange faces being clamped -->
-          <rect class="part" x="150" y="120" width="300" height="26" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
-          <rect class="part" x="150" y="146" width="300" height="26" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="150" y="120" width="300" height="26" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
+          <rect class="part" x="150" y="146" width="300" height="26" style="fill:url(#hatch)" stroke="#3d4c5d" stroke-width="2"/>
           <text class="note-text" x="150" y="192">FLANGE JOINT</text>
 
           <!-- bolt through the joint -->
-          <rect class="part-lt" x="286" y="60" width="28" height="130" rx="2" stroke="#b9c7d6" stroke-width="1.5"/>
-          <polygon points="272,44 328,44 336,60 264,60" fill="url(#steel)" stroke="#b9c7d6" stroke-width="1.5"/>
-          <rect class="part-lt" x="270" y="190" width="60" height="20" rx="2" stroke="#b9c7d6" stroke-width="1.5"/>
+          <rect class="part-lt" x="286" y="60" width="28" height="130" rx="2" stroke="#3d4c5d" stroke-width="1.5"/>
+          <polygon points="272,44 328,44 336,60 264,60" fill="url(#steel)" stroke="#3d4c5d" stroke-width="1.5"/>
+          <rect class="part-lt" x="270" y="190" width="60" height="20" rx="2" stroke="#3d4c5d" stroke-width="1.5"/>
           <line class="center-line" x1="300" y1="30" x2="300" y2="224"/>
 
           <!-- clamp load arrows -->
@@ -757,8 +761,8 @@
           <rect class="tool-body" x="300" y="36" width="240" height="22" rx="6"/>
           <rect class="tool-accent" x="470" y="30" width="66" height="34" rx="6"/>
           <circle class="tool-body" cx="300" cy="47" r="24"/>
-          <circle cx="300" cy="47" r="13" fill="#0d141d" stroke="#f4b400" stroke-width="2"/>
-          <path d="M362,20 a54,54 0 0,1 46,10" stroke="#ff9f43" stroke-width="2.5" fill="none" marker-end="url(#ar)"/>
+          <circle cx="300" cy="47" r="13" fill="#ffffff" stroke="#a87d0a" stroke-width="2"/>
+          <path d="M362,20 a54,54 0 0,1 46,10" stroke="#b3541e" stroke-width="2.5" fill="none" marker-end="url(#ar)"/>
           <text class="dim-text" x="368" y="14">TORQUE T</text>
           <text class="note-text" x="466" y="80">TORQUE WRENCH</text>
 

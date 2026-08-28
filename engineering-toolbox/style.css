@@ -1,27 +1,27 @@
 :root {
-  /* CAD / blueprint palette */
-  --bp-0: #0d141d;
-  --bp-1: #131d29;
-  --bp-2: #1a2634;
-  --bp-3: #24313f;
-  --line: #2e3d4e;
-  --line-soft: #223040;
-  --text: #dfe7f0;
-  --text-dim: #94a6ba;
-  --text-faint: #64768a;
-  --cad: #4a9eff;
-  --cad-dim: rgba(74, 158, 255, 0.14);
-  --cyan: #56d4dd;
-  --dim: #ff9f43;
-  --metal-lt: #b9c7d6;
-  --metal: #7d8fa3;
-  --metal-dk: #46566a;
-  --good: #3ddc97;
-  --warn: #ffb545;
-  --bad: #ff6b81;
+  /* Light drafting-paper palette, matched to the rest of the RetubeCo site */
+  --bp-0: #eef1f5;
+  --bp-1: #ffffff;
+  --bp-2: #f5f7fa;
+  --bp-3: #e7ecf2;
+  --line: #ccd4de;
+  --line-soft: #e3e8ee;
+  --text: #1f2430;
+  --text-dim: #5b6472;
+  --text-faint: #86929f;
+  --cad: #1f5fa8;
+  --cad-dim: #e8f0fa;
+  --cyan: #0e7c86;
+  --dim: #b3541e;
+  --metal-lt: #eef2f6;
+  --metal: #c3ccd7;
+  --metal-dk: #3d4c5d;
+  --good: #2f9e6e;
+  --warn: #c2703d;
+  --bad: #c94f6d;
   --radius: 10px;
   --brand-yellow: #f4b400;
-  --brand-black: #12181f;
+  --brand-black: #1a1a1a;
   --mono: "Consolas", "SF Mono", "Roboto Mono", ui-monospace, monospace;
 }
 
@@ -33,40 +33,40 @@ body {
   color: var(--text);
   line-height: 1.45;
   background-color: var(--bp-0);
-  /* Blueprint grid: fine 10px mesh over a heavier 50px mesh. */
+  /* Drafting grid: fine 10px mesh over a heavier 50px mesh. */
   background-image:
-    linear-gradient(rgba(74, 158, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(74, 158, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(rgba(74, 158, 255, 0.075) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(74, 158, 255, 0.075) 1px, transparent 1px);
+    linear-gradient(rgba(31, 95, 168, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 95, 168, 0.05) 1px, transparent 1px),
+    linear-gradient(rgba(31, 95, 168, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 95, 168, 0.09) 1px, transparent 1px);
   background-size: 10px 10px, 10px 10px, 50px 50px, 50px 50px;
 }
 
 /* ---------- Header ---------- */
 .app-header {
-  background: linear-gradient(180deg, #182430 0%, var(--brand-black) 100%);
+  background: var(--brand-black);
+  color: white;
   padding: 14px 24px;
   display: flex;
   align-items: center;
   gap: 16px;
-  border-bottom: 3px solid var(--brand-yellow);
-  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+  border-bottom: 4px solid var(--brand-yellow);
 }
 .back-to-hub {
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.75);
   text-decoration: none;
   font-size: 0.85rem;
   white-space: nowrap;
   font-family: var(--mono);
 }
-.back-to-hub:hover { color: var(--cad); }
+.back-to-hub:hover { color: white; }
 .app-logo { height: 42px; background: white; padding: 5px 9px; border-radius: 4px; flex-shrink: 0; }
 .app-header-text { flex: 1; min-width: 0; }
-.app-header h1 { margin: 0 0 2px; font-size: 1.25rem; letter-spacing: 0.01em; }
-.app-header .subtitle { margin: 0; color: var(--text-dim); font-size: 0.85rem; }
+.app-header h1 { margin: 0 0 2px; font-size: 1.25rem; }
+.app-header .subtitle { margin: 0; opacity: 0.85; font-size: 0.85rem; }
 .powered-by { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
 .powered-by-label {
-  font-size: 0.68rem; color: var(--text-faint); text-transform: uppercase;
+  font-size: 0.68rem; color: rgba(255, 255, 255, 0.55); text-transform: uppercase;
   letter-spacing: 0.05em; white-space: nowrap; font-family: var(--mono);
 }
 .erogn-logo { height: 26px; width: auto; border-radius: 3px; }
@@ -84,13 +84,12 @@ body {
 .sidebar {
   width: 252px;
   flex-shrink: 0;
-  background: rgba(19, 29, 41, 0.9);
+  background: var(--bp-1);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 10px;
   position: sticky;
   top: 14px;
-  backdrop-filter: blur(4px);
 }
 .nav-group {
   font-family: var(--mono);
@@ -129,11 +128,9 @@ body {
 
 .content { flex: 1; min-width: 0; }
 
-/* Section title styled like a drawing callout */
 .tool-section h2 {
   margin: 0 0 6px;
   font-size: 1.32rem;
-  letter-spacing: 0.01em;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -148,12 +145,13 @@ body {
 
 /* ---------- Cards ---------- */
 .card {
-  background: rgba(22, 32, 46, 0.92);
+  background: var(--bp-1);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 20px 22px;
   margin-bottom: 18px;
   position: relative;
+  box-shadow: 0 1px 3px rgba(31, 40, 55, 0.05);
 }
 /* Corner ticks — drafting-sheet detail */
 .card::before, .card::after {
@@ -161,7 +159,7 @@ body {
   position: absolute;
   width: 9px; height: 9px;
   border-color: var(--cad);
-  opacity: 0.4;
+  opacity: 0.45;
 }
 .card::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; border-radius: var(--radius) 0 0 0; }
 .card::after { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; border-radius: 0 0 var(--radius) 0; }
@@ -170,11 +168,11 @@ body {
 /* ---------- Diagram ---------- */
 .diagram {
   background:
-    linear-gradient(rgba(74,158,255,0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(74,158,255,0.05) 1px, transparent 1px),
+    linear-gradient(rgba(31, 95, 168, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 95, 168, 0.055) 1px, transparent 1px),
     var(--bp-1);
   background-size: 12px 12px, 12px 12px;
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
   margin-bottom: 18px;
@@ -192,20 +190,20 @@ body {
 }
 
 /* CAD drawing element classes used inside the SVGs */
-.part { fill: #55667c; stroke: var(--metal-lt); stroke-width: 1.5; }
-.part-lt { fill: #6d8098; stroke: var(--metal-lt); stroke-width: 1.5; }
-.part-dk { fill: #3a4859; stroke: var(--metal); stroke-width: 1.5; }
-.tool-body { fill: #3f4c5c; stroke: #9fb2c6; stroke-width: 1.5; }
+.part { fill: #dfe5ec; stroke: var(--metal-dk); stroke-width: 1.5; }
+.part-lt { fill: #f0f4f8; stroke: var(--metal-dk); stroke-width: 1.5; }
+.part-dk { fill: #c8d2dd; stroke: var(--metal-dk); stroke-width: 1.5; }
+.tool-body { fill: #cfd8e2; stroke: #46566a; stroke-width: 1.5; }
 .tool-accent { fill: var(--brand-yellow); stroke: #8a6800; stroke-width: 1; }
 .dim-line { stroke: var(--dim); stroke-width: 1.2; fill: none; }
-.ext-line { stroke: var(--dim); stroke-width: 0.9; stroke-dasharray: none; opacity: 0.65; }
-.center-line { stroke: var(--cyan); stroke-width: 1; stroke-dasharray: 14 4 3 4; opacity: 0.75; }
+.ext-line { stroke: var(--dim); stroke-width: 0.9; opacity: 0.6; }
+.center-line { stroke: var(--cyan); stroke-width: 1; stroke-dasharray: 14 4 3 4; opacity: 0.8; }
 .dim-text { fill: var(--dim); font-family: var(--mono); font-size: 12px; font-weight: 700; }
 .note-text { fill: var(--text-dim); font-family: var(--mono); font-size: 11px; }
 .label-text { fill: var(--cyan); font-family: var(--mono); font-size: 11px; font-weight: 700; }
 .flow-arrow { stroke: var(--cad); stroke-width: 2; fill: none; }
-.hot { fill: #ff7a5c; }
-.cold { fill: #4a9eff; }
+.hot { fill: #c0392b; }
+.cold { fill: var(--cad); }
 
 /* ---------- Fields ---------- */
 .field-grid {
@@ -232,7 +230,7 @@ body {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: var(--bp-0);
+  background: #fff;
   width: 100%;
 }
 .field-grid input:focus, .field-grid select:focus {
@@ -240,7 +238,6 @@ body {
   border-color: var(--cad);
   box-shadow: 0 0 0 3px var(--cad-dim);
 }
-.field-grid select option { background: var(--bp-1); }
 
 /* ---------- Results ---------- */
 .results {
@@ -250,7 +247,7 @@ body {
   margin-top: 18px;
 }
 .result-tile {
-  background: linear-gradient(180deg, var(--bp-2) 0%, var(--bp-1) 100%);
+  background: var(--bp-2);
   border: 1px solid var(--line);
   border-left: 3px solid var(--cad);
   border-radius: 8px;
@@ -315,11 +312,12 @@ body {
 
 /* ---------- Converters ---------- */
 .converter {
-  background: rgba(22, 32, 46, 0.92);
+  background: var(--bp-1);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 15px 18px;
   margin-bottom: 13px;
+  box-shadow: 0 1px 3px rgba(31, 40, 55, 0.05);
 }
 .converter h3 {
   margin: 0 0 10px;
@@ -337,7 +335,7 @@ body {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: var(--bp-0);
+  background: #fff;
   color: var(--text);
   width: 150px;
   min-width: 0;
@@ -351,7 +349,7 @@ body {
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: var(--bp-1);
+  background: #fff;
   color: var(--text);
   flex: 0 1 auto;
   min-width: 0;
