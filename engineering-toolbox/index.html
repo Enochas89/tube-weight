@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Engineering Toolbox — RetubeCo Tools</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Shared drawing defs: arrowheads and section hatching -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ff9f43"/>
+    </marker>
+    <marker id="arB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4a9eff"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ff7a5c"/>
+    </marker>
+    <pattern id="hatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#9fb2c6" stroke-width="1.3" opacity="0.85"/>
+    </pattern>
+    <!-- Adjacent parts get opposing hatch angles so the joint line reads clearly,
+         the same convention used on real section views. -->
+    <pattern id="hatch2" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#f4b400" stroke-width="1.3" opacity="0.75"/>
+    </pattern>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8296ad"/><stop offset="0.5" stop-color="#5b6d82"/><stop offset="1" stop-color="#3d4c5d"/>
+    </linearGradient>
+    <linearGradient id="waterFlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4a9eff" stop-opacity="0.15"/><stop offset="1" stop-color="#56d4dd" stop-opacity="0.35"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<header class="app-header">
+  <a href="../" class="back-to-hub" title="Back to RetubeCo Tools">&larr; Tools</a>
+  <img src="../truck-calculator/logo.png" alt="RetubeCo, Inc." class="app-logo">
+  <div class="app-header-text">
+    <h1>Engineering Toolbox</h1>
+    <p class="subtitle">Calculators, charts, and converters for tube, heat exchanger, and fabrication work.</p>
+  </div>
+  <div class="powered-by">
+    <span class="powered-by-label">Powered by</span>
+    <img src="../truck-calculator/erogn-logo.png" alt="Erogn Tools" class="erogn-logo">
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar">
+    <div class="nav-group">Tubes &amp; Retubing</div>
+    <button class="nav-item active" data-section="tubeWeight">Tube Weight</button>
+    <button class="nav-item" data-section="tubeGauge">Tube ID &amp; Gauge</button>
+    <button class="nav-item" data-section="rolling">Tube Rolling</button>
+    <button class="nav-item" data-section="velocity">Tube-Side Velocity</button>
+    <button class="nav-item" data-section="surface">Surface Area</button>
+    <div class="nav-group">Heat Transfer</div>
+    <button class="nav-item" data-section="lmtd">LMTD</button>
+    <button class="nav-item" data-section="duty">Heat Duty</button>
+    <button class="nav-item" data-section="thermal">Thermal Expansion</button>
+    <div class="nav-group">Fabrication</div>
+    <button class="nav-item" data-section="metalWeight">Metal Weight</button>
+    <button class="nav-item" data-section="cylinder">Cylinder &amp; Tank Volume</button>
+    <button class="nav-item" data-section="torque">Bolt Torque</button>
+    <div class="nav-group">Reference Charts</div>
+    <button class="nav-item" data-section="bwgChart">BWG Gauge Chart</button>
+    <button class="nav-item" data-section="pipeChart">Pipe Schedule Chart</button>
+    <button class="nav-item" data-section="fractionChart">Fraction &middot; Decimal &middot; mm</button>
+    <button class="nav-item" data-section="materialChart">Material Properties</button>
+    <div class="nav-group">Unit Converters</div>
+    <button class="nav-item" data-section="convert">All Converters</button>
+  </nav>
+
+  <main class="content">
+
+    <!-- ============ Tube Weight ============ -->
+    <section class="tool-section" id="tubeWeight">
+      <h2>Tube Weight</h2>
+      <p class="tool-desc">Weight of straight condenser / heat exchanger tubing from material, OD, wall, and length.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 290" role="img" aria-label="Tube cross-section measured with a vernier caliper">
+          <!-- caliper beam and jaws -->
+          <rect class="tool-body" x="60" y="228" width="360" height="16" rx="3"/>
+          <rect class="tool-body" x="128" y="120" width="14" height="112" rx="2"/>
+          <rect class="tool-body" x="278" y="120" width="14" height="112" rx="2"/>
+          <rect class="tool-body" x="268" y="222" width="52" height="30" rx="3"/>
+          <rect class="tool-accent" x="276" y="230" width="36" height="8" rx="2"/>
+          <text class="note-text" x="330" y="266">VERNIER CALIPER</text>
+
+          <!-- tube cross-section (annulus, section-hatched) -->
+          <path d="M210,52 a68,68 0 1,0 0.1,0 z M210,70 a50,50 0 1,1 -0.1,0 z"
+                style="fill:url(#hatch)" fill-rule="evenodd" stroke="#b9c7d6" stroke-width="2"/>
+          <circle cx="210" cy="120" r="50" fill="#0d141d" stroke="#b9c7d6" stroke-width="2"/>
+          <line class="center-line" x1="118" y1="120" x2="302" y2="120"/>
+          <line class="center-line" x1="210" y1="28" x2="210" y2="212"/>
+
+          <!-- OD dimension -->
+          <line class="dim-line" x1="142" y1="196" x2="278" y2="196" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="196" y="190">OD</text>
+
+          <!-- wall dimension (leader out to the right) -->
+          <line class="ext-line" x1="260" y1="120" x2="470" y2="66"/>
+          <line class="dim-line" x1="470" y1="66" x2="530" y2="66"/>
+          <text class="dim-text" x="482" y="58">WALL (BWG)</text>
+
+          <!-- length note -->
+          <line class="dim-line" x1="400" y1="150" x2="560" y2="150" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="440" y="144">LENGTH</text>
+          <rect class="part" x="400" y="160" width="160" height="34" rx="2" opacity="0.55"/>
+          <text class="note-text" x="404" y="212">straight tube run</text>
+        </svg>
+        <div class="diagram-caption">Measure OD across the tube; wall from the BWG gauge or a tube micrometer</div>
+      </div>
+
+      <div class="card">
+        <div class="field-grid">
+          <label>Material
+            <select id="twMaterial"></select>
+          </label>
+          <label class="hidden" id="twDensityWrap">Density (lb/in&sup3;)
+            <input type="number" id="twDensity" step="0.0001" value="0.2836">
+          </label>
+          <label>Tube OD (in)
+            <input type="number" id="twOd" step="0.001" value="1.000">
+          </label>
+          <label>Wall — BWG or inches
+            <select id="twBwg"></select>
+          </label>
+          <label class="hidden" id="twWallWrap">Wall (in)
+            <input type="number" id="twWall" step="0.001" value="0.049">
+          </label>
+          <label>Tube length
+            <input type="text" id="twLength" value="20'" placeholder="e.g. 20' or 240">
+          </label>
+          <label>Tube count
+            <input type="number" id="twCount" step="1" value="1">
+          </label>
+        </div>
+        <div class="results" id="twResults"></div>
+      </div>
+    </section>
+
+    <!-- ============ Tube ID & Gauge ============ -->
+    <section class="tool-section hidden" id="tubeGauge">
+      <h2>Tube ID &amp; Gauge</h2>
+      <p class="tool-desc">Inside diameter and flow area from OD and BWG wall gauge.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 280" role="img" aria-label="Tube bore measured with inside caliper jaws and a wall thickness gauge">
+          <!-- tube end view -->
+          <path d="M180,42 a78,78 0 1,0 0.1,0 z M180,64 a56,56 0 1,1 -0.1,0 z"
+                style="fill:url(#hatch)" fill-rule="evenodd" stroke="#b9c7d6" stroke-width="2"/>
+          <circle cx="180" cy="120" r="56" fill="#0d141d" stroke="#b9c7d6" stroke-width="2"/>
+          <line class="center-line" x1="86" y1="120" x2="274" y2="120"/>
+          <line class="center-line" x1="180" y1="28" x2="180" y2="212"/>
+
+          <!-- inside jaws spreading in the bore -->
+          <path class="tool-body" d="M180,120 L180,60 L172,60 L172,120 z"/>
+          <path class="tool-body" d="M180,120 L180,180 L188,180 L188,120 z"/>
+          <rect class="tool-body" x="150" y="112" width="60" height="16" rx="3"/>
+          <rect class="tool-accent" x="158" y="116" width="20" height="8" rx="2"/>
+
+          <!-- ID dimension -->
+          <line class="dim-line" x1="124" y1="232" x2="236" y2="232" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <line class="ext-line" x1="124" y1="176" x2="124" y2="238"/>
+          <line class="ext-line" x1="236" y1="176" x2="236" y2="238"/>
+          <text class="dim-text" x="166" y="226">ID</text>
+
+          <!-- OD dimension -->
+          <line class="dim-line" x1="102" y1="256" x2="258" y2="256" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="160" y="250">OD</text>
+
+          <!-- wall gauge detail -->
+          <text class="label-text" x="330" y="52">WALL = (OD &minus; ID) / 2</text>
+          <rect class="part" x="330" y="70" width="230" height="26" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.5"/>
+          <rect x="330" y="96" width="230" height="52" fill="#0d141d" stroke="#b9c7d6" stroke-width="1.5"/>
+          <rect class="part" x="330" y="148" width="230" height="26" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.5"/>
+          <line class="dim-line" x1="356" y1="70" x2="356" y2="96" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="364" y="88">t</text>
+          <line class="dim-line" x1="500" y1="96" x2="500" y2="148" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="508" y="126">ID</text>
+          <text class="note-text" x="330" y="196">LONGITUDINAL SECTION</text>
+        </svg>
+        <div class="diagram-caption">Inside caliper jaws read bore directly; wall is half the OD&minus;ID difference</div>
+      </div>
+
+      <div class="card">
+        <div class="field-grid">
+          <label>Tube OD (in)
+            <input type="number" id="tgOd" step="0.001" value="0.750">
+          </label>
+          <label>BWG
+            <select id="tgBwg"></select>
+          </label>
+        </div>
+        <div class="results" id="tgResults"></div>
+      </div>
+    </section>
+
+    <!-- ============ Tube Rolling ============ -->
+    <section class="tool-section hidden" id="rolling">
+      <h2>Tube Rolling — Percent Wall Reduction</h2>
+      <p class="tool-desc">
+        Apparent wall reduction from expanding a tube into a tubesheet. Measure the tube ID before rolling,
+        the tubesheet hole ID, and the tube ID after rolling.
+      </p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 300" role="img" aria-label="Tube expander rolling a tube into a tubesheet, before and after">
+          <!-- BEFORE -->
+          <text class="label-text" x="20" y="24">BEFORE ROLLING</text>
+          <rect class="part" x="20" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="200" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <text class="note-text" x="18" y="188">TUBESHEET</text>
+          <!-- tube walls with a visible clearance gap to the hole -->
+          <rect class="part-lt" x="72" y="52" width="128" height="16" style="fill:url(#hatch2)" stroke="#f4b400" stroke-width="1.5"/>
+          <rect class="part-lt" x="72" y="142" width="128" height="16" style="fill:url(#hatch2)" stroke="#f4b400" stroke-width="1.5"/>
+          <line class="dim-line" x1="136" y1="40" x2="136" y2="52" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="142" y="50">gap</text>
+          <line class="dim-line" x1="100" y1="68" x2="100" y2="142" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="106" y="108">ID₁</text>
+
+          <!-- roller expander inserted -->
+          <rect class="tool-body" x="90" y="96" width="150" height="18" rx="4"/>
+          <circle class="tool-accent" cx="120" cy="105" r="13"/>
+          <circle class="tool-accent" cx="152" cy="105" r="13"/>
+          <rect class="tool-body" x="236" y="88" width="34" height="34" rx="5"/>
+          <text class="note-text" x="248" y="140">EXPANDER</text>
+
+          <!-- AFTER -->
+          <text class="label-text" x="330" y="24">AFTER ROLLING</text>
+          <rect class="part" x="330" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="510" y="40" width="52" height="130" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <!-- tube wall thinned and pressed tight to the hole (no gap) -->
+          <rect class="part-lt" x="382" y="40" width="128" height="13" style="fill:url(#hatch2)" stroke="#3ddc97" stroke-width="2"/>
+          <rect class="part-lt" x="382" y="157" width="128" height="13" style="fill:url(#hatch2)" stroke="#3ddc97" stroke-width="2"/>
+          <line class="dim-line" x1="410" y1="53" x2="410" y2="157" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="416" y="108">ID₂</text>
+          <text class="note-text" x="330" y="188">wall thinned, gap closed</text>
+
+          <!-- formula -->
+          <text class="label-text" x="20" y="234">% REDUCTION = [ (ID₂ &minus; ID₁) &minus; (HOLE &minus; OD) ] / (2 × WALL) × 100</text>
+          <line class="dim-line" x1="20" y1="246" x2="600" y2="246"/>
+          <text class="note-text" x="20" y="272">ID growth beyond the hole clearance is what actually thins the tube wall.</text>
+        </svg>
+        <div class="diagram-caption">Roller expander thins the wall to lock the tube into the tubesheet</div>
+      </div>
+
+      <div class="card">
+        <div class="field-grid">
+          <label>Tube OD (in)
+            <input type="number" id="rlOd" step="0.001" value="1.000">
+          </label>
+          <label>Tube wall (in)
+            <input type="number" id="rlWall" step="0.001" value="0.049">
+          </label>
+          <label>Tube ID before rolling (in)
+            <input type="number" id="rlIdBefore" step="0.001" value="0.902">
+          </label>
+          <label>Tubesheet hole ID (in)
+            <input type="number" id="rlHole" step="0.001" value="1.012">
+          </label>
+          <label>Tube ID after rolling (in)
+            <input type="number" id="rlIdAfter" step="0.001" value="0.919">
+          </label>
+        </div>
+        <div class="results" id="rlResults"></div>
+        <p class="note">
+          Typical rolled-joint specs call for roughly 4&ndash;8% apparent wall reduction depending on tube material
+          and service &mdash; always follow the job specification or manufacturer's data sheet.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ Tube-Side Velocity ============ -->
+    <section class="tool-section hidden" id="velocity">
+      <h2>Tube-Side Velocity</h2>
+      <p class="tool-desc">Water velocity through the tubes from total flow, tube count, and passes.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 250" role="img" aria-label="Water flowing through a tube with a flow meter">
+          <!-- tube in longitudinal section -->
+          <rect class="part" x="80" y="60" width="460" height="22" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.8"/>
+          <rect class="part" x="80" y="158" width="460" height="22" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.8"/>
+          <rect x="80" y="82" width="460" height="76" fill="url(#waterFlow)"/>
+          <line class="center-line" x1="64" y1="120" x2="556" y2="120"/>
+
+          <!-- flow arrows with a velocity profile feel -->
+          <line class="flow-arrow" x1="110" y1="98" x2="215" y2="98" marker-end="url(#arB)"/>
+          <line class="flow-arrow" x1="110" y1="120" x2="255" y2="120" marker-end="url(#arB)"/>
+          <line class="flow-arrow" x1="110" y1="142" x2="215" y2="142" marker-end="url(#arB)"/>
+          <line class="flow-arrow" x1="300" y1="98" x2="405" y2="98" marker-end="url(#arB)"/>
+          <line class="flow-arrow" x1="300" y1="120" x2="445" y2="120" marker-end="url(#arB)"/>
+          <line class="flow-arrow" x1="300" y1="142" x2="405" y2="142" marker-end="url(#arB)"/>
+
+          <!-- ID dimension -->
+          <line class="dim-line" x1="100" y1="82" x2="100" y2="158" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="60" y="126">ID</text>
+
+          <!-- flow meter clamped on the line -->
+          <rect class="tool-body" x="470" y="24" width="66" height="44" rx="5"/>
+          <rect x="478" y="32" width="50" height="20" rx="2" fill="#0d141d" stroke="#56d4dd" stroke-width="1"/>
+          <text x="484" y="47" style="fill:#56d4dd;font-family:Consolas,monospace;font-size:11px;font-weight:700">GPM</text>
+          <line class="ext-line" x1="503" y1="68" x2="503" y2="82"/>
+          <text class="note-text" x="452" y="18">FLOW METER</text>
+
+          <text class="label-text" x="80" y="216">V (ft/s) = 0.4085 × GPM per tube / ID²</text>
+          <text class="note-text" x="80" y="238">Total flow splits across the tubes in each pass.</text>
+        </svg>
+        <div class="diagram-caption">Velocity rises with flow per tube and falls sharply with bore diameter</div>
+      </div>
+
+      <div class="card">
+        <div class="field-grid">
+          <label>Total flow (GPM)
+            <input type="number" id="vlGpm" step="1" value="60000">
+          </label>
+          <label>Total tube count
+            <input type="number" id="vlTubes" step="1" value="5000">
+          </label>
+          <label>Passes
+            <input type="number" id="vlPasses" step="1" value="1">
+          </label>
+          <label>Tube ID (in)
+            <input type="number" id="vlId" step="0.001" value="0.902">
+          </label>
+        </div>
+        <div class="results" id="vlResults"></div>
+        <p class="note">
+          Common design guidance for condenser water is roughly 6&ndash;8 ft/s for steel and titanium,
+          and 6&ndash;7 ft/s max for copper alloys to limit erosion &mdash; verify against the applicable spec.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ Surface Area ============ -->
+    <section class="tool-section hidden" id="surface">
+      <h2>Heat Transfer Surface Area</h2>
+      <p class="tool-desc">External tube surface area of a bundle.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 250" role="img" aria-label="Tube bundle with effective length and tape measure">
+          <!-- tubesheets -->
+          <rect class="part" x="70" y="40" width="26" height="140" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="500" y="40" width="26" height="140" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <!-- tubes -->
+          <g stroke="#b9c7d6" stroke-width="1.5">
+            <rect class="part-lt" x="96" y="52" width="404" height="15" rx="2"/>
+            <rect class="part-lt" x="96" y="78" width="404" height="15" rx="2"/>
+            <rect class="part-lt" x="96" y="104" width="404" height="15" rx="2"/>
+            <rect class="part-lt" x="96" y="130" width="404" height="15" rx="2"/>
+            <rect class="part-lt" x="96" y="156" width="404" height="15" rx="2"/>
+          </g>
+          <text class="note-text" x="60" y="196">TUBESHEET</text>
+          <text class="note-text" x="470" y="196">TUBESHEET</text>
+
+          <!-- effective length dimension with a tape measure -->
+          <line class="dim-line" x1="96" y1="216" x2="500" y2="216" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <line class="ext-line" x1="96" y1="180" x2="96" y2="222"/>
+          <line class="ext-line" x1="500" y1="180" x2="500" y2="222"/>
+          <text class="dim-text" x="252" y="210">EFFECTIVE LENGTH</text>
+          <rect class="tool-body" x="30" y="200" width="52" height="34" rx="6"/>
+          <circle cx="56" cy="217" r="10" fill="#0d141d" stroke="#f4b400" stroke-width="2"/>
+          <text class="note-text" x="26" y="248">TAPE</text>
+
+          <!-- OD callout -->
+          <line class="ext-line" x1="300" y1="52" x2="360" y2="22"/>
+          <line class="dim-line" x1="360" y1="22" x2="440" y2="22"/>
+          <text class="dim-text" x="368" y="16">TUBE OD</text>
+
+          <text class="label-text" x="96" y="242">A = π × OD × L × TUBE COUNT</text>
+        </svg>
+        <div class="diagram-caption">External area of every tube between the tubesheets</div>
+      </div>
+
+      <div class="card">
+        <div class="field-grid">
+          <label>Tube OD (in)
+            <input type="number" id="saOd" step="0.001" value="1.000">
+          </label>
+          <label>Effective tube length
+            <input type="text" id="saLength" value="30'">
+          </label>
+          <label>Tube count
+            <input type="number" id="saCount" step="1" value="5000">
+          </label>
+        </div>
+        <div class="results" id="saResults"></div>
+      </div>
+    </section>
+
+    <!-- ============ LMTD ============ -->
+    <section class="tool-section hidden" id="lmtd">
+      <h2>Log Mean Temperature Difference</h2>
+      <p class="tool-desc">LMTD for counterflow or parallel-flow exchangers.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 260" role="img" aria-label="Shell and tube exchanger with hot and cold streams and a temperature profile">
+          <!-- shell -->
+          <rect class="part-dk" x="90" y="40" width="420" height="110" rx="10" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="90" y="40" width="16" height="110" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.5"/>
+          <rect class="part" x="494" y="40" width="16" height="110" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.5"/>
+          <!-- tubes -->
+          <g stroke="#9fb2c6" stroke-width="1.4" fill="#55667c">
+            <rect x="106" y="62" width="388" height="12" rx="2"/>
+            <rect x="106" y="89" width="388" height="12" rx="2"/>
+            <rect x="106" y="116" width="388" height="12" rx="2"/>
+          </g>
+
+          <!-- hot shell-side stream (top, left to right) -->
+          <line class="flow-arrow" x1="150" y1="26" x2="250" y2="26" marker-end="url(#arR)" stroke="#ff7a5c"/>
+          <text class="dim-text" x="150" y="18" style="fill:#ff7a5c">HOT IN</text>
+          <line class="flow-arrow" x1="380" y1="26" x2="470" y2="26" marker-end="url(#arR)" stroke="#ff7a5c"/>
+          <text class="dim-text" x="384" y="18" style="fill:#ff7a5c">HOT OUT</text>
+
+          <!-- cold tube-side stream (bottom, right to left = counterflow) -->
+          <line class="flow-arrow" x1="470" y1="168" x2="380" y2="168" marker-end="url(#arB)"/>
+          <text class="dim-text" x="410" y="186" style="fill:#4a9eff">COLD IN</text>
+          <line class="flow-arrow" x1="250" y1="168" x2="150" y2="168" marker-end="url(#arB)"/>
+          <text class="dim-text" x="150" y="186" style="fill:#4a9eff">COLD OUT</text>
+
+          <!-- temperature profile plot -->
+          <line class="ext-line" x1="90" y1="248" x2="510" y2="248"/>
+          <path d="M100,206 L500,232" stroke="#ff7a5c" stroke-width="2.5" fill="none"/>
+          <path d="M100,240 L500,214" stroke="#4a9eff" stroke-width="2.5" fill="none"/>
+          <line class="dim-line" x1="112" y1="207" x2="112" y2="239" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="118" y="204">ΔT₁</text>
+          <line class="dim-line" x1="488" y1="215" x2="488" y2="231" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="440" y="212">ΔT₂</text>
+          <text class="note-text" x="200" y="256">TEMPERATURE PROFILE ALONG LENGTH</text>
+        </svg>
+        <div class="diagram-caption">LMTD averages the end temperature differences logarithmically</div>
+      </div>
+
+      <div class="card">
+        <div class="field-grid">
+          <label>Flow arrangement
+            <select id="lmMode">
+              <option value="counter">Counterflow</option>
+              <option value="parallel">Parallel flow</option>
+            </select>
+          </label>
+          <label>Hot in (&deg;F)
+            <input type="number" id="lmHotIn" step="0.1" value="120">
+          </label>
+          <label>Hot out (&deg;F)
+            <input type="number" id="lmHotOut" step="0.1" value="100">
+          </label>
+          <label>Cold in (&deg;F)
+            <input type="number" id="lmColdIn" step="0.1" value="70">
+          </label>
+          <label>Cold out (&deg;F)
+            <input type="number" id="lmColdOut" step="0.1" value="90">
+          </label>
+        </div>
+        <div class="results" id="lmResults"></div>
+      </div>
+    </section>
+
+    <!-- ============ Heat Duty ============ -->
+    <section class="tool-section hidden" id="duty">
+      <h2>Heat Duty</h2>
+      <p class="tool-desc">Heat transferred to or from a flowing stream.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 230" role="img" aria-label="Flow through a heated section with inlet and outlet thermometers">
+          <!-- pipe -->
+          <rect class="part" x="90" y="72" width="440" height="18" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.8"/>
+          <rect class="part" x="90" y="140" width="440" height="18" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="1.8"/>
+          <rect x="90" y="90" width="440" height="50" fill="url(#waterFlow)"/>
+          <line class="flow-arrow" x1="120" y1="115" x2="230" y2="115" marker-end="url(#arB)"/>
+          <line class="flow-arrow" x1="330" y1="115" x2="440" y2="115" marker-end="url(#arB)"/>
+          <text class="dim-text" x="240" y="120" style="fill:#56d4dd">FLOW</text>
+
+          <!-- heat input arrows -->
+          <g stroke="#ff7a5c" stroke-width="2.5" fill="none">
+            <line x1="200" y1="192" x2="200" y2="162" marker-end="url(#arR)"/>
+            <line x1="270" y1="192" x2="270" y2="162" marker-end="url(#arR)"/>
+            <line x1="340" y1="192" x2="340" y2="162" marker-end="url(#arR)"/>
+            <line x1="410" y1="192" x2="410" y2="162" marker-end="url(#arR)"/>
+          </g>
+          <text class="dim-text" x="248" y="212" style="fill:#ff7a5c">HEAT IN (Q)</text>
+
+          <!-- inlet thermometer -->
+          <rect class="tool-body" x="96" y="20" width="16" height="46" rx="8"/>
+          <circle class="cold" cx="104" cy="66" r="11"/>
+          <rect class="cold" x="100" y="34" width="8" height="30"/>
+          <text class="dim-text" x="72" y="16" style="fill:#4a9eff">T IN</text>
+
+          <!-- outlet thermometer -->
+          <rect class="tool-body" x="504" y="20" width="16" height="46" rx="8"/>
+          <circle class="hot" cx="512" cy="66" r="11"/>
+          <rect class="hot" x="508" y="26" width="8" height="38"/>
+          <text class="dim-text" x="484" y="16" style="fill:#ff7a5c">T OUT</text>
+
+          <text class="label-text" x="90" y="224">Q = ṁ × c&#8346; × ΔT     &#8226;     water: Q ≈ 500 × GPM × ΔT</text>
+        </svg>
+        <div class="diagram-caption">Duty is mass flow times specific heat times the temperature rise</div>
+      </div>
+
+      <div class="card">
+        <h3>Water (quick form)</h3>
+        <div class="field-grid">
+          <label>Flow (GPM)
+            <input type="number" id="hdGpm" step="1" value="10000">
+          </label>
+          <label>Temperature rise &Delta;T (&deg;F)
+            <input type="number" id="hdDt" step="0.1" value="20">
+          </label>
+        </div>
+        <div class="results" id="hdWaterResults"></div>
+      </div>
+      <div class="card">
+        <h3>Any fluid</h3>
+        <div class="field-grid">
+          <label>Mass flow (lb/hr)
+            <input type="number" id="hdMass" step="1" value="100000">
+          </label>
+          <label>Specific heat c<sub>p</sub> (BTU/lb&middot;&deg;F)
+            <input type="number" id="hdCp" step="0.01" value="1.00">
+          </label>
+          <label>&Delta;T (&deg;F)
+            <input type="number" id="hdDt2" step="0.1" value="20">
+          </label>
+        </div>
+        <div class="results" id="hdAnyResults"></div>
+      </div>
+    </section>
+
+    <!-- ============ Thermal Expansion ============ -->
+    <section class="tool-section hidden" id="thermal">
+      <h2>Thermal Expansion</h2>
+      <p class="tool-desc">Length change of tube, pipe, or structural members with temperature.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 240" role="img" aria-label="Bar growing in length when heated, measured with a dial indicator">
+          <!-- fixed anchor -->
+          <rect class="part" x="40" y="50" width="26" height="110" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <text class="note-text" x="30" y="176">ANCHOR</text>
+
+          <!-- cold bar -->
+          <rect class="part-dk" x="66" y="76" width="360" height="24" rx="2" stroke="#4a9eff" stroke-width="2"/>
+          <text class="dim-text" x="180" y="70" style="fill:#4a9eff">COLD — LENGTH L @ T₁</text>
+
+          <!-- hot bar, visibly longer -->
+          <rect class="part-dk" x="66" y="122" width="418" height="24" rx="2" stroke="#ff7a5c" stroke-width="2"/>
+          <text class="dim-text" x="180" y="166" style="fill:#ff7a5c">HOT @ T₂ — GROWS ΔL</text>
+
+          <!-- growth dimension -->
+          <line class="ext-line" x1="426" y1="76" x2="426" y2="200"/>
+          <line class="ext-line" x1="484" y1="122" x2="484" y2="200"/>
+          <line class="dim-line" x1="426" y1="192" x2="484" y2="192" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="498" y="196">ΔL</text>
+
+          <!-- dial indicator against the free end -->
+          <circle class="tool-body" cx="540" cy="80" r="26"/>
+          <circle cx="540" cy="80" r="19" fill="#0d141d" stroke="#f4b400" stroke-width="1.5"/>
+          <line x1="540" y1="80" x2="551" y2="68" stroke="#f4b400" stroke-width="2.5"/>
+          <rect class="tool-body" x="536" y="106" width="8" height="32"/>
+          <text class="note-text" x="506" y="150">DIAL INDICATOR</text>
+
+          <text class="label-text" x="40" y="226">ΔL = α × L × ΔT     (α in µin/in·°F)</text>
+        </svg>
+        <div class="diagram-caption">Growth scales with material coefficient, length, and temperature swing</div>
+      </div>
+
+      <div class="card">
+        <div class="field-grid">
+          <label>Material
+            <select id="teMaterial"></select>
+          </label>
+          <label class="hidden" id="teAlphaWrap">Coefficient (&mu;in/in&middot;&deg;F)
+            <input type="number" id="teAlpha" step="0.1" value="6.5">
+          </label>
+          <label>Length
+            <input type="text" id="teLength" value="30'">
+          </label>
+          <label>Start temp (&deg;F)
+            <input type="number" id="teT1" step="1" value="70">
+          </label>
+          <label>End temp (&deg;F)
+            <input type="number" id="teT2" step="1" value="300">
+          </label>
+        </div>
+        <div class="results" id="teResults"></div>
+      </div>
+    </section>
+
+    <!-- ============ Metal Weight ============ -->
+    <section class="tool-section hidden" id="metalWeight">
+      <h2>Metal Weight</h2>
+      <p class="tool-desc">Weight of common stock shapes.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 210" role="img" aria-label="Cross sections of plate, round bar, tube, and hex bar with dimensions">
+          <!-- plate -->
+          <text class="label-text" x="24" y="20">PLATE / FLAT BAR</text>
+          <rect class="part" x="24" y="34" width="110" height="30" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <line class="dim-line" x1="24" y1="80" x2="134" y2="80" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="66" y="96">WIDTH</text>
+          <line class="dim-line" x1="146" y1="34" x2="146" y2="64" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="152" y="54">t</text>
+
+          <!-- round bar -->
+          <text class="label-text" x="216" y="20">ROUND BAR</text>
+          <circle cx="256" cy="52" r="30" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <line class="center-line" x1="216" y1="52" x2="296" y2="52"/>
+          <line class="dim-line" x1="226" y1="98" x2="286" y2="98" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="248" y="114">DIA</text>
+
+          <!-- tube -->
+          <text class="label-text" x="356" y="20">TUBE / PIPE</text>
+          <path d="M396,22 a30,30 0 1,0 0.1,0 z M396,34 a18,18 0 1,1 -0.1,0 z"
+                style="fill:url(#hatch)" fill-rule="evenodd" stroke="#b9c7d6" stroke-width="2"/>
+          <circle cx="396" cy="52" r="18" fill="#0d141d" stroke="#b9c7d6" stroke-width="2"/>
+          <line class="dim-line" x1="366" y1="98" x2="426" y2="98" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="388" y="114">OD</text>
+          <line class="ext-line" x1="414" y1="34" x2="466" y2="18"/>
+          <text class="dim-text" x="470" y="22">WALL</text>
+
+          <!-- hex bar -->
+          <text class="label-text" x="512" y="20">HEX BAR</text>
+          <polygon points="546,26 572,40 572,66 546,80 520,66 520,40"
+                   style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <line class="dim-line" x1="520" y1="98" x2="572" y2="98" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="518" y="114">ACROSS FLATS</text>
+
+          <!-- length + scale -->
+          <line class="dim-line" x1="24" y1="150" x2="500" y2="150" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="230" y="144">LENGTH</text>
+          <rect class="tool-body" x="510" y="134" width="86" height="32" rx="5"/>
+          <rect x="518" y="142" width="70" height="16" rx="2" fill="#0d141d" stroke="#56d4dd" stroke-width="1"/>
+          <text x="524" y="155" style="fill:#56d4dd;font-family:Consolas,monospace;font-size:11px;font-weight:700">SCALE</text>
+          <text class="label-text" x="24" y="188">WEIGHT = CROSS-SECTION AREA × LENGTH × DENSITY</text>
+        </svg>
+        <div class="diagram-caption">Cross-sectional area drives the weight for every stock shape</div>
+      </div>
+
+      <div class="card">
+        <div class="field-grid">
+          <label>Shape
+            <select id="mwShape">
+              <option value="plate">Plate / flat bar</option>
+              <option value="round">Round bar</option>
+              <option value="tube">Tube / pipe</option>
+              <option value="hex">Hex bar</option>
+            </select>
+          </label>
+          <label>Material
+            <select id="mwMaterial"></select>
+          </label>
+          <label class="hidden" id="mwDensityWrap">Density (lb/in&sup3;)
+            <input type="number" id="mwDensity" step="0.0001" value="0.2836">
+          </label>
+          <label id="mwDim1Wrap">Thickness (in)
+            <input type="number" id="mwDim1" step="0.001" value="0.5">
+          </label>
+          <label id="mwDim2Wrap">Width (in)
+            <input type="number" id="mwDim2" step="0.001" value="12">
+          </label>
+          <label>Length
+            <input type="text" id="mwLength" value="10'">
+          </label>
+          <label>Pieces
+            <input type="number" id="mwCount" step="1" value="1">
+          </label>
+        </div>
+        <div class="results" id="mwResults"></div>
+      </div>
+    </section>
+
+    <!-- ============ Cylinder Volume ============ -->
+    <section class="tool-section hidden" id="cylinder">
+      <h2>Cylinder &amp; Tank Volume</h2>
+      <p class="tool-desc">Volume and water weight of a cylindrical shell or tank.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 240" role="img" aria-label="Cylindrical tank in section with diameter and length dimensions">
+          <!-- tank shell in section -->
+          <rect class="part" x="110" y="46" width="380" height="18" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="110" y="152" width="380" height="18" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <path class="part" d="M110,46 a26,62 0 0,0 0,124 z" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <path class="part" d="M490,46 a26,62 0 0,1 0,124 z" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <!-- contents -->
+          <rect x="110" y="64" width="380" height="88" fill="url(#waterFlow)"/>
+          <line x1="110" y1="96" x2="490" y2="96" stroke="#56d4dd" stroke-width="1.5" opacity="0.6"/>
+          <line class="center-line" x1="86" y1="108" x2="516" y2="108"/>
+
+          <!-- ID dimension -->
+          <line class="dim-line" x1="180" y1="64" x2="180" y2="152" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="188" y="112">INSIDE DIA</text>
+
+          <!-- length dimension -->
+          <line class="ext-line" x1="110" y1="170" x2="110" y2="206"/>
+          <line class="ext-line" x1="490" y1="170" x2="490" y2="206"/>
+          <line class="dim-line" x1="110" y1="198" x2="490" y2="198" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="262" y="192">LENGTH</text>
+
+          <!-- sight gauge -->
+          <rect class="tool-body" x="522" y="52" width="14" height="112" rx="4"/>
+          <rect x="526" y="82" width="6" height="78" fill="#56d4dd"/>
+          <text class="note-text" x="506" y="184">GAUGE</text>
+
+          <text class="label-text" x="110" y="228">V = π/4 × ID² × LENGTH     &#8226;     231 in³ = 1 gal</text>
+        </svg>
+        <div class="diagram-caption">Bore area times length gives volume; water weighs 8.34 lb per gallon</div>
+      </div>
+
+      <div class="card">
+        <div class="field-grid">
+          <label>Inside diameter (in)
+            <input type="number" id="cyId" step="0.01" value="48">
+          </label>
+          <label>Length / height
+            <input type="text" id="cyLength" value="10'">
+          </label>
+        </div>
+        <div class="results" id="cyResults"></div>
+      </div>
+    </section>
+
+    <!-- ============ Bolt Torque ============ -->
+    <section class="tool-section hidden" id="torque">
+      <h2>Bolt Torque</h2>
+      <p class="tool-desc">Estimated tightening torque from the short-form torque equation T = K &middot; D &middot; F.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 620 250" role="img" aria-label="Torque wrench on a flange bolt with clamp load arrows">
+          <!-- flange faces being clamped -->
+          <rect class="part" x="150" y="120" width="300" height="26" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <rect class="part" x="150" y="146" width="300" height="26" style="fill:url(#hatch)" stroke="#b9c7d6" stroke-width="2"/>
+          <text class="note-text" x="150" y="192">FLANGE JOINT</text>
+
+          <!-- bolt through the joint -->
+          <rect class="part-lt" x="286" y="60" width="28" height="130" rx="2" stroke="#b9c7d6" stroke-width="1.5"/>
+          <polygon points="272,44 328,44 336,60 264,60" fill="url(#steel)" stroke="#b9c7d6" stroke-width="1.5"/>
+          <rect class="part-lt" x="270" y="190" width="60" height="20" rx="2" stroke="#b9c7d6" stroke-width="1.5"/>
+          <line class="center-line" x1="300" y1="30" x2="300" y2="224"/>
+
+          <!-- clamp load arrows -->
+          <line class="dim-line" x1="210" y1="106" x2="210" y2="120" marker-end="url(#ar)"/>
+          <line class="dim-line" x1="390" y1="106" x2="390" y2="120" marker-end="url(#ar)"/>
+          <line class="dim-line" x1="210" y1="186" x2="210" y2="172" marker-end="url(#ar)"/>
+          <line class="dim-line" x1="390" y1="186" x2="390" y2="172" marker-end="url(#ar)"/>
+          <text class="dim-text" x="186" y="102">CLAMP LOAD F</text>
+
+          <!-- bolt diameter -->
+          <line class="dim-line" x1="286" y1="238" x2="314" y2="238" marker-start="url(#ar)" marker-end="url(#ar)"/>
+          <text class="dim-text" x="326" y="242">DIA D</text>
+
+          <!-- torque wrench -->
+          <rect class="tool-body" x="300" y="36" width="240" height="22" rx="6"/>
+          <rect class="tool-accent" x="470" y="30" width="66" height="34" rx="6"/>
+          <circle class="tool-body" cx="300" cy="47" r="24"/>
+          <circle cx="300" cy="47" r="13" fill="#0d141d" stroke="#f4b400" stroke-width="2"/>
+          <path d="M362,20 a54,54 0 0,1 46,10" stroke="#ff9f43" stroke-width="2.5" fill="none" marker-end="url(#ar)"/>
+          <text class="dim-text" x="368" y="14">TORQUE T</text>
+          <text class="note-text" x="466" y="80">TORQUE WRENCH</text>
+
+          <text class="label-text" x="24" y="228">T = K × D × F     (K = friction / lubrication factor)</text>
+        </svg>
+        <div class="diagram-caption">Torque converts to clamp load through the K factor — lubrication changes it sharply</div>
+      </div>
+
+      <div class="card">
+        <div class="field-grid">
+          <label>Nominal bolt diameter (in)
+            <input type="number" id="btDia" step="0.001" value="0.750">
+          </label>
+          <label>Target clamp load (lbf)
+            <input type="number" id="btLoad" step="100" value="15000">
+          </label>
+          <label>Lubrication (K factor)
+            <select id="btK">
+              <option value="0.20">Dry / as-received (K = 0.20)</option>
+              <option value="0.17" selected>Lightly oiled (K = 0.17)</option>
+              <option value="0.13">Moly / heavy lubricant (K = 0.13)</option>
+              <option value="custom">Custom K&hellip;</option>
+            </select>
+          </label>
+          <label class="hidden" id="btKCustomWrap">K factor
+            <input type="number" id="btKCustom" step="0.01" value="0.15">
+          </label>
+        </div>
+        <div class="results" id="btResults"></div>
+        <p class="note">
+          Estimate only &mdash; K varies widely with thread condition and lubricant. For pressure-boundary or
+          critical joints, use the fastener manufacturer's or engineering-specified torque values.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ BWG Chart ============ -->
+    <section class="tool-section hidden" id="bwgChart">
+      <h2>BWG Tube Gauge Chart</h2>
+      <p class="tool-desc">Birmingham Wire Gauge wall thicknesses for condenser and heat exchanger tubing.</p>
+      <div class="card table-card">
+        <div class="table-scroll">
+          <table id="bwgTable">
+            <thead><tr><th>BWG</th><th>Wall (in)</th><th>Wall (mm)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Pipe Schedule Chart ============ -->
+    <section class="tool-section hidden" id="pipeChart">
+      <h2>Pipe Schedule Chart</h2>
+      <p class="tool-desc">Carbon steel pipe dimensions per ASME B36.10 (wall thickness in inches).</p>
+      <div class="card table-card">
+        <div class="table-scroll">
+          <table id="pipeTable">
+            <thead><tr><th>NPS</th><th>OD (in)</th><th>Sch 10</th><th>Sch 40</th><th>Sch 80</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Fraction Chart ============ -->
+    <section class="tool-section hidden" id="fractionChart">
+      <h2>Fraction &middot; Decimal &middot; Millimeter</h2>
+      <p class="tool-desc">Every 64th from 1/64" to 1".</p>
+      <div class="card table-card">
+        <div class="table-scroll">
+          <table id="fractionTable">
+            <thead><tr><th>Fraction</th><th>Decimal (in)</th><th>mm</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Material Properties ============ -->
+    <section class="tool-section hidden" id="materialChart">
+      <h2>Material Properties</h2>
+      <p class="tool-desc">Typical values for common tube and fabrication materials.</p>
+      <div class="card table-card">
+        <div class="table-scroll">
+          <table id="materialTable">
+            <thead><tr><th>Material</th><th>Density (lb/in&sup3;)</th><th>Density (lb/ft&sup3;)</th><th>Thermal exp. (&mu;in/in&middot;&deg;F)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="note">Typical room-temperature values for estimating; use certified material data for design work.</p>
+      </div>
+    </section>
+
+    <!-- ============ Converters ============ -->
+    <section class="tool-section hidden" id="convert">
+      <h2>Unit Converters</h2>
+      <p class="tool-desc">Type in either field &mdash; the other updates.</p>
+      <div id="converters"></div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <p>RetubeCo, Inc. — internal tools. Estimates only; verify against applicable codes and specifications.</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
