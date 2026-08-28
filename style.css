@@ -86,6 +86,7 @@ main {
   border-color: var(--accent);
 }
 .app-card-icon { font-size: 2.2rem; margin-bottom: 10px; }
+.app-card-icon-img { width: 2.2rem; height: 2.2rem; border-radius: 8px; display: block; }
 .app-card h2 { margin: 0 0 8px; font-size: 1.15rem; color: var(--text); }
 .app-card p { margin: 0; font-size: 0.9rem; color: var(--text-dim); }
 .app-card-badge {
