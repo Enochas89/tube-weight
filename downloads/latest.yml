@@ -1,8 +1,8 @@
-version: 0.1.4
+version: 0.1.5
 files:
-  - url: Vector-Setup-0.1.4.exe
-    sha512: xD+BpCVZm3a6n9sjBnMq01HsfZlgxVbNkKLWTdd2ChnTy5hv+FbO2Lv0JOUzG/EGLurdI/OVgUgBhcZMy0VFgA==
-    size: 100514311
-path: Vector-Setup-0.1.4.exe
-sha512: xD+BpCVZm3a6n9sjBnMq01HsfZlgxVbNkKLWTdd2ChnTy5hv+FbO2Lv0JOUzG/EGLurdI/OVgUgBhcZMy0VFgA==
-releaseDate: '2026-08-28T17:56:34.968Z'
+  - url: Vector-Setup-0.1.5.exe
+    sha512: Ns7R1tyIp+IcZvmYvOu6yj6Qvg7PpVnZd5RYsDo8/g6elyBtoT3v4vDiUK7whVWo3yrGHLSosDtBlZ+TgmgQ3w==
+    size: 93574296
+path: Vector-Setup-0.1.5.exe
+sha512: Ns7R1tyIp+IcZvmYvOu6yj6Qvg7PpVnZd5RYsDo8/g6elyBtoT3v4vDiUK7whVWo3yrGHLSosDtBlZ+TgmgQ3w==
+releaseDate: '2026-08-30T11:53:24.004Z'
