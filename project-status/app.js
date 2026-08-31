@@ -1283,7 +1283,9 @@
         name, startDate, endDate, duration, predecessors,
         responsible: document.getElementById("f-owner").value.trim(),
         status: document.getElementById("f-status").value,
-        progress: Math.max(0, Math.min(100, Math.round(num(document.getElementById("f-progress").value)))),
+        progress: document.getElementById("f-status").value === "complete"
+          ? 100
+          : Math.max(0, Math.min(100, Math.round(num(document.getElementById("f-progress").value)))),
         noScheduleImpact: document.getElementById("f-no-impact").checked,
       };
       let prev = null;
@@ -1312,6 +1314,9 @@
     document.querySelectorAll(".f-predecessor").forEach((cb) => cb.addEventListener("change", syncStartDisabled));
     syncStartDisabled();
     document.getElementById("f-status").value = isEdit ? task.status : "not_started";
+    document.getElementById("f-status").addEventListener("change", (e) => {
+      if (e.target.value === "complete") document.getElementById("f-progress").value = 100;
+    });
   }
 
   function openDelayModal(project, trav, presetTask) {
