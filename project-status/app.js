@@ -12,6 +12,7 @@
   let currentProjectId = null;
   let currentTravelerId = null;
   let isEditor = false;
+  const selectedTaskIds = new Set();
 
   // ---------- utility ----------
   function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
@@ -280,6 +281,7 @@
   function route() {
     const hash = location.hash.slice(1);
     const travelerMatch = hash.match(/^project\/([^/]+)\/traveler\/([^/]+)$/);
+    if ((travelerMatch ? travelerMatch[2] : null) !== currentTravelerId) selectedTaskIds.clear();
     if (travelerMatch) {
       const p = getProject(travelerMatch[1]);
       const trav = p && getTraveler(p, travelerMatch[2]);
@@ -884,8 +886,19 @@
     return [...delays, ...notes].sort((a, b) => b.date.localeCompare(a.date));
   }
 
+  function updateTaskBulkBar() {
+    const bar = document.getElementById("taskBulkBar");
+    const n = selectedTaskIds.size;
+    bar.classList.toggle("hidden", n === 0);
+    if (n > 0) document.getElementById("taskBulkCount").textContent = `${n} selected`;
+  }
+
   function renderTaskList(project, trav) {
     const wrap = document.getElementById("taskListWrap");
+    // Drop selections for tasks that no longer exist (e.g. deleted elsewhere).
+    const liveIds = new Set(trav.tasks.map((t) => t.id));
+    Array.from(selectedTaskIds).forEach((id) => { if (!liveIds.has(id)) selectedTaskIds.delete(id); });
+    updateTaskBulkBar();
     if (!trav.tasks.length) {
       wrap.innerHTML = `<div class="empty-state">No tasks yet.${isEditor ? ' Click "+ Add Task" to get started.' : ""}</div>`;
       return;
@@ -943,13 +956,15 @@
           </div>` : "";
 
       const currentBanner = isToday ? `<div class="current-marker">Current &bull; ${fmtDate(todayStr())}</div>` : "";
+      const checkbox = isEditor ? `<input type="checkbox" class="task-select-checkbox" data-select-task="${t.id}" ${selectedTaskIds.has(t.id) ? "checked" : ""}>` : "";
 
       return `
         ${currentBanner}
-        <div class="task-card">
+        <div class="task-card${selectedTaskIds.has(t.id) ? " is-selected" : ""}" data-task-card="${t.id}">
           <div class="task-card-stripe" style="background:${color}"></div>
           <div class="task-card-top">
             <div class="task-card-title">
+              ${checkbox}
               <span class="status-dot" style="background:${color}"></span>
               <span class="task-name">${escapeHtml(t.name)}</span>
               ${t.noScheduleImpact ? `<span class="no-impact-badge" title="Excluded from overall % complete">No impact</span>` : ""}
@@ -967,6 +982,14 @@
         </div>`;
     }).join("");
 
+    wrap.querySelectorAll("[data-select-task]").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        const id = cb.dataset.selectTask;
+        if (cb.checked) selectedTaskIds.add(id); else selectedTaskIds.delete(id);
+        cb.closest(".task-card").classList.toggle("is-selected", cb.checked);
+        updateTaskBulkBar();
+      });
+    });
     wrap.querySelectorAll("[data-edit-task]").forEach((el) => {
       el.addEventListener("click", () => {
         openTaskModal(project, trav, trav.tasks.find((t) => t.id === el.dataset.editTask));
@@ -1035,6 +1058,41 @@
   document.getElementById("addTaskBtn").addEventListener("click", () => {
     const p = getProject(currentProjectId);
     openTaskModal(p, getTraveler(p, currentTravelerId));
+  });
+
+  async function bulkSetTaskCompletion(complete) {
+    const p = getProject(currentProjectId);
+    const trav = p && getTraveler(p, currentTravelerId);
+    if (!trav) return;
+    const targets = trav.tasks.filter((t) => selectedTaskIds.has(t.id));
+    if (!targets.length) return;
+    const prev = targets.map((t) => ({ id: t.id, status: t.status, progress: t.progress }));
+    targets.forEach((t) => {
+      t.status = complete ? "complete" : "not_started";
+      t.progress = complete ? 100 : 0;
+    });
+    recalcSchedule(p);
+    const ok = await saveRemote();
+    if (!ok) {
+      prev.forEach(({ id, status, progress }) => {
+        const t = trav.tasks.find((tk) => tk.id === id);
+        if (t) { t.status = status; t.progress = progress; }
+      });
+      recalcSchedule(p);
+      return;
+    }
+    selectedTaskIds.clear();
+    renderTaskList(p, trav);
+    renderList();
+    renderTravelerList(p);
+  }
+  document.getElementById("taskBulkComplete").addEventListener("click", () => bulkSetTaskCompletion(true));
+  document.getElementById("taskBulkNotComplete").addEventListener("click", () => bulkSetTaskCompletion(false));
+  document.getElementById("taskBulkClear").addEventListener("click", () => {
+    selectedTaskIds.clear();
+    const p = getProject(currentProjectId);
+    const trav = p && getTraveler(p, currentTravelerId);
+    if (trav) renderTaskList(p, trav);
   });
 
   // ---------- Delays ----------

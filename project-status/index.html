@@ -109,6 +109,14 @@
         <h3>Tasks</h3>
         <button class="btn-secondary editor-only hidden" id="addTaskBtn">+ Add Task</button>
       </div>
+      <div id="taskBulkBar" class="task-bulk-bar hidden">
+        <span id="taskBulkCount">0 selected</span>
+        <span class="task-bulk-actions">
+          <button class="btn-secondary" id="taskBulkComplete">Mark Complete</button>
+          <button class="btn-secondary" id="taskBulkNotComplete">Mark Not Complete</button>
+          <button class="btn-link" id="taskBulkClear">Clear</button>
+        </span>
+      </div>
       <div id="taskListWrap" class="task-list"></div>
     </div>
 
