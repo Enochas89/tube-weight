@@ -278,13 +278,21 @@ module.exports = async function handler(req, res) {
       res.status(500).json({ error: "Server is not configured with an edit password (EDIT_PASSWORD env var is missing)." });
       return;
     }
+    // Narrower credential for the two status-update actions below, used by
+    // the automated assistant integration instead of the full edit password
+    // so a leaked automation credential can only ever move a status/progress
+    // value — never trigger the whole-state overwrite further down.
+    const assistantKey = process.env.ASSISTANT_KEY;
+    function statusActionAuthorized(pw) {
+      return pw === expected || (!!assistantKey && pw === assistantKey);
+    }
 
     // Password-gated, narrow-scope action: set an existing traveler's status
     // to any of the values the UI itself allows. Used by the assistant
     // integration to update traveler status without needing the full
     // password-gated whole-state write below.
     if (body.action === "setTravelerStatus") {
-      if (body.password !== expected) {
+      if (!statusActionAuthorized(body.password)) {
         res.status(401).json({ error: "Invalid password." });
         return;
       }
@@ -325,7 +333,7 @@ module.exports = async function handler(req, res) {
     // uses (progress >=100 -> complete, >0 -> in_progress, 0 -> not_started;
     // "delayed" must be passed explicitly, same as the task-edit form).
     if (body.action === "setTaskStatus") {
-      if (body.password !== expected) {
+      if (!statusActionAuthorized(body.password)) {
         res.status(401).json({ error: "Invalid password." });
         return;
       }
