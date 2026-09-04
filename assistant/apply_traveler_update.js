@@ -1,11 +1,20 @@
 #!/usr/bin/env node
-// Usage: RETUBECO_ASSISTANT_KEY=<key> node apply_traveler_update.js '<travelerQuery>' '<linesJSON>'
-// linesJSON: JSON array of {taskText, percent}
+// Usage: RETUBECO_ASSISTANT_KEY=<key> node apply_traveler_update.js '<subject>' '<body>'
 //
-// Used by the scheduled email-processing routine to turn parsed email lines
-// into status updates on ergontools.com. Matching is deterministic (not a
-// model judgment call each run) so production shop-floor data updates are
-// auditable and reproducible — see the score/margin fields in the output.
+// Used by the scheduled email-processing routine to turn a RetubeCo
+// traveler-update email into status updates on ergontools.com. ALL parsing
+// (subject -> traveler number, body -> command) happens here, deterministically,
+// rather than leaving it to the calling agent to hand-build structured input
+// each run — production shop-floor data is at stake, so the interpretation
+// needs to be reproducible and testable, not a fresh judgment call per email.
+//
+// Supported body formats (checked in this order):
+//   1. "All tasks NN%"                    -> every task on the traveler set to NN%
+//   2. "Tasks 1, 100%, 2, 50%" (or         -> task #1 (1-indexed, matches the
+//      one "<index>, <percent>%" pair         order shown in the app / on the
+//      per line)                              printed traveler) -> 100%, #2 -> 50%, etc.
+//   3. Anything else: one task per line,   -> fuzzy-matched by name against
+//      "<task description> -NN%"              the traveler's task list
 //
 // The credential is read from RETUBECO_ASSISTANT_KEY, a narrow-scope key
 // (server-side env var ASSISTANT_KEY) that can only move a traveler/task
@@ -15,10 +24,6 @@ const https = require('https');
 
 const API_URL = 'https://www.ergontools.com/api/data';
 
-// Common filler words only — deliberately does NOT drop short numeric/
-// alphanumeric tokens (e.g. drawing rev numbers, traveler suffixes) since
-// those are exactly what distinguishes near-duplicate names like
-// "Dwg 7533-1 Rev 1" vs "Dwg 7533-2 Rev 0", or traveler "11322-1" vs "11322-2".
 const STOPWORDS = new Set(['a', 'an', 'the', 'to', 'of', 'per', 'and', 'or', 'in', 'on', 'for', 'is', 'be', 'that', 'this', 'with', 'without', 'as']);
 
 function get(url) {
@@ -69,18 +74,11 @@ function similarity(a, b) {
   return hits / wa.length;
 }
 
-// Hyphen-PRESERVING token extraction, used only for traveler-number
-// identity — the general normalize()/words() strip hyphens to spaces (fine
-// for word-overlap scoring), but that would turn "11322-1" into two tokens
-// and lose the distinguishing suffix.
 function leadingToken(rawName) {
   const first = String(rawName || '').trim().split(/\s+/)[0] || '';
   return first.toLowerCase().replace(/[^a-z0-9-]/g, '');
 }
 
-// Traveler identity is high-stakes (wrong job entirely) so this is
-// deliberately strict: exact match on the leading number token only. No
-// fuzzy fallback — an unrecognized traveler number should fail loudly.
 function findTraveler(data, query) {
   const q = leadingToken(query);
   const matches = [];
@@ -95,7 +93,7 @@ function findTraveler(data, query) {
   return null;
 }
 
-function findTask(traveler, taskText) {
+function findTaskByName(traveler, taskText) {
   const scored = (traveler.tasks || [])
     .map((task) => ({ task, score: similarity(taskText, task.name) }))
     .sort((a, b) => b.score - a.score);
@@ -105,14 +103,66 @@ function findTask(traveler, taskText) {
   return { task: top.task, score: top.score, margin: top.score - runnerUp };
 }
 
+function parseSubject(subject) {
+  const m = String(subject || '').match(/traveler\s+([^\s].*)$/i);
+  return m ? m[1].trim().replace(/[.,;:]+$/, '') : null;
+}
+
+// Returns { mode: 'allTasks', percent } | { mode: 'indexed', pairs: [{index, percent}] }
+// | { mode: 'byName', lines: [{taskText, percent}] }
+function parseCommand(body) {
+  const text = String(body || '');
+  const trimmed = text.trim();
+
+  const allTasksMatch = trimmed.match(/^all\s+tasks\b[\s\S]*?(-?\d{1,3})\s*%/i);
+  if (allTasksMatch) {
+    return { mode: 'allTasks', percent: clampPercent(allTasksMatch[1]) };
+  }
+
+  if (/^tasks?\b/i.test(trimmed)) {
+    const rest = trimmed.replace(/^tasks?\b/i, '');
+    const pairs = [];
+    const re = /(\d+)\D+?(-?\d{1,3})\s*%/g;
+    let m;
+    while ((m = re.exec(rest)) !== null) {
+      pairs.push({ index: parseInt(m[1], 10), percent: clampPercent(m[2]) });
+    }
+    if (pairs.length) return { mode: 'indexed', pairs };
+  }
+
+  const lines = [];
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const m = line.match(/^(.+?)\s*-?\s*(\d{1,3})\s*%\s*$/);
+    if (m) lines.push({ taskText: m[1].trim(), percent: clampPercent(m[2]) });
+  }
+  return { mode: 'byName', lines };
+}
+
+function clampPercent(n) {
+  return Math.max(0, Math.min(100, Math.round(Math.abs(Number(n)))));
+}
+
 (async () => {
-  const [, , travelerQuery, linesJson] = process.argv;
+  const [, , subject, body] = process.argv;
   const password = process.env.RETUBECO_ASSISTANT_KEY;
   if (!password) {
     console.log(JSON.stringify({ ok: false, error: 'RETUBECO_ASSISTANT_KEY env var is not set.' }));
     process.exit(1);
   }
-  const lines = JSON.parse(linesJson);
+
+  const travelerQuery = parseSubject(subject);
+  if (!travelerQuery) {
+    console.log(JSON.stringify({ ok: false, error: `Subject "${subject}" doesn't contain "Traveler <number>".` }));
+    process.exit(1);
+  }
+
+  const command = parseCommand(body);
+  if (command.mode === 'byName' && !command.lines.length) {
+    console.log(JSON.stringify({ ok: false, error: 'No parseable task/percent lines found in the body.', travelerQuery }));
+    process.exit(1);
+  }
 
   const data = await get(API_URL);
   const match = findTraveler(data, travelerQuery);
@@ -134,36 +184,40 @@ function findTask(traveler, taskText) {
   }
 
   const results = [];
-  for (const line of lines) {
-    // Whole-traveler command: {"allTasks": true, "percent": NN} applies to
-    // every task on the traveler, no per-task name matching involved.
-    if (line.allTasks) {
-      const progress = Math.max(0, Math.min(100, Math.round(Number(line.percent))));
-      for (const task of match.traveler.tasks || []) {
-        const r = await applyProgress(task.id, task.name, progress);
-        results.push({ line: { allTasks: true, percent: progress }, ...r });
-      }
-      continue;
-    }
 
-    const found = findTask(match.traveler, line.taskText);
-    if (!found) {
-      results.push({ line, ok: false, error: 'No task matched at all' });
-      continue;
+  if (command.mode === 'allTasks') {
+    for (const task of match.traveler.tasks || []) {
+      results.push({ command: { allTasks: true, percent: command.percent }, ...(await applyProgress(task.id, task.name, command.percent)) });
     }
-    const progress = Math.max(0, Math.min(100, Math.round(Number(line.percent))));
-    const r = await applyProgress(found.task.id, found.task.name, progress);
-    results.push({
-      line,
-      matchScore: Math.round(found.score * 100) / 100,
-      matchMargin: Math.round(found.margin * 100) / 100,
-      lowConfidence: found.score < 0.6 || found.margin < 0.15,
-      ...r,
-    });
+  } else if (command.mode === 'indexed') {
+    for (const { index, percent } of command.pairs) {
+      const task = (match.traveler.tasks || [])[index - 1];
+      if (!task) {
+        results.push({ command: { taskIndex: index, percent }, ok: false, error: `Task index ${index} out of range (traveler has ${(match.traveler.tasks || []).length} tasks).` });
+        continue;
+      }
+      results.push({ command: { taskIndex: index, percent }, ...(await applyProgress(task.id, task.name, percent)) });
+    }
+  } else {
+    for (const line of command.lines) {
+      const found = findTaskByName(match.traveler, line.taskText);
+      if (!found) {
+        results.push({ command: line, ok: false, error: 'No task matched at all' });
+        continue;
+      }
+      results.push({
+        command: line,
+        matchScore: Math.round(found.score * 100) / 100,
+        matchMargin: Math.round(found.margin * 100) / 100,
+        lowConfidence: found.score < 0.6 || found.margin < 0.15,
+        ...(await applyProgress(found.task.id, found.task.name, line.percent)),
+      });
+    }
   }
 
   console.log(JSON.stringify({
     ok: true,
+    commandMode: command.mode,
     travelerMatched: match.traveler.name,
     projectName: match.project.name,
     results,

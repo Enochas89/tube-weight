@@ -905,7 +905,7 @@
     }
 
     const todayMs = new Date(todayStr() + "T00:00:00").getTime();
-    wrap.innerHTML = trav.tasks.map((t) => {
+    wrap.innerHTML = trav.tasks.map((t, taskIdx) => {
       const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
       const isToday = todayMs >= new Date(t.startDate + "T00:00:00").getTime() && todayMs <= new Date(t.endDate + "T00:00:00").getTime();
       const actions = isEditor ? `
@@ -966,6 +966,7 @@
             <div class="task-card-title">
               ${checkbox}
               <span class="status-dot" style="background:${color}"></span>
+              <span class="task-number" title="Task # for email updates (e.g. Tasks ${taskIdx + 1}, 100%)">#${taskIdx + 1}</span>
               <span class="task-name">${escapeHtml(t.name)}</span>
               ${t.noScheduleImpact ? `<span class="no-impact-badge" title="Excluded from overall % complete">No impact</span>` : ""}
             </div>

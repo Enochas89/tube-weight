@@ -296,6 +296,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .task-card-title .status-dot { margin-top: 6px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .task-name { font-size: 0.98rem; font-weight: 700; color: var(--text); overflow-wrap: break-word; word-break: break-word; }
+.task-number { flex-shrink: 0; font-size: 0.8rem; font-weight: 700; color: var(--text-muted, #888); background: var(--surface-2, rgba(127,127,127,0.15)); border-radius: 4px; padding: 1px 6px; }
 .no-impact-badge {
   flex-shrink: 0;
   align-self: center;
