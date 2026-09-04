@@ -121,31 +121,44 @@ function findTask(traveler, taskText) {
     process.exit(1);
   }
 
+  async function applyProgress(taskId, taskName, progress) {
+    const r = await post({
+      action: 'setTaskStatus',
+      password,
+      projectId: match.project.id,
+      travelerId: match.traveler.id,
+      taskId,
+      progress,
+    });
+    return { matchedTask: taskName, progress, ok: r.status === 200, response: r.body };
+  }
+
   const results = [];
   for (const line of lines) {
+    // Whole-traveler command: {"allTasks": true, "percent": NN} applies to
+    // every task on the traveler, no per-task name matching involved.
+    if (line.allTasks) {
+      const progress = Math.max(0, Math.min(100, Math.round(Number(line.percent))));
+      for (const task of match.traveler.tasks || []) {
+        const r = await applyProgress(task.id, task.name, progress);
+        results.push({ line: { allTasks: true, percent: progress }, ...r });
+      }
+      continue;
+    }
+
     const found = findTask(match.traveler, line.taskText);
     if (!found) {
       results.push({ line, ok: false, error: 'No task matched at all' });
       continue;
     }
     const progress = Math.max(0, Math.min(100, Math.round(Number(line.percent))));
-    const r = await post({
-      action: 'setTaskStatus',
-      password,
-      projectId: match.project.id,
-      travelerId: match.traveler.id,
-      taskId: found.task.id,
-      progress,
-    });
+    const r = await applyProgress(found.task.id, found.task.name, progress);
     results.push({
       line,
-      matchedTask: found.task.name,
       matchScore: Math.round(found.score * 100) / 100,
       matchMargin: Math.round(found.margin * 100) / 100,
       lowConfidence: found.score < 0.6 || found.margin < 0.15,
-      progress,
-      ok: r.status === 200,
-      response: r.body,
+      ...r,
     });
   }
 
