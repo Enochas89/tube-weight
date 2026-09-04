@@ -273,14 +273,123 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const password = body.password;
-    const data = body.data;
-
     const expected = process.env.EDIT_PASSWORD;
     if (!expected) {
       res.status(500).json({ error: "Server is not configured with an edit password (EDIT_PASSWORD env var is missing)." });
       return;
     }
+
+    // Password-gated, narrow-scope action: set an existing traveler's status
+    // to any of the values the UI itself allows. Used by the assistant
+    // integration to update traveler status without needing the full
+    // password-gated whole-state write below.
+    if (body.action === "setTravelerStatus") {
+      if (body.password !== expected) {
+        res.status(401).json({ error: "Invalid password." });
+        return;
+      }
+      const projectId = String(body.projectId || "").slice(0, 200);
+      const travelerId = String(body.travelerId || "").slice(0, 200);
+      const status = String(body.status || "");
+      const allowedStatus = ["on_track", "at_risk", "delayed", "complete", "on_hold"];
+      if (!projectId || !travelerId || !allowedStatus.includes(status)) {
+        res.status(400).json({ error: "Missing or invalid projectId/travelerId/status." });
+        return;
+      }
+      try {
+        let conflict = null;
+        let travelerName = null;
+        await withRedis(async (client) => {
+          const raw = await client.get(KV_KEY);
+          const data = raw ? JSON.parse(raw) : { projects: [] };
+          const project = (data.projects || []).find((p) => p.id === projectId);
+          const trav = project && (project.travelers || []).find((t) => t.id === travelerId);
+          if (!project || !trav) { conflict = "That traveler no longer exists."; return; }
+          trav.status = status;
+          travelerName = trav.name;
+          await client.set(KV_KEY, JSON.stringify(data));
+        });
+        if (conflict) {
+          res.status(409).json({ error: conflict });
+          return;
+        }
+        res.status(200).json({ ok: true, travelerName, status });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to update traveler status: " + err.message });
+      }
+      return;
+    }
+
+    // Password-gated, narrow-scope action: set an existing task's progress
+    // and/or status, mirroring the derivation logic the client UI already
+    // uses (progress >=100 -> complete, >0 -> in_progress, 0 -> not_started;
+    // "delayed" must be passed explicitly, same as the task-edit form).
+    if (body.action === "setTaskStatus") {
+      if (body.password !== expected) {
+        res.status(401).json({ error: "Invalid password." });
+        return;
+      }
+      const projectId = String(body.projectId || "").slice(0, 200);
+      const travelerId = String(body.travelerId || "").slice(0, 200);
+      const taskId = String(body.taskId || "").slice(0, 200);
+      const allowedTaskStatus = ["not_started", "in_progress", "delayed", "complete"];
+      let status = body.status !== undefined ? String(body.status) : undefined;
+      let progress = body.progress !== undefined ? Math.round(Number(body.progress)) : undefined;
+
+      if (status !== undefined && !allowedTaskStatus.includes(status)) {
+        res.status(400).json({ error: "Invalid status." });
+        return;
+      }
+      if (progress !== undefined && (Number.isNaN(progress) || progress < 0 || progress > 100)) {
+        res.status(400).json({ error: "Invalid progress (must be 0-100)." });
+        return;
+      }
+      if (status === undefined && progress === undefined) {
+        res.status(400).json({ error: "Provide status and/or progress." });
+        return;
+      }
+      if (!projectId || !travelerId || !taskId) {
+        res.status(400).json({ error: "Missing projectId/travelerId/taskId." });
+        return;
+      }
+
+      try {
+        let conflict = null;
+        let taskName = null;
+        await withRedis(async (client) => {
+          const raw = await client.get(KV_KEY);
+          const data = raw ? JSON.parse(raw) : { projects: [] };
+          const project = (data.projects || []).find((p) => p.id === projectId);
+          const trav = project && (project.travelers || []).find((t) => t.id === travelerId);
+          const task = trav && (trav.tasks || []).find((t) => t.id === taskId);
+          if (!project || !trav || !task) { conflict = "That task no longer exists."; return; }
+
+          if (status === undefined) {
+            status = progress >= 100 ? "complete" : progress > 0 ? "in_progress" : "not_started";
+          }
+          if (progress === undefined) {
+            progress = status === "complete" ? 100 : status === "not_started" ? 0 : task.progress;
+          }
+          task.status = status;
+          task.progress = progress;
+          taskName = task.name;
+          recalcSchedule(project);
+          await client.set(KV_KEY, JSON.stringify(data));
+        });
+        if (conflict) {
+          res.status(409).json({ error: conflict });
+          return;
+        }
+        res.status(200).json({ ok: true, taskName, status, progress });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to update task: " + err.message });
+      }
+      return;
+    }
+
+    const password = body.password;
+    const data = body.data;
+
     if (password !== expected) {
       res.status(401).json({ error: "Invalid password." });
       return;
