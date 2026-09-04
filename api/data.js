@@ -395,6 +395,128 @@ module.exports = async function handler(req, res) {
       return;
     }
 
+    // Password-gated, narrow-scope action: create a new project. Additive
+    // only — can't edit or delete any existing project. Used by the NAS file
+    // explorer's "Create Project in Traveler System" right-click action.
+    // Idempotent by name so right-clicking the same job folder twice doesn't
+    // create duplicate projects.
+    if (body.action === "createProject") {
+      if (!statusActionAuthorized(body.password)) {
+        res.status(401).json({ error: "Invalid password." });
+        return;
+      }
+      const name = String(body.name || "").trim().slice(0, 200);
+      const client = String(body.client || "").trim().slice(0, 200);
+      const description = String(body.description || "").trim().slice(0, 1000);
+      const allowedStatus = ["on_track", "at_risk", "delayed", "complete", "on_hold"];
+      const status = allowedStatus.includes(body.status) ? body.status : "on_track";
+      if (!name) {
+        res.status(400).json({ error: "Project name is required." });
+        return;
+      }
+      try {
+        let projectId = null;
+        let alreadyExisted = false;
+        const today = new Date().toISOString().slice(0, 10);
+        await withRedis(async (client_) => {
+          const raw = await client_.get(KV_KEY);
+          const data = raw ? JSON.parse(raw) : { projects: [] };
+          if (!Array.isArray(data.projects)) data.projects = [];
+          const existing = data.projects.find((p) => p.name.trim().toLowerCase() === name.toLowerCase());
+          if (existing) {
+            projectId = existing.id;
+            alreadyExisted = true;
+            return;
+          }
+          const project = {
+            id: crypto.randomUUID(), name, client, status,
+            startDate: today, endDate: "", description, travelers: [],
+          };
+          data.projects.push(project);
+          projectId = project.id;
+          await client_.set(KV_KEY, JSON.stringify(data));
+        });
+        res.status(200).json({ ok: true, projectId, alreadyExisted });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to create project: " + err.message });
+      }
+      return;
+    }
+
+    // Password-gated, narrow-scope action: append one traveler (with tasks)
+    // to an existing project by id. Additive only — same shape/validation as
+    // quickAddTravelers, but targets any project instead of only the fixed
+    // Fab Shop Floor one. Used by the NAS file explorer's "Add Traveler"
+    // right-click action.
+    if (body.action === "addTraveler") {
+      if (!statusActionAuthorized(body.password)) {
+        res.status(401).json({ error: "Invalid password." });
+        return;
+      }
+      const projectId = String(body.projectId || "").slice(0, 200);
+      const travName = String(body.name || "").trim().slice(0, 200);
+      const travDescription = String(body.description || "").trim().slice(0, 1000);
+      const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+      const allowedTaskStatus = ["not_started", "in_progress", "delayed", "complete"];
+      const allowedTravStatus = ["not_started", "in_progress", "delayed", "complete", "on_hold", "on_track", "at_risk"];
+      const travStatus = allowedTravStatus.includes(body.status) ? body.status : "on_hold";
+      if (!projectId || !travName) {
+        res.status(400).json({ error: "Missing projectId or traveler name." });
+        return;
+      }
+      try {
+        let conflict = null;
+        let travelerId = null;
+        const today = new Date().toISOString().slice(0, 10);
+        await withRedis(async (client_) => {
+          const raw = await client_.get(KV_KEY);
+          const data = raw ? JSON.parse(raw) : { projects: [] };
+          const project = (data.projects || []).find((p) => p.id === projectId);
+          if (!project) { conflict = "That project no longer exists."; return; }
+          if (!Array.isArray(project.travelers)) project.travelers = [];
+
+          const rawTasks = Array.isArray(body.tasks) ? body.tasks.slice(0, 2000) : [];
+          const tasks = rawTasks.map((tk) => {
+            const name = String(tk?.name || "").trim().slice(0, 500);
+            if (!name) return null;
+            const duration = Math.max(1, Math.min(3650, Math.round(Number(tk?.duration)) || 1));
+            const startDate = dateRe.test(tk?.startDate) ? tk.startDate : today;
+            const endDate = dateRe.test(tk?.endDate) ? tk.endDate : addDays(startDate, duration - 1);
+            const responsible = String(tk?.responsible || "").trim().slice(0, 300);
+            const status = allowedTaskStatus.includes(tk?.status) ? tk.status : "not_started";
+            const progress = Math.max(0, Math.min(100, Math.round(Number(tk?.progress)) || 0));
+            return { id: crypto.randomUUID(), name, startDate, endDate, duration, responsible, status, progress, predecessors: [] };
+          }).filter(Boolean);
+          // No task rows given: fall back to a single placeholder task named
+          // after the traveler itself, so it still shows up on the board.
+          if (!tasks.length) {
+            tasks.push({
+              id: crypto.randomUUID(), name: travName, startDate: today, endDate: today,
+              duration: 1, responsible: "", status: "not_started", progress: 0, predecessors: [],
+            });
+          }
+          tasks.forEach((t, i) => { if (i > 0) t.predecessors = [tasks[i - 1].id]; });
+
+          const traveler = {
+            id: crypto.randomUUID(), name: travName, description: travDescription,
+            status: travStatus, tasks, delays: [], notes: [],
+          };
+          project.travelers.push(traveler);
+          travelerId = traveler.id;
+          recalcSchedule(project);
+          await client_.set(KV_KEY, JSON.stringify(data));
+        });
+        if (conflict) {
+          res.status(409).json({ error: conflict });
+          return;
+        }
+        res.status(200).json({ ok: true, travelerId });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to add traveler: " + err.message });
+      }
+      return;
+    }
+
     const password = body.password;
     const data = body.data;
 
