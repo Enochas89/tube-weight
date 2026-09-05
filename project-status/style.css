@@ -218,6 +218,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .detail-title-row h2 { margin: 0; }
 .detail-client { margin: 2px 0 0; color: var(--text-dim); font-size: 0.9rem; }
 .detail-description { margin: 12px 0 0; font-size: 0.88rem; color: var(--text-dim); }
+.detail-source { margin: 6px 0 0; font-size: 0.82rem; color: var(--text-dim); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .detail-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .status-select {
   font-family: inherit;

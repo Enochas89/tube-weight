@@ -827,6 +827,9 @@
     document.getElementById("detailName").textContent = trav.name;
     document.getElementById("detailClient").textContent = "Part of " + p.name;
     document.getElementById("detailDescription").textContent = trav.description || "";
+    const sourceEl = document.getElementById("detailSource");
+    if (trav.sourcePath) { sourceEl.textContent = "📁 K Drive: " + trav.sourcePath; sourceEl.hidden = false; }
+    else { sourceEl.hidden = true; }
 
     const statusSelect = document.getElementById("detailStatus");
     const statusBadgeReadonly = document.getElementById("detailStatusBadge");

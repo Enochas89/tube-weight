@@ -456,6 +456,7 @@ module.exports = async function handler(req, res) {
       const projectId = String(body.projectId || "").slice(0, 200);
       const travName = String(body.name || "").trim().slice(0, 200);
       const travDescription = String(body.description || "").trim().slice(0, 1000);
+      const sourcePath = String(body.sourcePath || "").trim().slice(0, 500) || null;
       const dateRe = /^\d{4}-\d{2}-\d{2}$/;
       const allowedTaskStatus = ["not_started", "in_progress", "delayed", "complete"];
       const allowedTravStatus = ["not_started", "in_progress", "delayed", "complete", "on_hold", "on_track", "at_risk"];
@@ -500,6 +501,7 @@ module.exports = async function handler(req, res) {
           const traveler = {
             id: crypto.randomUUID(), name: travName, description: travDescription,
             status: travStatus, tasks, delays: [], notes: [],
+            sourcePath,
           };
           project.travelers.push(traveler);
           travelerId = traveler.id;
