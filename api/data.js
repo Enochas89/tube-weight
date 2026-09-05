@@ -80,6 +80,52 @@ function recalcSchedule(project) {
   }
 }
 
+// Shared by quickAddTravelers (the shop-floor Excel-upload flow) and
+// addTraveler (Explorer's right-click flow) so both build/sanitize tasks
+// exactly the same way. Returns tasks with predecessorNames still
+// unresolved — pair with resolveTaskPredecessors below once every task's
+// final name is known (a batch may span several travelers at once).
+function buildTasksFromInput(rawTasks, todayStr) {
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const allowedTaskStatus = ["not_started", "in_progress", "delayed", "complete"];
+  return (Array.isArray(rawTasks) ? rawTasks.slice(0, 2000) : []).map((tk) => {
+    const name = String(tk?.name || "").trim().slice(0, 500);
+    if (!name) return null;
+    const duration = Math.max(1, Math.min(3650, Math.round(Number(tk?.duration)) || 1));
+    const startDate = dateRe.test(tk?.startDate) ? tk.startDate : todayStr;
+    const endDate = dateRe.test(tk?.endDate) ? tk.endDate : addDays(startDate, duration - 1);
+    const responsible = String(tk?.responsible || "").trim().slice(0, 300);
+    const status = allowedTaskStatus.includes(tk?.status) ? tk.status : "not_started";
+    const progress = Math.max(0, Math.min(100, Math.round(Number(tk?.progress)) || 0));
+    const predecessorNames = Array.isArray(tk?.predecessorNames)
+      ? tk.predecessorNames.map((n) => String(n).trim()).filter(Boolean).slice(0, 20)
+      : [];
+    return { id: crypto.randomUUID(), name, startDate, endDate, duration, responsible, status, progress, predecessorNames };
+  }).filter(Boolean);
+}
+
+// Resolves each task's predecessorNames (matched case-insensitively against
+// nameToId, which should already include every existing task name the
+// caller wants addressable) to real task ids, falling back to chaining a
+// task after the previous one in its own list when no name was given.
+// taskLists is an array of task arrays (one per traveler in the batch) so
+// a predecessor in one traveler can reference a task name in another.
+function resolveTaskPredecessors(taskLists, nameToId) {
+  taskLists.forEach((tasks) => tasks.forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; }));
+  taskLists.forEach((tasks) => {
+    tasks.forEach((t, i) => {
+      if (t.predecessorNames.length) {
+        t.predecessors = t.predecessorNames.map((n) => nameToId[n.toLowerCase()]).filter(Boolean);
+      } else if (i > 0) {
+        t.predecessors = [tasks[i - 1].id];
+      } else {
+        t.predecessors = [];
+      }
+      delete t.predecessorNames;
+    });
+  });
+}
+
 // GET  -> returns the current project-status data, open to anyone with the link.
 // POST -> { password, data } — password is checked against the EDIT_PASSWORD env var
 //         before any write happens. Pass data: null to just verify a password
@@ -158,8 +204,6 @@ module.exports = async function handler(req, res) {
       }
       try {
         const today = new Date().toISOString().slice(0, 10);
-        const dateRe = /^\d{4}-\d{2}-\d{2}$/;
-        const allowedStatus = ["not_started", "in_progress", "delayed", "complete"];
 
         await withRedis(async (client) => {
           const raw = await client.get(KV_KEY);
@@ -178,44 +222,19 @@ module.exports = async function handler(req, res) {
 
           const newTravelers = incoming.map((t) => {
             const travName = String(t?.name || "").trim().slice(0, 200) || "Imported Traveler";
-            const rawTasks = Array.isArray(t?.tasks) ? t.tasks.slice(0, 2000) : [];
-            const tasks = rawTasks.map((tk) => {
-              const name = String(tk?.name || "").trim().slice(0, 500);
-              if (!name) return null;
-              const duration = Math.max(1, Math.min(3650, Math.round(Number(tk?.duration)) || 1));
-              const startDate = dateRe.test(tk?.startDate) ? tk.startDate : today;
-              const endDate = dateRe.test(tk?.endDate) ? tk.endDate : addDays(startDate, duration - 1);
-              const responsible = String(tk?.responsible || "").trim().slice(0, 300);
-              const status = allowedStatus.includes(tk?.status) ? tk.status : "not_started";
-              const progress = Math.max(0, Math.min(100, Math.round(Number(tk?.progress)) || 0));
-              const predecessorNames = Array.isArray(tk?.predecessorNames)
-                ? tk.predecessorNames.map((n) => String(n).trim()).filter(Boolean).slice(0, 20)
-                : [];
-              return { id: crypto.randomUUID(), name, startDate, endDate, duration, responsible, status, progress, predecessorNames };
-            }).filter(Boolean);
+            const tasks = buildTasksFromInput(t?.tasks, today);
             return { id: crypto.randomUUID(), name: travName, description: "", status: "on_hold", tasks, delays: [], notes: [] };
           }).filter((t) => t.tasks.length);
 
           if (!newTravelers.length) throw new Error("No valid tasks found in the uploaded file(s).");
 
           // Resolve predecessor names to ids across both the existing Fab
-          // Shop Floor tasks and this batch, falling back to a sequential
-          // auto-chain within each new traveler when no name was given.
+          // Shop Floor tasks and this whole batch, falling back to a
+          // sequential auto-chain within each new traveler when no name
+          // was given.
           const nameToId = {};
           allProjectTasks(fab).forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; });
-          newTravelers.forEach((trav) => trav.tasks.forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; }));
-          newTravelers.forEach((trav) => {
-            trav.tasks.forEach((t, i) => {
-              if (t.predecessorNames.length) {
-                t.predecessors = t.predecessorNames.map((n) => nameToId[n.toLowerCase()]).filter(Boolean);
-              } else if (i > 0) {
-                t.predecessors = [trav.tasks[i - 1].id];
-              } else {
-                t.predecessors = [];
-              }
-              delete t.predecessorNames;
-            });
-          });
+          resolveTaskPredecessors(newTravelers.map((t) => t.tasks), nameToId);
 
           fab.travelers.push(...newTravelers);
           recalcSchedule(fab);
@@ -457,8 +476,6 @@ module.exports = async function handler(req, res) {
       const travName = String(body.name || "").trim().slice(0, 200);
       const travDescription = String(body.description || "").trim().slice(0, 1000);
       const sourcePath = String(body.sourcePath || "").trim().slice(0, 500) || null;
-      const dateRe = /^\d{4}-\d{2}-\d{2}$/;
-      const allowedTaskStatus = ["not_started", "in_progress", "delayed", "complete"];
       const allowedTravStatus = ["not_started", "in_progress", "delayed", "complete", "on_hold", "on_track", "at_risk"];
       const travStatus = allowedTravStatus.includes(body.status) ? body.status : "on_hold";
       if (!projectId || !travName) {
@@ -476,27 +493,22 @@ module.exports = async function handler(req, res) {
           if (!project) { conflict = "That project no longer exists."; return; }
           if (!Array.isArray(project.travelers)) project.travelers = [];
 
-          const rawTasks = Array.isArray(body.tasks) ? body.tasks.slice(0, 2000) : [];
-          const tasks = rawTasks.map((tk) => {
-            const name = String(tk?.name || "").trim().slice(0, 500);
-            if (!name) return null;
-            const duration = Math.max(1, Math.min(3650, Math.round(Number(tk?.duration)) || 1));
-            const startDate = dateRe.test(tk?.startDate) ? tk.startDate : today;
-            const endDate = dateRe.test(tk?.endDate) ? tk.endDate : addDays(startDate, duration - 1);
-            const responsible = String(tk?.responsible || "").trim().slice(0, 300);
-            const status = allowedTaskStatus.includes(tk?.status) ? tk.status : "not_started";
-            const progress = Math.max(0, Math.min(100, Math.round(Number(tk?.progress)) || 0));
-            return { id: crypto.randomUUID(), name, startDate, endDate, duration, responsible, status, progress, predecessors: [] };
-          }).filter(Boolean);
+          const tasks = buildTasksFromInput(body.tasks, today);
           // No task rows given: fall back to a single placeholder task named
           // after the traveler itself, so it still shows up on the board.
           if (!tasks.length) {
             tasks.push({
               id: crypto.randomUUID(), name: travName, startDate: today, endDate: today,
-              duration: 1, responsible: "", status: "not_started", progress: 0, predecessors: [],
+              duration: 1, responsible: "", status: "not_started", progress: 0, predecessorNames: [],
             });
           }
-          tasks.forEach((t, i) => { if (i > 0) t.predecessors = [tasks[i - 1].id]; });
+          // Resolve predecessor names against this project's existing tasks
+          // plus this new traveler's own tasks, falling back to a sequential
+          // auto-chain when no name was given — same mechanism the shop-floor
+          // Excel-upload flow (quickAddTravelers) uses.
+          const nameToId = {};
+          allProjectTasks(project).forEach((t) => { nameToId[t.name.trim().toLowerCase()] = t.id; });
+          resolveTaskPredecessors([tasks], nameToId);
 
           const traveler = {
             id: crypto.randomUUID(), name: travName, description: travDescription,
