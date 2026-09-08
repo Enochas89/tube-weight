@@ -979,7 +979,7 @@
               ${checkbox}
               <span class="status-dot" style="background:${color}"></span>
               <span class="task-number" title="Task # for email updates (e.g. Tasks ${taskIdx + 1}, 100%)">#${taskIdx + 1}</span>
-              <span class="task-name">${escapeHtml(t.name)}</span>
+              <span class="task-name" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</span>
               ${t.noScheduleImpact ? `<span class="no-impact-badge" title="Excluded from overall % complete">No impact</span>` : ""}
             </div>
             ${actions}
