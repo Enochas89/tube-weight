@@ -2,6 +2,10 @@
   "use strict";
 
   const API_URL = "/api/data";
+  // RetubeCo Explorer's current address (home-hosted, Tailscale Funnel) — used
+  // to deep-link a traveler's sourcePath back to its NAS folder. Update this
+  // if Explorer's hosting or URL ever changes.
+  const EXPLORER_URL = "https://flexserver.tail5bc9f4.ts.net";
   const AUTH_KEY = "projectStatus.editPassword";
   const STATUS_LABELS = { on_track: "On Track", at_risk: "At Risk", delayed: "Delayed", complete: "Complete", on_hold: "On Hold" };
   // Monday/ClickUp-style vibrant status colors rather than muted ones.
@@ -827,6 +831,14 @@
     document.getElementById("detailName").textContent = trav.name;
     document.getElementById("detailClient").textContent = "Part of " + p.name;
     document.getElementById("detailDescription").textContent = trav.description || "";
+    const sourceEl = document.getElementById("detailSource");
+    if (trav.sourcePath) {
+      sourceEl.textContent = "📁 K Drive: " + trav.sourcePath;
+      sourceEl.href = EXPLORER_URL + "/?path=" + encodeURIComponent(trav.sourcePath);
+      sourceEl.hidden = false;
+    } else {
+      sourceEl.hidden = true;
+    }
 
     const statusSelect = document.getElementById("detailStatus");
     const statusBadgeReadonly = document.getElementById("detailStatusBadge");
@@ -905,7 +917,7 @@
     }
 
     const todayMs = new Date(todayStr() + "T00:00:00").getTime();
-    wrap.innerHTML = trav.tasks.map((t) => {
+    wrap.innerHTML = trav.tasks.map((t, taskIdx) => {
       const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
       const isToday = todayMs >= new Date(t.startDate + "T00:00:00").getTime() && todayMs <= new Date(t.endDate + "T00:00:00").getTime();
       const actions = isEditor ? `
@@ -966,6 +978,7 @@
             <div class="task-card-title">
               ${checkbox}
               <span class="status-dot" style="background:${color}"></span>
+              <span class="task-number" title="Task # for email updates (e.g. Tasks ${taskIdx + 1}, 100%)">#${taskIdx + 1}</span>
               <span class="task-name">${escapeHtml(t.name)}</span>
               ${t.noScheduleImpact ? `<span class="no-impact-badge" title="Excluded from overall % complete">No impact</span>` : ""}
             </div>
