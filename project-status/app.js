@@ -1129,7 +1129,7 @@
         : "Row numbers this task starts after, e.g. 1, 3";
       return `
         <tr data-row-task="${t.id}" class="${t.status === "complete" ? "row-complete" : ""}">
-          <td>${idx + 1}</td>
+          <td>${idx + 1}${t.noScheduleImpact ? `<span class="task-table-no-impact" title="No schedule impact — excluded from % complete">&#9679;</span>` : ""}</td>
           <td class="task-table-name-col"><input type="text" data-field="name" value="${escapeHtml(t.name)}"></td>
           <td><input type="text" data-field="responsible" value="${escapeHtml(t.responsible || "")}" placeholder="Unassigned"></td>
           <td>
@@ -1139,7 +1139,7 @@
           </td>
           <td><input type="number" min="0" max="100" data-field="progress" value="${t.progress || 0}"></td>
           <td><input type="date" data-field="startDate" value="${t.startDate}" ${hasPreds ? 'disabled title="Auto-calculated from predecessor end date"' : ""}></td>
-          <td><input type="number" min="1" data-field="duration" value="${taskDuration(t)}"></td>
+          <td><input type="number" min="0" data-field="duration" value="${t.duration === 0 ? 0 : taskDuration(t)}" title="0 = no schedule impact, dated to the task above"></td>
           <td><span class="task-table-end">${fmtDate(t.endDate)}</span></td>
           <td><input type="text" class="task-table-preds" data-field="predecessors" value="${predNums.join(", ")}" title="${escapeHtml(predsTitle)}"></td>
           <td><button class="task-table-del" data-del-row title="Delete task">&times;</button></td>
@@ -1211,13 +1211,28 @@
 
       const durationInput = row.querySelector('[data-field="duration"]');
       durationInput.addEventListener("change", async () => {
-        const prevDuration = task.duration, prevEnd = task.endDate;
-        const dur = Math.max(1, Math.round(num(durationInput.value)) || 1);
-        task.duration = dur;
-        task.endDate = endDateForDuration(task.startDate, dur, project);
+        const prevDuration = task.duration, prevStart = task.startDate, prevEnd = task.endDate, prevNoImpact = task.noScheduleImpact;
+        const dur = Math.max(0, Math.round(num(durationInput.value)) || 0);
+        if (dur === 0) {
+          // A zero-duration row is a milestone, not a scheduled span: it has
+          // no impact on overall % complete, and — unless it already has its
+          // own predecessor link driving its date — it defaults to sitting
+          // on the same date as the row above it in the table.
+          task.duration = 0;
+          task.noScheduleImpact = true;
+          if (!(task.predecessors || []).length) {
+            const idx = trav.tasks.indexOf(task);
+            if (idx > 0) task.startDate = trav.tasks[idx - 1].endDate;
+          }
+          task.endDate = task.startDate;
+        } else {
+          task.duration = dur;
+          task.noScheduleImpact = false;
+          task.endDate = endDateForDuration(task.startDate, dur, project);
+        }
         recalcSchedule(project);
         const ok = await saveRemote();
-        if (!ok) { task.duration = prevDuration; task.endDate = prevEnd; recalcSchedule(project); }
+        if (!ok) { task.duration = prevDuration; task.startDate = prevStart; task.endDate = prevEnd; task.noScheduleImpact = prevNoImpact; recalcSchedule(project); }
         refreshTaskViews(project, trav);
       });
 
