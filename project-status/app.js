@@ -956,7 +956,7 @@
           </div>` : "";
 
       const currentBanner = isToday ? `<div class="current-marker">Current &bull; ${fmtDate(todayStr())}</div>` : "";
-      const checkbox = isEditor ? `<input type="checkbox" class="task-select-checkbox" data-select-task="${t.id}" ${selectedTaskIds.has(t.id) ? "checked" : ""}>` : "";
+      const checkbox = isEditor ? `<label class="task-select-wrap"><input type="checkbox" class="task-select-checkbox" data-select-task="${t.id}" ${selectedTaskIds.has(t.id) ? "checked" : ""}></label>` : "";
 
       return `
         ${currentBanner}
