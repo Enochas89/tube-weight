@@ -434,6 +434,7 @@
     hideAllViews();
     document.getElementById("projectGanttView").classList.remove("hidden");
     renderProjectGanttFull();
+    updateProjectGanttZoomLabel();
   }
 
   // Polls for changes made elsewhere (another editor, the shop-floor QR
@@ -2200,10 +2201,35 @@
 
   // ---------- project overview (project-level Gantt) ----------
   const PROJECT_STATUS_OPTIONS = Object.entries(STATUS_LABELS);
-  const PROJECT_DAY_WIDTH = 8;
+  const PROJECT_GANTT_DAY_WIDTH_MIN = 2;
+  const PROJECT_GANTT_DAY_WIDTH_MAX = 40;
+  const PROJECT_GANTT_DAY_WIDTH_DEFAULT = 8;
+  let projectGanttDayWidth = PROJECT_GANTT_DAY_WIDTH_DEFAULT;
   // Keeps the grid feeling like a full sheet instead of shrinking down to a
   // couple of rows when there are only one or two projects.
   const PROJECT_GANTT_MIN_ROWS = 15;
+
+  function zoomProjectGantt(factor) {
+    const prevScrollLeft = document.querySelector("#projectGanttView .gantt-full-scroll")?.scrollLeft || 0;
+    const prevWidth = projectGanttDayWidth;
+    projectGanttDayWidth = Math.max(PROJECT_GANTT_DAY_WIDTH_MIN, Math.min(PROJECT_GANTT_DAY_WIDTH_MAX, Math.round(projectGanttDayWidth * factor)));
+    if (projectGanttDayWidth === prevWidth) return;
+    renderProjectGanttFull();
+    // Keep whatever date range was centered in view centered after the scale
+    // changes, instead of snapping back to the start of the timeline.
+    const scrollEl = document.querySelector("#projectGanttView .gantt-full-scroll");
+    if (scrollEl) {
+      const center = prevScrollLeft + scrollEl.clientWidth / 2;
+      const newCenter = center * (projectGanttDayWidth / prevWidth);
+      scrollEl.scrollLeft = newCenter - scrollEl.clientWidth / 2;
+      scrollEl.dispatchEvent(new Event("scroll"));
+    }
+    updateProjectGanttZoomLabel();
+  }
+  function updateProjectGanttZoomLabel() {
+    const label = document.getElementById("projectGanttZoomLabel");
+    if (label) label.textContent = Math.round((projectGanttDayWidth / PROJECT_GANTT_DAY_WIDTH_DEFAULT) * 100) + "%";
+  }
 
   function refreshProjectGanttView() {
     renderProjectGanttFull();
@@ -2273,7 +2299,7 @@
         <span class="gantt-col-pcount gantt-mini-popover-wrap">
           <button type="button" class="gantt-traveler-count" data-travelers-toggle title="Travelers in this project">${p.travelers.length}</button>
           <div class="gantt-mini-popover">
-            ${p.travelers.length ? p.travelers.map((t) => `<div class="gantt-mini-popover-item">${escapeHtml(t.name)}</div>`).join("") : `<p class="modal-hint">No travelers yet.</p>`}
+            ${p.travelers.length ? p.travelers.map((t) => `<div class="gantt-mini-popover-item gantt-traveler-item"><span class="gantt-traveler-item-name">${escapeHtml(t.name)}</span><span class="gantt-traveler-item-pct">${travelerProgress(t)}%</span></div>`).join("") : `<p class="modal-hint">No travelers yet.</p>`}
             <label class="modal-label-hint" style="display:block; margin-top:8px;">Move a traveler here</label>
             <select class="gantt-move-traveler-select">
               <option value="">— choose —</option>
@@ -2300,7 +2326,7 @@
     rangeStart = addDays(rangeStart, -7);
     rangeEnd = addDays(rangeEnd, 7);
     const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
-    const totalWidth = totalDays * PROJECT_DAY_WIDTH;
+    const totalWidth = totalDays * projectGanttDayWidth;
     const rowSlotCount = Math.max(state.projects.length, PROJECT_GANTT_MIN_ROWS);
     const totalHeight = rowSlotCount * GANTT_ROW_HEIGHT;
     const today = todayStr();
@@ -2317,7 +2343,7 @@
         curLabel = dt.toLocaleDateString(undefined, { month: "short", year: "numeric" });
         curWidth = 0;
       }
-      curWidth += PROJECT_DAY_WIDTH;
+      curWidth += projectGanttDayWidth;
     }
     if (curKey !== null) monthSegments.push({ label: curLabel, width: curWidth });
     header.innerHTML = `<div class="gantt-full-header-row" style="width:${totalWidth}px">${monthSegments.map((seg) => `<div class="gantt-full-day project-month-seg" style="width:${seg.width}px">${seg.label}</div>`).join("")}</div>`;
@@ -2327,8 +2353,8 @@
     const barsHtml = state.projects.map((p, idx) => {
       const offsetDays = daysBetween(rangeStart, p.startDate);
       const spanDays = daysBetween(p.startDate, p.endDate) + 1;
-      const barLeft = offsetDays * PROJECT_DAY_WIDTH;
-      const barWidth = Math.max(PROJECT_DAY_WIDTH * 2 - 2, spanDays * PROJECT_DAY_WIDTH - 2);
+      const barLeft = offsetDays * projectGanttDayWidth;
+      const barWidth = Math.max(projectGanttDayWidth * 2 - 2, spanDays * projectGanttDayWidth - 2);
       layout[p.id] = { idx, left: barLeft, width: barWidth };
       const color = `var(--status-${p.status})`;
       const locked = (p.predecessors || []).length > 0;
@@ -2389,7 +2415,7 @@
       </svg>`;
 
     const todayLine = (today >= rangeStart && today <= rangeEnd)
-      ? `<div class="gantt-today-line" style="left:${daysBetween(rangeStart, today) * PROJECT_DAY_WIDTH}px; height:${totalHeight}px;" title="Today"></div>`
+      ? `<div class="gantt-today-line" style="left:${daysBetween(rangeStart, today) * projectGanttDayWidth}px; height:${totalHeight}px;" title="Today"></div>`
       : "";
 
     body.innerHTML = `<div class="gantt-full-body-inner" style="width:${totalWidth}px">${linksSvg}${todayLine}${barsHtml}</div>`;
@@ -2558,11 +2584,11 @@
         let dragging = false;
         let startX = 0, startLeft = 0, deltaDays = 0, scrollAdjustPx = 0, lastClientX = 0;
         const updateMove = () => {
-          const dDays = Math.round((lastClientX - startX + scrollAdjustPx) / PROJECT_DAY_WIDTH);
+          const dDays = Math.round((lastClientX - startX + scrollAdjustPx) / projectGanttDayWidth);
           if (dDays !== deltaDays) {
             deltaDays = dDays;
             wasDragged = wasDragged || dDays !== 0;
-            barEl.style.left = (startLeft + deltaDays * PROJECT_DAY_WIDTH) + "px";
+            barEl.style.left = (startLeft + deltaDays * projectGanttDayWidth) + "px";
           }
         };
         const moveScroller = makeGanttAutoScroller(scrollEl, () => lastClientX, (applied) => { scrollAdjustPx += applied; updateMove(); });
@@ -2617,11 +2643,11 @@
         let resizing = false;
         let resizeStartX = 0, startWidth = 0, resizeDeltaDays = 0, resizeChanged = false, resizeScrollAdjustPx = 0, resizeLastClientX = 0;
         const updateResize = () => {
-          const dDays = Math.round((resizeLastClientX - resizeStartX + resizeScrollAdjustPx) / PROJECT_DAY_WIDTH);
+          const dDays = Math.round((resizeLastClientX - resizeStartX + resizeScrollAdjustPx) / projectGanttDayWidth);
           if (dDays !== resizeDeltaDays) {
             resizeDeltaDays = dDays;
             resizeChanged = true;
-            const newWidth = Math.max(PROJECT_DAY_WIDTH * 2 - 2, startWidth + dDays * PROJECT_DAY_WIDTH);
+            const newWidth = Math.max(projectGanttDayWidth * 2 - 2, startWidth + dDays * projectGanttDayWidth);
             barEl.style.width = newWidth + "px";
           }
         };
@@ -2634,7 +2660,7 @@
           resizeScrollAdjustPx = 0;
           resizeStartX = e.clientX;
           resizeLastClientX = e.clientX;
-          startWidth = parseFloat(barEl.style.width) || PROJECT_DAY_WIDTH;
+          startWidth = parseFloat(barEl.style.width) || projectGanttDayWidth;
           resizeHandle.setPointerCapture(e.pointerId);
           barEl.classList.add("dragging");
           resizeScroller.start();
@@ -2723,6 +2749,26 @@
     if (e.target.closest(".gantt-bar") || e.target.closest(".gantt-mini-popover-wrap")) return;
     document.querySelectorAll(".gantt-mini-popover.open").forEach((p) => p.classList.remove("open"));
   });
+
+  document.getElementById("projectGanttZoomIn").addEventListener("click", () => zoomProjectGantt(1.25));
+  document.getElementById("projectGanttZoomOut").addEventListener("click", () => zoomProjectGantt(0.8));
+  document.getElementById("projectGanttZoomReset").addEventListener("click", () => zoomProjectGantt(PROJECT_GANTT_DAY_WIDTH_DEFAULT / projectGanttDayWidth));
+  // Ctrl/Cmd + scroll-wheel zoom, centered on the pointer rather than
+  // whatever happens to be scrolled into view — the way map and Gantt tools
+  // usually handle it.
+  document.querySelector("#projectGanttView .gantt-full-scroll").addEventListener("wheel", (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const scrollEl = e.currentTarget;
+    const rect = scrollEl.getBoundingClientRect();
+    const pointerOffsetInContent = scrollEl.scrollLeft + (e.clientX - rect.left);
+    const prevWidth = projectGanttDayWidth;
+    zoomProjectGantt(e.deltaY < 0 ? 1.15 : 1 / 1.15);
+    if (projectGanttDayWidth !== prevWidth) {
+      scrollEl.scrollLeft = pointerOffsetInContent * (projectGanttDayWidth / prevWidth) - (e.clientX - rect.left);
+      scrollEl.dispatchEvent(new Event("scroll"));
+    }
+  }, { passive: false });
 
   document.getElementById("projectGanttAddBtn").addEventListener("click", async () => {
     const today = todayStr();
