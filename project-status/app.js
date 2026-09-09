@@ -18,7 +18,6 @@
   let currentTravelerId = null;
   let isEditor = false;
   const selectedTaskIds = new Set();
-  const selectedTableTaskIds = new Set();
 
   // ---------- utility ----------
   function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
@@ -336,7 +335,6 @@
   function showTaskTable(p, trav) {
     if (!isEditor || !p || !trav) return;
     hideAllViews();
-    selectedTableTaskIds.clear();
     document.getElementById("taskTableView").classList.remove("hidden");
     document.getElementById("taskTableTravelerName").textContent = trav.name;
     renderTaskTable(p, trav);
@@ -1111,20 +1109,10 @@
     renderTravelerList(project);
   }
 
-  function updateTaskTableBulkBar() {
-    const bar = document.getElementById("taskTableBulkBar");
-    const n = selectedTableTaskIds.size;
-    bar.classList.toggle("hidden", n === 0);
-    if (n > 0) document.getElementById("taskTableBulkCount").textContent = `${n} selected`;
-  }
-
   function renderTaskTable(project, trav) {
     const tbody = document.getElementById("taskTableBody");
-    const liveIds = new Set(trav.tasks.map((t) => t.id));
-    Array.from(selectedTableTaskIds).forEach((id) => { if (!liveIds.has(id)) selectedTableTaskIds.delete(id); });
-    updateTaskTableBulkBar();
     if (!trav.tasks.length) {
-      tbody.innerHTML = `<tr><td colspan="11" class="empty-state">No tasks yet. Click "+ Add Task" to get started.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="empty-state">No tasks yet. Click "+ Add Task" to get started.</td></tr>`;
       return;
     }
     const sameTravIds = new Set(trav.tasks.map((t) => t.id));
@@ -1140,8 +1128,7 @@
         ? `${externalPredCount} cross-traveler dependency(ies) not shown here — edit via this task's pencil icon in the card view.`
         : "Row numbers this task starts after, e.g. 1, 3";
       return `
-        <tr data-row-task="${t.id}" class="${t.status === "complete" ? "row-complete" : ""}${selectedTableTaskIds.has(t.id) ? " is-selected" : ""}">
-          <td><input type="checkbox" class="task-table-select" data-select-row="${t.id}" ${selectedTableTaskIds.has(t.id) ? "checked" : ""}></td>
+        <tr data-row-task="${t.id}" class="${t.status === "complete" ? "row-complete" : ""}">
           <td>${idx + 1}${t.noScheduleImpact ? `<span class="task-table-no-impact" title="No schedule impact — excluded from % complete">&#9679;</span>` : ""}</td>
           <td class="task-table-name-col"><input type="text" data-field="name" value="${escapeHtml(t.name)}"></td>
           <td><input type="text" data-field="responsible" value="${escapeHtml(t.responsible || "")}" placeholder="Unassigned"></td>
@@ -1163,12 +1150,6 @@
       const taskId = row.dataset.rowTask;
       const task = trav.tasks.find((t) => t.id === taskId);
       if (!task) return;
-
-      row.querySelector("[data-select-row]").addEventListener("change", (e) => {
-        if (e.target.checked) selectedTableTaskIds.add(taskId); else selectedTableTaskIds.delete(taskId);
-        row.classList.toggle("is-selected", e.target.checked);
-        updateTaskTableBulkBar();
-      });
 
       const nameInput = row.querySelector('[data-field="name"]');
       nameInput.addEventListener("change", async () => {
@@ -1324,54 +1305,6 @@
     refreshTaskViews(p, trav);
     const nameField = document.querySelector(`tr[data-row-task="${newTask.id}"] [data-field="name"]`);
     if (nameField) { nameField.focus(); nameField.select(); }
-  });
-
-  // Applies the same zero-duration "milestone" rule as a single row's
-  // Duration=0 edit to every selected row at once: no schedule impact, and
-  // (absent its own predecessor) dated to sit on whatever the row above it
-  // ends up at — processed top-to-bottom so a run of selected rows chains
-  // off each other's freshly-set date rather than stale pre-batch ones.
-  async function bulkSetNoImpact(makeNoImpact) {
-    const p = getProject(currentProjectId);
-    const trav = p && getTraveler(p, currentTravelerId);
-    if (!trav || !selectedTableTaskIds.size) return;
-    const prev = trav.tasks.map((t) => ({ id: t.id, duration: t.duration, startDate: t.startDate, endDate: t.endDate, noScheduleImpact: t.noScheduleImpact }));
-    trav.tasks.forEach((task) => {
-      if (!selectedTableTaskIds.has(task.id)) return;
-      if (makeNoImpact) {
-        task.duration = 0;
-        task.noScheduleImpact = true;
-        if (!(task.predecessors || []).length) {
-          const idx = trav.tasks.indexOf(task);
-          if (idx > 0) task.startDate = trav.tasks[idx - 1].endDate;
-        }
-        task.endDate = task.startDate;
-      } else {
-        task.duration = 1;
-        task.noScheduleImpact = false;
-        task.endDate = endDateForDuration(task.startDate, 1, p);
-      }
-    });
-    recalcSchedule(p);
-    const ok = await saveRemote();
-    if (!ok) {
-      prev.forEach(({ id, duration, startDate, endDate, noScheduleImpact }) => {
-        const t = trav.tasks.find((tk) => tk.id === id);
-        if (t) { t.duration = duration; t.startDate = startDate; t.endDate = endDate; t.noScheduleImpact = noScheduleImpact; }
-      });
-      recalcSchedule(p);
-      return;
-    }
-    selectedTableTaskIds.clear();
-    refreshTaskViews(p, trav);
-  }
-  document.getElementById("taskTableBulkNoImpact").addEventListener("click", () => bulkSetNoImpact(true));
-  document.getElementById("taskTableBulkClearImpact").addEventListener("click", () => bulkSetNoImpact(false));
-  document.getElementById("taskTableBulkClearSel").addEventListener("click", () => {
-    selectedTableTaskIds.clear();
-    const p = getProject(currentProjectId);
-    const trav = p && getTraveler(p, currentTravelerId);
-    if (trav) renderTaskTable(p, trav);
   });
 
   // ---------- Gantt strip (drag-to-reschedule timeline) ----------

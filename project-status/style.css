@@ -441,8 +441,6 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .task-table-end { color: var(--text-dim); padding: 5px 6px; display: inline-block; }
 .task-table-preds { width: 70px; }
 .task-table-no-impact { color: var(--text-dim); font-size: 0.55rem; margin-left: 4px; vertical-align: middle; }
-.task-table tbody tr.is-selected { background: var(--accent-dim); }
-.task-table-select { width: 15px; height: 15px; cursor: pointer; }
 .task-table-del { background: none; border: none; cursor: pointer; color: var(--text-dim); font-size: 1rem; padding: 4px 8px; }
 .task-table-del:hover { color: var(--status-delayed); }
 
