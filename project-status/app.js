@@ -10,6 +10,13 @@
   const STATUS_LABELS = { on_track: "On Track", at_risk: "At Risk", delayed: "Delayed", complete: "Complete", on_hold: "On Hold" };
   // Monday/ClickUp-style vibrant status colors rather than muted ones.
   const TASK_STATUS_COLOR = { not_started: "#c4c4c4", in_progress: "#fdab3d", delayed: "#e2445c", complete: "#00c875" };
+  const GANTT_DAY_WIDTH = 34;
+  const TASK_STATUS_OPTIONS = [
+    ["not_started", "Not Started"],
+    ["in_progress", "In Progress"],
+    ["delayed", "Delayed"],
+    ["complete", "Complete"],
+  ];
   const AVATAR_PALETTE = ["#579bfc", "#a25ddc", "#ff642e", "#fdab3d", "#00c875", "#66ccff", "#e2445c", "#7e5efd"];
 
   let state = { projects: [] };
@@ -17,6 +24,7 @@
   let currentTravelerId = null;
   let isEditor = false;
   const selectedTaskIds = new Set();
+  const selectedGanttTaskIds = new Set();
 
   // ---------- utility ----------
   function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
@@ -314,6 +322,7 @@
     document.getElementById("listView").classList.add("hidden");
     document.getElementById("travelerListView").classList.add("hidden");
     document.getElementById("detailView").classList.add("hidden");
+    document.getElementById("ganttView").classList.add("hidden");
   }
   function showList() {
     hideAllViews();
@@ -330,6 +339,14 @@
     document.getElementById("detailView").classList.remove("hidden");
     renderTravelerDetail(p, trav);
   }
+  function showGanttView(p, trav) {
+    if (!isEditor || !p || !trav) return;
+    hideAllViews();
+    selectedGanttTaskIds.clear();
+    document.getElementById("ganttView").classList.remove("hidden");
+    document.getElementById("ganttViewTravelerName").textContent = trav.name;
+    renderGanttFull(p, trav);
+  }
 
   // Polls for changes made elsewhere (another editor, the shop-floor QR
   // flow, a claimed traveler) and re-renders whatever's currently on screen.
@@ -338,6 +355,7 @@
   // since this runs unattended in the background.
   async function silentRefresh() {
     if (!modalBackdrop.classList.contains("hidden")) return;
+    if (!document.getElementById("ganttView").classList.contains("hidden")) return;
     try {
       const res = await fetch(API_URL);
       if (!res.ok) return;
@@ -870,6 +888,14 @@
 
   document.getElementById("backToListBtn").addEventListener("click", () => { location.hash = "project/" + currentProjectId; });
   document.getElementById("editProjectBtn").addEventListener("click", () => openTravelerModal(getProject(currentProjectId), getTraveler(getProject(currentProjectId), currentTravelerId)));
+  document.getElementById("openGanttViewBtn").addEventListener("click", () => {
+    const p = getProject(currentProjectId);
+    showGanttView(p, getTraveler(p, currentTravelerId));
+  });
+  document.getElementById("backFromGanttViewBtn").addEventListener("click", () => {
+    const p = getProject(currentProjectId);
+    showTravelerDetail(p, getTraveler(p, currentTravelerId));
+  });
   document.getElementById("deleteProjectBtn").addEventListener("click", async () => {
     if (!confirm("Delete this traveler? This can't be undone.")) return;
     const p = getProject(currentProjectId);
@@ -1448,6 +1474,421 @@
     });
     if (presetTask) document.getElementById("f-task").value = presetTask.id;
   }
+
+  // ---------- Gantt view (fully editable timeline) ----------
+  function refreshGanttViews(project, trav) {
+    renderGanttFull(project, trav);
+    renderList();
+    renderTravelerList(project);
+  }
+
+  function updateGanttBulkBar() {
+    const bar = document.getElementById("ganttBulkBar");
+    const n = selectedGanttTaskIds.size;
+    bar.classList.toggle("hidden", n === 0);
+    if (n > 0) document.getElementById("ganttBulkCount").textContent = `${n} selected`;
+  }
+
+  function renderGanttFull(project, trav) {
+    const labels = document.getElementById("ganttFullLabels");
+    const header = document.getElementById("ganttFullHeader");
+    const body = document.getElementById("ganttFullBody");
+
+    const liveIds = new Set(trav.tasks.map((t) => t.id));
+    Array.from(selectedGanttTaskIds).forEach((id) => { if (!liveIds.has(id)) selectedGanttTaskIds.delete(id); });
+    updateGanttBulkBar();
+
+    if (!trav.tasks.length) {
+      labels.innerHTML = "";
+      header.innerHTML = "";
+      body.innerHTML = `<div class="empty-state">No tasks yet. Click "+ Add Task" to get started.</div>`;
+      return;
+    }
+
+    // ---- left column: name/responsible, always editable, no popup needed ----
+    labels.innerHTML = trav.tasks.map((t, idx) => `
+      <div class="gantt-full-label-row${selectedGanttTaskIds.has(t.id) ? " is-selected" : ""}" data-row-task="${t.id}">
+        <input type="checkbox" class="gantt-select" data-select-row="${t.id}" ${selectedGanttTaskIds.has(t.id) ? "checked" : ""}>
+        <span class="gantt-row-num">${idx + 1}${t.noScheduleImpact ? `<span class="task-table-no-impact" title="No schedule impact — excluded from % complete">&#9679;</span>` : ""}</span>
+        <input type="text" class="gantt-name-input" data-field="name" value="${escapeHtml(t.name)}" title="${escapeHtml(t.name)}">
+        <input type="text" class="gantt-resp-input" data-field="responsible" value="${escapeHtml(t.responsible || "")}" placeholder="Unassigned">
+        <button class="gantt-row-del" data-del-row title="Delete task">&times;</button>
+      </div>`).join("");
+
+    // ---- date scale ----
+    let rangeStart = trav.tasks[0].startDate;
+    let rangeEnd = trav.tasks[0].endDate;
+    trav.tasks.forEach((t) => {
+      if (t.startDate < rangeStart) rangeStart = t.startDate;
+      if (t.endDate > rangeEnd) rangeEnd = t.endDate;
+    });
+    rangeStart = addDays(rangeStart, -3);
+    rangeEnd = addDays(rangeEnd, 3);
+    const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
+    const totalWidth = totalDays * GANTT_DAY_WIDTH;
+    const today = todayStr();
+
+    const dayCells = [];
+    for (let i = 0; i < totalDays; i++) {
+      const d = addDays(rangeStart, i);
+      const dow = new Date(d + "T00:00:00").getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      const isToday = d === today;
+      const dt = new Date(d + "T00:00:00");
+      const dayNum = dt.getDate();
+      const showMonth = dayNum === 1 || i === 0;
+      dayCells.push(`<div class="gantt-full-day${isWeekend ? " weekend" : ""}${isToday ? " today" : ""}" style="width:${GANTT_DAY_WIDTH}px">${showMonth ? `<div class="gantt-full-month">${dt.toLocaleDateString(undefined, { month: "short" })}</div>` : ""}<div>${dayNum}</div></div>`);
+    }
+    header.innerHTML = `<div class="gantt-full-header-row" style="width:${totalWidth}px">${dayCells.join("")}</div>`;
+
+    // ---- bars, each with a popover carrying every other editable field ----
+    body.innerHTML = `<div class="gantt-full-body-inner" style="width:${totalWidth}px">` + trav.tasks.map((t) => {
+      const offsetDays = daysBetween(rangeStart, t.startDate);
+      const durDays = taskDuration(t);
+      const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
+      const locked = (t.predecessors || []).length > 0;
+      const blocked = descendantsOf(project, t.id);
+      const groupsHtml = project.travelers.map((otherTrav) => {
+        const candidates = otherTrav.tasks.filter((ot) => ot.id !== t.id && !blocked.has(ot.id));
+        if (!candidates.length) return "";
+        return `<div class="checkbox-group-label">${escapeHtml(otherTrav.name)}</div>` + candidates.map((ot) => `
+          <label class="checkbox-row"><input type="checkbox" class="gantt-pred-cb" value="${ot.id}" ${(t.predecessors || []).includes(ot.id) ? "checked" : ""}> ${escapeHtml(ot.name)}</label>`).join("");
+      }).join("");
+      const hasCandidates = project.travelers.some((ot) => ot.tasks.some((cand) => cand.id !== t.id && !blocked.has(cand.id)));
+      const predCheckboxes = hasCandidates ? groupsHtml : `<p class="modal-hint">No other tasks to depend on yet.</p>`;
+
+      return `
+        <div class="gantt-full-row${selectedGanttTaskIds.has(t.id) ? " is-selected" : ""}">
+          <div class="gantt-bar${locked ? " locked" : ""}" data-gantt-task="${t.id}"
+               style="left:${offsetDays * GANTT_DAY_WIDTH}px; width:${durDays * GANTT_DAY_WIDTH - 2}px; background:${color};"
+               title="${escapeHtml(t.name)} — ${fmtDate(t.startDate)} → ${fmtDate(t.endDate)}${locked ? " (auto-scheduled from a predecessor)" : ""}">
+            <div class="gantt-bar-fill" style="width:${t.progress || 0}%"></div>
+            <span class="gantt-bar-label">${t.progress || 0}%</span>
+            <div class="gantt-bar-resize" title="Drag to change duration"></div>
+            <div class="gantt-bar-popover" data-popover-for="${t.id}">
+              <label>Status
+                <select data-gantt-field="status">
+                  ${TASK_STATUS_OPTIONS.map(([v, label]) => `<option value="${v}" ${t.status === v ? "selected" : ""}>${label}</option>`).join("")}
+                </select>
+              </label>
+              <label>% Complete <input type="number" min="0" max="100" data-gantt-field="progress" value="${t.progress || 0}"></label>
+              <label class="checkbox-row"><input type="checkbox" data-gantt-field="noImpact" ${t.noScheduleImpact ? "checked" : ""}> No impact on schedule</label>
+              <div class="gantt-popover-preds">
+                <div class="modal-label-hint">Predecessors</div>
+                ${predCheckboxes}
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }).join("") + `</div>`;
+
+    // ---- wire the left-column labels ----
+    labels.querySelectorAll("[data-row-task]").forEach((row) => {
+      const taskId = row.dataset.rowTask;
+      const task = trav.tasks.find((tk) => tk.id === taskId);
+      if (!task) return;
+
+      row.querySelector("[data-select-row]").addEventListener("change", (e) => {
+        if (e.target.checked) selectedGanttTaskIds.add(taskId); else selectedGanttTaskIds.delete(taskId);
+        row.classList.toggle("is-selected", e.target.checked);
+        const barRow = body.querySelector(`[data-gantt-task="${taskId}"]`)?.closest(".gantt-full-row");
+        if (barRow) barRow.classList.toggle("is-selected", e.target.checked);
+        updateGanttBulkBar();
+      });
+
+      const nameInput = row.querySelector('[data-field="name"]');
+      nameInput.addEventListener("change", async () => {
+        const prev = task.name;
+        const val = nameInput.value.trim() || "Untitled task";
+        if (val === prev) { nameInput.value = prev; return; }
+        task.name = val;
+        const ok = await saveRemote();
+        if (!ok) task.name = prev;
+        refreshGanttViews(project, trav);
+      });
+
+      const respInput = row.querySelector('[data-field="responsible"]');
+      respInput.addEventListener("change", async () => {
+        const prev = task.responsible;
+        const val = respInput.value.trim();
+        if (val === prev) return;
+        task.responsible = val;
+        const ok = await saveRemote();
+        if (!ok) task.responsible = prev;
+        refreshGanttViews(project, trav);
+      });
+
+      row.querySelector("[data-del-row]").addEventListener("click", async () => {
+        if (!confirm("Delete this task?")) return;
+        const removedIdx = trav.tasks.indexOf(task);
+        trav.tasks = trav.tasks.filter((tk) => tk.id !== taskId);
+        const affectedDelays = trav.delays.filter((d) => d.taskId === taskId);
+        affectedDelays.forEach((d) => { d.taskId = null; });
+        const affectedNotes = trav.notes.filter((n) => n.taskId === taskId);
+        affectedNotes.forEach((n) => { n.taskId = null; });
+        const affectedPredTasks = allTasks(project).filter((tk) => (tk.predecessors || []).includes(taskId));
+        affectedPredTasks.forEach((tk) => { tk.predecessors = tk.predecessors.filter((id) => id !== taskId); });
+        recalcSchedule(project);
+        const ok = await saveRemote();
+        if (!ok) {
+          trav.tasks.splice(removedIdx, 0, task);
+          affectedDelays.forEach((d) => { d.taskId = task.id; });
+          affectedNotes.forEach((n) => { n.taskId = task.id; });
+          affectedPredTasks.forEach((tk) => { tk.predecessors.push(taskId); });
+          recalcSchedule(project);
+        }
+        selectedGanttTaskIds.delete(taskId);
+        refreshGanttViews(project, trav);
+      });
+    });
+
+    // ---- wire the bars: popover fields, drag-to-move, drag-to-resize ----
+    body.querySelectorAll("[data-gantt-task]").forEach((barEl) => {
+      const taskId = barEl.dataset.ganttTask;
+      const task = trav.tasks.find((tk) => tk.id === taskId);
+      if (!task) return;
+      const popover = barEl.querySelector(".gantt-bar-popover");
+
+      popover.querySelector('[data-gantt-field="status"]').addEventListener("change", async (e) => {
+        const prevStatus = task.status, prevProgress = task.progress;
+        task.status = e.target.value;
+        if (task.status === "complete") task.progress = 100;
+        recalcSchedule(project);
+        const ok = await saveRemote();
+        if (!ok) { task.status = prevStatus; task.progress = prevProgress; recalcSchedule(project); }
+        refreshGanttViews(project, trav);
+      });
+      popover.querySelector('[data-gantt-field="progress"]').addEventListener("change", async (e) => {
+        const prev = task.progress;
+        task.progress = Math.max(0, Math.min(100, Math.round(num(e.target.value)) || 0));
+        const ok = await saveRemote();
+        if (!ok) task.progress = prev;
+        refreshGanttViews(project, trav);
+      });
+      popover.querySelector('[data-gantt-field="noImpact"]').addEventListener("change", async (e) => {
+        const prevDuration = task.duration, prevStart = task.startDate, prevEnd = task.endDate, prevNoImpact = task.noScheduleImpact;
+        if (e.target.checked) {
+          task.duration = 0;
+          task.noScheduleImpact = true;
+          if (!(task.predecessors || []).length) {
+            const idx = trav.tasks.indexOf(task);
+            if (idx > 0) task.startDate = trav.tasks[idx - 1].endDate;
+          }
+          task.endDate = task.startDate;
+        } else {
+          task.duration = 1;
+          task.noScheduleImpact = false;
+          task.endDate = endDateForDuration(task.startDate, 1, project);
+        }
+        recalcSchedule(project);
+        const ok = await saveRemote();
+        if (!ok) { task.duration = prevDuration; task.startDate = prevStart; task.endDate = prevEnd; task.noScheduleImpact = prevNoImpact; recalcSchedule(project); }
+        refreshGanttViews(project, trav);
+      });
+      popover.querySelectorAll(".gantt-pred-cb").forEach((cb) => {
+        cb.addEventListener("change", async () => {
+          const prevPreds = [...(task.predecessors || [])];
+          const prevStart = task.startDate, prevEnd = task.endDate;
+          const selected = Array.from(popover.querySelectorAll(".gantt-pred-cb:checked")).map((el) => el.value);
+          task.predecessors = selected;
+          if (selected.length) {
+            const preds = selected.map((id) => allTasks(project).find((tk) => tk.id === id)).filter(Boolean);
+            const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
+            task.startDate = nextWorkDay(new Date(latestEnd + 86400000).toISOString().slice(0, 10), project);
+            task.endDate = endDateForDuration(task.startDate, taskDuration(task), project);
+          }
+          recalcSchedule(project);
+          const ok = await saveRemote();
+          if (!ok) { task.predecessors = prevPreds; task.startDate = prevStart; task.endDate = prevEnd; recalcSchedule(project); }
+          refreshGanttViews(project, trav);
+        });
+      });
+      popover.addEventListener("click", (e) => e.stopPropagation());
+
+      let wasDragged = false;
+      const locked = !!(task.predecessors && task.predecessors.length);
+
+      if (!locked) {
+        let dragging = false;
+        let startX = 0, startLeft = 0, deltaDays = 0;
+        barEl.addEventListener("pointerdown", (e) => {
+          if (e.target.closest(".gantt-bar-popover") || e.target.closest(".gantt-bar-resize")) return;
+          dragging = true;
+          wasDragged = false;
+          deltaDays = 0;
+          startX = e.clientX;
+          startLeft = parseFloat(barEl.style.left) || 0;
+          barEl.setPointerCapture(e.pointerId);
+          barEl.classList.add("dragging");
+        });
+        barEl.addEventListener("pointermove", (e) => {
+          if (!dragging) return;
+          const dPx = e.clientX - startX;
+          const dDays = Math.round(dPx / GANTT_DAY_WIDTH);
+          if (dDays !== deltaDays) {
+            deltaDays = dDays;
+            wasDragged = wasDragged || dDays !== 0;
+            barEl.style.left = (startLeft + deltaDays * GANTT_DAY_WIDTH) + "px";
+          }
+        });
+        barEl.addEventListener("pointerup", async () => {
+          if (!dragging) return;
+          dragging = false;
+          barEl.classList.remove("dragging");
+          if (wasDragged && deltaDays !== 0) {
+            const prevStart = task.startDate, prevEnd = task.endDate;
+            task.startDate = addDays(task.startDate, deltaDays);
+            task.endDate = endDateForDuration(task.startDate, taskDuration(task), project);
+            recalcSchedule(project);
+            const ok = await saveRemote();
+            if (!ok) { task.startDate = prevStart; task.endDate = prevEnd; recalcSchedule(project); }
+            refreshGanttViews(project, trav);
+          }
+        });
+      }
+
+      // Resize handle: drag the bar's right edge to change its duration
+      // (and, since a genuine resize is a deliberate schedule choice, clear
+      // any "no impact" milestone flag the task might have had).
+      const resizeHandle = barEl.querySelector(".gantt-bar-resize");
+      let resizing = false;
+      let resizeStartX = 0, startWidth = 0, resizeDeltaDays = 0, resizeChanged = false;
+      resizeHandle.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        resizing = true;
+        resizeChanged = false;
+        resizeDeltaDays = 0;
+        resizeStartX = e.clientX;
+        startWidth = parseFloat(barEl.style.width) || GANTT_DAY_WIDTH;
+        resizeHandle.setPointerCapture(e.pointerId);
+        barEl.classList.add("dragging");
+      });
+      resizeHandle.addEventListener("pointermove", (e) => {
+        if (!resizing) return;
+        const dPx = e.clientX - resizeStartX;
+        const dDays = Math.round(dPx / GANTT_DAY_WIDTH);
+        if (dDays !== resizeDeltaDays) {
+          resizeDeltaDays = dDays;
+          resizeChanged = true;
+          const newWidth = Math.max(GANTT_DAY_WIDTH - 2, startWidth + dDays * GANTT_DAY_WIDTH);
+          barEl.style.width = newWidth + "px";
+        }
+      });
+      resizeHandle.addEventListener("pointerup", async (e) => {
+        e.stopPropagation();
+        if (!resizing) return;
+        resizing = false;
+        barEl.classList.remove("dragging");
+        if (resizeChanged) {
+          const prevDuration = task.duration, prevEnd = task.endDate, prevNoImpact = task.noScheduleImpact;
+          const newDuration = Math.max(1, taskDuration(task) + resizeDeltaDays);
+          task.duration = newDuration;
+          task.noScheduleImpact = false;
+          task.endDate = endDateForDuration(task.startDate, newDuration, project);
+          recalcSchedule(project);
+          const ok = await saveRemote();
+          if (!ok) { task.duration = prevDuration; task.endDate = prevEnd; task.noScheduleImpact = prevNoImpact; recalcSchedule(project); }
+          refreshGanttViews(project, trav);
+        }
+      });
+
+      barEl.addEventListener("click", (e) => {
+        if (e.target.closest(".gantt-bar-popover") || e.target.closest(".gantt-bar-resize")) return;
+        if (wasDragged) { wasDragged = false; return; }
+        const wasOpen = popover.classList.contains("open");
+        document.querySelectorAll(".gantt-bar-popover.open").forEach((p) => p.classList.remove("open"));
+        if (!wasOpen) popover.classList.add("open");
+      });
+    });
+  }
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".gantt-bar")) return;
+    document.querySelectorAll(".gantt-bar-popover.open").forEach((p) => p.classList.remove("open"));
+  });
+
+  document.getElementById("ganttAddTaskBtn").addEventListener("click", async () => {
+    const p = getProject(currentProjectId);
+    const trav = getTraveler(p, currentTravelerId);
+    if (!trav) return;
+    const today = todayStr();
+    const newTask = { id: uid(), name: "New Task", startDate: today, endDate: today, duration: 1, responsible: "", status: "not_started", progress: 0, predecessors: [] };
+    trav.tasks.push(newTask);
+    recalcSchedule(p);
+    const ok = await saveRemote();
+    if (!ok) { trav.tasks.pop(); return; }
+    refreshGanttViews(p, trav);
+    const nameField = document.querySelector(`.gantt-full-label-row[data-row-task="${newTask.id}"] [data-field="name"]`);
+    if (nameField) { nameField.focus(); nameField.select(); }
+  });
+
+  async function bulkSetGanttCompletion(complete) {
+    const p = getProject(currentProjectId);
+    const trav = p && getTraveler(p, currentTravelerId);
+    if (!trav || !selectedGanttTaskIds.size) return;
+    const targets = trav.tasks.filter((t) => selectedGanttTaskIds.has(t.id));
+    const prev = targets.map((t) => ({ id: t.id, status: t.status, progress: t.progress }));
+    targets.forEach((t) => {
+      t.status = complete ? "complete" : "not_started";
+      t.progress = complete ? 100 : 0;
+    });
+    recalcSchedule(p);
+    const ok = await saveRemote();
+    if (!ok) {
+      prev.forEach(({ id, status, progress }) => {
+        const t = trav.tasks.find((tk) => tk.id === id);
+        if (t) { t.status = status; t.progress = progress; }
+      });
+      recalcSchedule(p);
+      return;
+    }
+    selectedGanttTaskIds.clear();
+    refreshGanttViews(p, trav);
+  }
+  document.getElementById("ganttBulkComplete").addEventListener("click", () => bulkSetGanttCompletion(true));
+  document.getElementById("ganttBulkNotComplete").addEventListener("click", () => bulkSetGanttCompletion(false));
+
+  async function bulkSetGanttNoImpact(makeNoImpact) {
+    const p = getProject(currentProjectId);
+    const trav = p && getTraveler(p, currentTravelerId);
+    if (!trav || !selectedGanttTaskIds.size) return;
+    const prev = trav.tasks.map((t) => ({ id: t.id, duration: t.duration, startDate: t.startDate, endDate: t.endDate, noScheduleImpact: t.noScheduleImpact }));
+    trav.tasks.forEach((task) => {
+      if (!selectedGanttTaskIds.has(task.id)) return;
+      if (makeNoImpact) {
+        task.duration = 0;
+        task.noScheduleImpact = true;
+        if (!(task.predecessors || []).length) {
+          const idx = trav.tasks.indexOf(task);
+          if (idx > 0) task.startDate = trav.tasks[idx - 1].endDate;
+        }
+        task.endDate = task.startDate;
+      } else {
+        task.duration = 1;
+        task.noScheduleImpact = false;
+        task.endDate = endDateForDuration(task.startDate, 1, p);
+      }
+    });
+    recalcSchedule(p);
+    const ok = await saveRemote();
+    if (!ok) {
+      prev.forEach(({ id, duration, startDate, endDate, noScheduleImpact }) => {
+        const t = trav.tasks.find((tk) => tk.id === id);
+        if (t) { t.duration = duration; t.startDate = startDate; t.endDate = endDate; t.noScheduleImpact = noScheduleImpact; }
+      });
+      recalcSchedule(p);
+      return;
+    }
+    selectedGanttTaskIds.clear();
+    refreshGanttViews(p, trav);
+  }
+  document.getElementById("ganttBulkNoImpact").addEventListener("click", () => bulkSetGanttNoImpact(true));
+  document.getElementById("ganttBulkClearImpact").addEventListener("click", () => bulkSetGanttNoImpact(false));
+  document.getElementById("ganttBulkClearSel").addEventListener("click", () => {
+    selectedGanttTaskIds.clear();
+    const p = getProject(currentProjectId);
+    const trav = p && getTraveler(p, currentTravelerId);
+    if (trav) renderGanttFull(p, trav);
+  });
 
   // ---------- init ----------
   (async () => {

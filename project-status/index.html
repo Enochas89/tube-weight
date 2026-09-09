@@ -108,7 +108,10 @@
     <div class="tab-panel" data-tab-panel="tasks">
       <div class="panel-header-row">
         <h3>Tasks</h3>
-        <button class="btn-secondary editor-only hidden" id="addTaskBtn">+ Add Task</button>
+        <div class="header-row-actions">
+          <button class="btn-secondary editor-only hidden" id="openGanttViewBtn">Gantt View</button>
+          <button class="btn-secondary editor-only hidden" id="addTaskBtn">+ Add Task</button>
+        </div>
       </div>
       <div id="taskBulkBar" class="task-bulk-bar hidden">
         <span id="taskBulkCount">0 selected</span>
@@ -137,6 +140,42 @@
         <button class="btn-secondary editor-only hidden" id="addNoteBtn">+ Add Note</button>
       </div>
       <div id="notesList" class="log-list"></div>
+    </div>
+  </section>
+
+  <!-- ===================== GANTT VIEW (fully editable timeline) ===================== -->
+  <section id="ganttView" class="view hidden">
+    <div class="detail-header">
+      <button class="btn-link" id="backFromGanttViewBtn">&larr; Back to Traveler</button>
+      <div class="detail-title-row">
+        <div>
+          <h2 id="ganttViewTravelerName">Traveler Name</h2>
+          <p class="detail-client">Drag a bar to reschedule, drag its right edge to resize, click it to edit status/%/predecessors</p>
+        </div>
+        <div class="detail-actions">
+          <button class="btn-primary" id="ganttAddTaskBtn">+ Add Task</button>
+        </div>
+      </div>
+    </div>
+    <div id="ganttBulkBar" class="task-bulk-bar hidden">
+      <span id="ganttBulkCount">0 selected</span>
+      <span class="task-bulk-actions">
+        <button class="btn-secondary" id="ganttBulkComplete">Mark Complete</button>
+        <button class="btn-secondary" id="ganttBulkNotComplete">Mark Not Complete</button>
+        <button class="btn-secondary" id="ganttBulkNoImpact">No Impact</button>
+        <button class="btn-secondary" id="ganttBulkClearImpact">Clear No Impact</button>
+        <button class="btn-link" id="ganttBulkClearSel">Clear</button>
+      </span>
+    </div>
+    <div class="gantt-full">
+      <div class="gantt-full-labels">
+        <div class="gantt-full-label-spacer"></div>
+        <div id="ganttFullLabels"></div>
+      </div>
+      <div class="gantt-full-scroll">
+        <div id="ganttFullHeader"></div>
+        <div id="ganttFullBody"></div>
+      </div>
     </div>
   </section>
 
