@@ -1536,15 +1536,31 @@
       return;
     }
 
-    // ---- left column: name/responsible, always editable, no popup needed ----
-    labels.innerHTML = trav.tasks.map((t, idx) => `
+    // ---- left column: name/responsible/predecessors, always editable, plus a read-only successors column ----
+    labels.innerHTML = trav.tasks.map((t, idx) => {
+      const predNums = (t.predecessors || [])
+        .map((id) => trav.tasks.findIndex((tt) => tt.id === id))
+        .filter((i) => i !== -1)
+        .map((i) => i + 1);
+      const externalPredCount = (t.predecessors || []).length - predNums.length;
+      const predTitle = externalPredCount
+        ? `${externalPredCount} cross-traveler dependency(ies) not shown here — edit via the bar's popover.`
+        : "Row numbers this task starts after, e.g. 1, 3";
+      const succNums = successorsOf(project, t.id)
+        .map((s) => trav.tasks.findIndex((tt) => tt.id === s.id))
+        .filter((i) => i !== -1)
+        .map((i) => i + 1);
+      return `
       <div class="gantt-full-label-row${selectedGanttTaskIds.has(t.id) ? " is-selected" : ""}" data-row-task="${t.id}">
-        <input type="checkbox" class="gantt-select" data-select-row="${t.id}" ${selectedGanttTaskIds.has(t.id) ? "checked" : ""}>
-        <span class="gantt-row-num">${idx + 1}${t.noScheduleImpact ? `<span class="task-table-no-impact" title="No schedule impact — excluded from % complete">&#9679;</span>` : ""}</span>
-        <input type="text" class="gantt-name-input" data-field="name" value="${escapeHtml(t.name)}" title="${escapeHtml(t.name)}">
-        <input type="text" class="gantt-resp-input" data-field="responsible" value="${escapeHtml(t.responsible || "")}" placeholder="Unassigned">
-        <button class="gantt-row-del" data-del-row title="Delete task">&times;</button>
-      </div>`).join("");
+        <input type="checkbox" class="gantt-select gantt-col-check" data-select-row="${t.id}" ${selectedGanttTaskIds.has(t.id) ? "checked" : ""}>
+        <span class="gantt-row-num gantt-col-num">${idx + 1}${t.noScheduleImpact ? `<span class="task-table-no-impact" title="No schedule impact — excluded from % complete">&#9679;</span>` : ""}</span>
+        <span class="gantt-col-name"><input type="text" class="gantt-name-input" data-field="name" value="${escapeHtml(t.name)}" title="${escapeHtml(t.name)}"></span>
+        <span class="gantt-col-resp"><input type="text" class="gantt-resp-input" data-field="responsible" value="${escapeHtml(t.responsible || "")}" placeholder="Unassigned"></span>
+        <span class="gantt-col-pred"><input type="text" class="gantt-pred-input" data-field="predecessors" value="${predNums.join(", ")}" title="${escapeHtml(predTitle)}"></span>
+        <span class="gantt-col-succ"><span class="gantt-succ-display" title="Row numbers that start after this task">${succNums.join(", ") || "—"}</span></span>
+        <button class="gantt-row-del gantt-col-del" data-del-row title="Delete task">&times;</button>
+      </div>`;
+    }).join("");
 
     // ---- date scale ----
     let rangeStart = trav.tasks[0].startDate;
@@ -1684,6 +1700,38 @@
         task.responsible = val;
         const ok = await saveRemote();
         if (!ok) task.responsible = prev;
+        refreshGanttViews(project, trav);
+      });
+
+      const predInput = row.querySelector('[data-field="predecessors"]');
+      predInput.addEventListener("change", async () => {
+        const prevPreds = [...(task.predecessors || [])];
+        const prevStart = task.startDate, prevEnd = task.endDate;
+        const nums = predInput.value.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean).map((s) => parseInt(s, 10));
+        const blockedIds = descendantsOf(project, task.id);
+        const rowIdx = trav.tasks.indexOf(task);
+        const resolvedIds = [];
+        const invalid = [];
+        nums.forEach((n) => {
+          if (!Number.isFinite(n) || n < 1 || n > trav.tasks.length || (n - 1) === rowIdx) { invalid.push(n); return; }
+          const candidate = trav.tasks[n - 1];
+          if (blockedIds.has(candidate.id)) { invalid.push(n); return; }
+          if (!resolvedIds.includes(candidate.id)) resolvedIds.push(candidate.id);
+        });
+        // This field only edits same-traveler dependencies by row number —
+        // any existing cross-traveler predecessor link is left untouched.
+        const externalPreds = prevPreds.filter((id) => !liveIds.has(id));
+        task.predecessors = [...externalPreds, ...resolvedIds];
+        if (resolvedIds.length) {
+          const preds = resolvedIds.map((id) => trav.tasks.find((tk) => tk.id === id));
+          const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
+          task.startDate = nextWorkDay(new Date(latestEnd + 86400000).toISOString().slice(0, 10), project);
+          task.endDate = endDateForDuration(task.startDate, taskDuration(task), project);
+        }
+        recalcSchedule(project);
+        const ok = await saveRemote();
+        if (!ok) { task.predecessors = prevPreds; task.startDate = prevStart; task.endDate = prevEnd; recalcSchedule(project); }
+        if (invalid.length) showStatus(`Ignored invalid row number(s): ${invalid.join(", ")}`, "error");
         refreshGanttViews(project, trav);
       });
 
