@@ -1619,7 +1619,7 @@
         <div class="gantt-full-row${idx % 2 === 1 ? " row-alt" : ""}${selectedGanttTaskIds.has(t.id) ? " is-selected" : ""}">
           <div class="gantt-bar${locked ? " locked" : ""}${isMilestone ? " milestone" : ""}" data-gantt-task="${t.id}"
                style="left:${barLeft}px; width:${barWidth}px;${isMilestone ? "" : ` background:${color};`}"
-               title="${escapeHtml(t.name)} — ${fmtDate(t.startDate)} → ${fmtDate(t.endDate)}${locked ? " (auto-scheduled from a predecessor)" : ""}">
+               title="${escapeHtml(t.name)} — ${fmtDate(t.startDate)} → ${fmtDate(t.endDate)}${locked ? " (auto-scheduled from a predecessor — drag to detach and reschedule manually)" : ""}">
             ${isMilestone ? `<div class="gantt-diamond-shape"></div>` : `
             <div class="gantt-bar-fill" style="width:${t.progress || 0}%"></div>
             ${showLabelInside ? `<span class="gantt-bar-label">${t.progress || 0}%</span>` : ""}
@@ -1853,7 +1853,7 @@
       let wasDragged = false;
       const locked = !!(task.predecessors && task.predecessors.length);
 
-      if (!locked) {
+      {
         let dragging = false;
         let startX = 0, startLeft = 0, deltaDays = 0, scrollAdjustPx = 0, lastClientX = 0;
         const updateMove = () => {
@@ -1889,12 +1889,27 @@
           moveScroller.stop();
           barEl.classList.remove("dragging");
           if (wasDragged && deltaDays !== 0) {
+            // A manual drag is the user overriding the schedule directly, so
+            // it severs this task's own predecessor links (it's no longer
+            // "auto-scheduled from") and removes it from any other task's
+            // predecessor list (nothing keeps auto-cascading off a date the
+            // user just hand-picked).
             const prevStart = task.startDate, prevEnd = task.endDate;
+            const prevOwnPreds = [...(task.predecessors || [])];
+            const affectedSuccessors = allTasks(project).filter((tk) => (tk.predecessors || []).includes(taskId));
+            const prevSuccessorPreds = affectedSuccessors.map((tk) => [...tk.predecessors]);
+            task.predecessors = [];
+            affectedSuccessors.forEach((tk) => { tk.predecessors = tk.predecessors.filter((id) => id !== taskId); });
             task.startDate = addDays(task.startDate, deltaDays);
             task.endDate = endDateForDuration(task.startDate, taskDuration(task), project);
             recalcSchedule(project);
             const ok = await saveRemote();
-            if (!ok) { task.startDate = prevStart; task.endDate = prevEnd; recalcSchedule(project); }
+            if (!ok) {
+              task.startDate = prevStart; task.endDate = prevEnd;
+              task.predecessors = prevOwnPreds;
+              affectedSuccessors.forEach((tk, i) => { tk.predecessors = prevSuccessorPreds[i]; });
+              recalcSchedule(project);
+            }
             refreshGanttViews(project, trav);
           }
         });
