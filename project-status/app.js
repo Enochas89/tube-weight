@@ -436,6 +436,13 @@
     projectGanttDayWidth = PROJECT_GANTT_DAY_WIDTH_DEFAULT * 2;
     renderProjectGanttFull();
     updateProjectGanttZoomLabel();
+    const scrollEl = document.querySelector("#projectGanttView .gantt-full-scroll");
+    const todayLine = document.querySelector("#projectGanttView .gantt-today-line");
+    if (scrollEl && todayLine) {
+      const todayLeft = parseFloat(todayLine.style.left) || 0;
+      scrollEl.scrollLeft = Math.max(0, todayLeft - scrollEl.clientWidth / 3);
+      scrollEl.dispatchEvent(new Event("scroll"));
+    }
   }
 
   // Polls for changes made elsewhere (another editor, the shop-floor QR
