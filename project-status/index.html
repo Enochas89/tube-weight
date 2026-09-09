@@ -34,6 +34,7 @@
       <h2>Projects</h2>
       <div class="header-row-actions">
         <button class="btn-secondary" id="shareListBtn">Share Link</button>
+        <button class="btn-secondary editor-only hidden" id="openProjectGanttBtn">Project Overview</button>
         <button class="btn-secondary editor-only hidden" id="importMspBtn">Import from MS Project</button>
         <input type="file" id="importFileInput" accept=".xml" class="hidden">
         <button class="btn-secondary editor-only hidden" id="importExcelBtn">Import from Excel</button>
@@ -186,6 +187,45 @@
         </div>
         <div class="gantt-full-scroll">
           <div id="ganttFullBody"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PROJECT OVERVIEW (project-level Gantt) ===================== -->
+  <section id="projectGanttView" class="view hidden">
+    <div class="detail-header">
+      <button class="btn-link" id="backFromProjectGanttBtn">&larr; Back to Projects</button>
+      <div class="detail-title-row">
+        <div>
+          <h2>Project Overview</h2>
+          <p class="detail-client">Drag a bar to reschedule, drag its right edge to resize, click it to edit status/manpower/travelers/links</p>
+        </div>
+        <div class="detail-actions">
+          <button class="btn-primary" id="projectGanttAddBtn">+ Add Project</button>
+        </div>
+      </div>
+    </div>
+    <div class="gantt-full">
+      <div class="gantt-full-labels project-gantt-labels">
+        <div class="gantt-full-label-header">
+          <span class="gantt-col-num">#</span>
+          <span class="gantt-col-name">Project</span>
+          <span class="gantt-col-resp">Client</span>
+          <span class="gantt-col-pcount" title="Unique names on Responsible across this project's tasks">Manpower</span>
+          <span class="gantt-col-pcount" title="Travelers in this project">Travelers</span>
+          <span class="gantt-col-pred" title="Row numbers this project starts after">Pred</span>
+          <span class="gantt-col-succ" title="Row numbers that start after this project">Succ</span>
+          <span class="gantt-col-del"></span>
+        </div>
+        <div id="projectGanttLabels"></div>
+      </div>
+      <div class="gantt-full-right-col">
+        <div class="gantt-full-header-clip">
+          <div id="projectGanttHeader"></div>
+        </div>
+        <div class="gantt-full-scroll">
+          <div id="projectGanttBody"></div>
         </div>
       </div>
     </div>

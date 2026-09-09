@@ -15,13 +15,14 @@
 
   // Scrolls the Gantt timeline while a drag's pointer sits near the left/
   // right edge of the visible strip, the way MS Project keeps following a
-  // bar dragged past the current view. `getClientX` reads the live pointer
-  // position each tick; `onScroll(appliedPx)` lets the caller fold the
-  // resulting scroll delta into its own drag math.
-  function makeGanttAutoScroller(getClientX, onScroll) {
+  // bar dragged past the current view. `scrollEl` is the specific scroll
+  // container to drive (there are two in the DOM at once — task Gantt and
+  // project Gantt — so this can't just look one up by class); `getClientX`
+  // reads the live pointer position each tick; `onScroll(appliedPx)` lets
+  // the caller fold the resulting scroll delta into its own drag math.
+  function makeGanttAutoScroller(scrollEl, getClientX, onScroll) {
     let timer = null;
     function tick() {
-      const scrollEl = document.querySelector(".gantt-full-scroll");
       if (!scrollEl) return;
       const rect = scrollEl.getBoundingClientRect();
       const edge = 50, maxSpeed = 16;
@@ -94,6 +95,7 @@
       delete p.delays;
       delete p.notes;
     }
+    if (!Array.isArray(p.predecessors)) p.predecessors = [];
   }
 
   function addDays(dateStr, n) {
@@ -172,6 +174,54 @@
       });
       if (!changed) break;
     }
+  }
+
+  // Project-level counterparts of descendantsOf/recalcSchedule, for the
+  // project-overview Gantt's own predecessor links between whole projects.
+  // No shared calendar concept applies across different projects, so this
+  // just preserves each project's own start-to-end span rather than
+  // consulting isBlockedDay/taskDuration.
+  function descendantsOfProject(projectId, visited) {
+    visited = visited || new Set();
+    state.projects.forEach((p) => {
+      if ((p.predecessors || []).includes(projectId) && !visited.has(p.id)) {
+        visited.add(p.id);
+        descendantsOfProject(p.id, visited);
+      }
+    });
+    return visited;
+  }
+  function successorsOfProject(projectId) {
+    return state.projects.filter((p) => (p.predecessors || []).includes(projectId));
+  }
+  function recalcProjectSchedule() {
+    const byId = {};
+    state.projects.forEach((p) => { byId[p.id] = p; });
+    for (let pass = 0; pass <= state.projects.length; pass++) {
+      let changed = false;
+      state.projects.forEach((p) => {
+        const preds = (p.predecessors || []).map((id) => byId[id]).filter(Boolean);
+        if (!preds.length) return;
+        const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
+        const newStart = addDays(new Date(latestEnd + 86400000).toISOString().slice(0, 10), 0);
+        const spanDays = daysBetween(p.startDate, p.endDate);
+        const newEnd = addDays(newStart, spanDays);
+        if (p.startDate !== newStart || p.endDate !== newEnd) {
+          p.startDate = newStart;
+          p.endDate = newEnd;
+          changed = true;
+        }
+      });
+      if (!changed) break;
+    }
+  }
+  // Unique "Responsible" names across every task in every traveler under a
+  // project — the project overview's manpower list, with no separate field
+  // to keep in sync.
+  function projectManpower(project) {
+    const names = new Set();
+    allTasks(project).forEach((t) => { parseNames(t.responsible).forEach((n) => names.add(n)); });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
   }
 
   function initials(name) {
@@ -354,6 +404,7 @@
     document.getElementById("travelerListView").classList.add("hidden");
     document.getElementById("detailView").classList.add("hidden");
     document.getElementById("ganttView").classList.add("hidden");
+    document.getElementById("projectGanttView").classList.add("hidden");
   }
   function showList() {
     hideAllViews();
@@ -378,6 +429,12 @@
     document.getElementById("ganttViewTravelerName").textContent = trav.name;
     renderGanttFull(p, trav);
   }
+  function showProjectGanttView() {
+    if (!isEditor) return;
+    hideAllViews();
+    document.getElementById("projectGanttView").classList.remove("hidden");
+    renderProjectGanttFull();
+  }
 
   // Polls for changes made elsewhere (another editor, the shop-floor QR
   // flow, a claimed traveler) and re-renders whatever's currently on screen.
@@ -387,6 +444,7 @@
   async function silentRefresh() {
     if (!modalBackdrop.classList.contains("hidden")) return;
     if (!document.getElementById("ganttView").classList.contains("hidden")) return;
+    if (!document.getElementById("projectGanttView").classList.contains("hidden")) return;
     try {
       const res = await fetch(API_URL);
       if (!res.ok) return;
@@ -446,6 +504,8 @@
   }
 
   document.getElementById("newProjectBtn").addEventListener("click", () => openProjectModal());
+  document.getElementById("openProjectGanttBtn").addEventListener("click", () => showProjectGanttView());
+  document.getElementById("backFromProjectGanttBtn").addEventListener("click", () => { showList(); });
 
   // ---------- MS Project XML import ----------
   // Reads only direct children by local name — namespace-agnostic (MSP XML
@@ -869,8 +929,14 @@
     if (!confirm("Delete this project and all its travelers? This can't be undone.")) return;
     const removed = state.projects.find((p) => p.id === currentProjectId);
     state.projects = state.projects.filter((p) => p.id !== currentProjectId);
+    const affectedSuccessors = state.projects.filter((p) => (p.predecessors || []).includes(currentProjectId));
+    affectedSuccessors.forEach((p) => { p.predecessors = p.predecessors.filter((id) => id !== currentProjectId); });
     const ok = await saveRemote();
-    if (!ok) { state.projects.push(removed); return; }
+    if (!ok) {
+      state.projects.push(removed);
+      affectedSuccessors.forEach((p) => { p.predecessors.push(currentProjectId); });
+      return;
+    }
     location.hash = "";
   });
   document.getElementById("newTravelerBtn").addEventListener("click", () => openTravelerModal(getProject(currentProjectId)));
@@ -1312,6 +1378,7 @@
           description: document.getElementById("f-desc").value.trim(),
           excludeSat, excludeSun,
           travelers: [],
+          predecessors: [],
         };
         state.projects.push(p);
         const ok = await saveRemote();
@@ -1524,6 +1591,7 @@
     const labels = document.getElementById("ganttFullLabels");
     const header = document.getElementById("ganttFullHeader");
     const body = document.getElementById("ganttFullBody");
+    const scrollEl = document.querySelector("#ganttView .gantt-full-scroll");
 
     const liveIds = new Set(trav.tasks.map((t) => t.id));
     Array.from(selectedGanttTaskIds).forEach((id) => { if (!liveIds.has(id)) selectedGanttTaskIds.delete(id); });
@@ -1864,7 +1932,7 @@
             barEl.style.left = (startLeft + deltaDays * GANTT_DAY_WIDTH) + "px";
           }
         };
-        const moveScroller = makeGanttAutoScroller(() => lastClientX, (applied) => { scrollAdjustPx += applied; updateMove(); });
+        const moveScroller = makeGanttAutoScroller(scrollEl, () => lastClientX, (applied) => { scrollAdjustPx += applied; updateMove(); });
         barEl.addEventListener("pointerdown", (e) => {
           if (e.target.closest(".gantt-bar-popover") || e.target.closest(".gantt-bar-resize") || e.target.closest(".gantt-link-handle")) return;
           dragging = true;
@@ -1933,7 +2001,7 @@
             barEl.style.width = newWidth + "px";
           }
         };
-        const resizeScroller = makeGanttAutoScroller(() => resizeLastClientX, (applied) => { resizeScrollAdjustPx += applied; updateResize(); });
+        const resizeScroller = makeGanttAutoScroller(scrollEl, () => resizeLastClientX, (applied) => { resizeScrollAdjustPx += applied; updateResize(); });
         resizeHandle.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
           resizing = true;
@@ -1977,7 +2045,7 @@
       const linkHandle = barEl.querySelector(".gantt-link-handle");
       let linking = false;
       let linkLastClientX = 0, linkLastClientY = 0, previewLine = null;
-      const linkScroller = makeGanttAutoScroller(() => linkLastClientX, () => {});
+      const linkScroller = makeGanttAutoScroller(scrollEl, () => linkLastClientX, () => {});
       linkHandle.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         linking = true;
@@ -2054,9 +2122,11 @@
   // own header row, since giving that container horizontal scroll forces its
   // vertical overflow to compute as "auto" too, making it -- not the page --
   // the container sticky positioning resolves against). Keep the two in sync
-  // by mirroring the body's horizontal scroll onto the header strip.
-  document.querySelector(".gantt-full-scroll").addEventListener("scroll", (e) => {
-    document.querySelector(".gantt-full-header-clip").scrollLeft = e.target.scrollLeft;
+  // by mirroring the body's horizontal scroll onto the header strip. Scoped
+  // to #ganttView specifically since #projectGanttView has its own identical
+  // pair of elements sharing the same classes.
+  document.querySelector("#ganttView .gantt-full-scroll").addEventListener("scroll", (e) => {
+    document.querySelector("#ganttView .gantt-full-header-clip").scrollLeft = e.target.scrollLeft;
   });
 
   async function bulkSetGanttCompletion(complete) {
@@ -2126,6 +2196,543 @@
     const p = getProject(currentProjectId);
     const trav = p && getTraveler(p, currentTravelerId);
     if (trav) renderGanttFull(p, trav);
+  });
+
+  // ---------- project overview (project-level Gantt) ----------
+  const PROJECT_STATUS_OPTIONS = Object.entries(STATUS_LABELS);
+  const PROJECT_DAY_WIDTH = 8;
+
+  function refreshProjectGanttView() {
+    renderProjectGanttFull();
+    renderList();
+  }
+
+  // Links sourceId as a predecessor of targetProject — shared by the
+  // popover's predecessor checkboxes and the bar's drag-to-link handle.
+  async function linkProjects(sourceId, targetProject) {
+    if (targetProject.id === sourceId) return;
+    if ((targetProject.predecessors || []).includes(sourceId)) { showStatus("Already linked.", "info"); return; }
+    const blocked = descendantsOfProject(targetProject.id);
+    if (blocked.has(sourceId)) { showStatus("Can't link — that would create a circular dependency.", "error"); return; }
+    const prevPreds = [...(targetProject.predecessors || [])];
+    const prevStart = targetProject.startDate, prevEnd = targetProject.endDate;
+    targetProject.predecessors = [...prevPreds, sourceId];
+    const preds = targetProject.predecessors.map((id) => state.projects.find((pp) => pp.id === id)).filter(Boolean);
+    const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
+    const spanDays = daysBetween(targetProject.startDate, targetProject.endDate);
+    const newStart = new Date(latestEnd + 86400000).toISOString().slice(0, 10);
+    targetProject.startDate = newStart;
+    targetProject.endDate = addDays(newStart, spanDays);
+    recalcProjectSchedule();
+    const ok = await saveRemote();
+    if (!ok) { targetProject.predecessors = prevPreds; targetProject.startDate = prevStart; targetProject.endDate = prevEnd; recalcProjectSchedule(); }
+    refreshProjectGanttView();
+  }
+
+  function renderProjectGanttFull() {
+    const labels = document.getElementById("projectGanttLabels");
+    const header = document.getElementById("projectGanttHeader");
+    const body = document.getElementById("projectGanttBody");
+    const scrollEl = document.querySelector("#projectGanttView .gantt-full-scroll");
+
+    if (!state.projects.length) {
+      labels.innerHTML = "";
+      header.innerHTML = "";
+      body.innerHTML = `<div class="empty-state">No projects yet. Click "+ Add Project" to get started.</div>`;
+      return;
+    }
+
+    // ---- labels: name, client, manpower/traveler mini-popovers, predecessors ----
+    labels.innerHTML = state.projects.map((p, idx) => {
+      const predNums = (p.predecessors || [])
+        .map((id) => state.projects.findIndex((pp) => pp.id === id))
+        .filter((i) => i !== -1)
+        .map((i) => i + 1);
+      const succNums = successorsOfProject(p.id)
+        .map((s) => state.projects.findIndex((pp) => pp.id === s.id))
+        .filter((i) => i !== -1)
+        .map((i) => i + 1);
+      const manpower = projectManpower(p);
+      const otherTravelerOptions = state.projects.filter((pp) => pp.id !== p.id)
+        .flatMap((pp) => pp.travelers.map((t) => `<option value="${pp.id}::${t.id}">${escapeHtml(t.name)} — ${escapeHtml(pp.name)}</option>`))
+        .join("");
+      return `
+      <div class="gantt-full-label-row${idx % 2 === 1 ? " row-alt" : ""}" data-row-project="${p.id}">
+        <span class="gantt-row-num gantt-col-num">${idx + 1}</span>
+        <span class="gantt-col-name"><input type="text" class="gantt-name-input" data-field="name" value="${escapeHtml(p.name)}" title="${escapeHtml(p.name)}"></span>
+        <span class="gantt-col-resp"><input type="text" class="gantt-resp-input" data-field="client" value="${escapeHtml(p.client || "")}" placeholder="Client"></span>
+        <span class="gantt-col-pcount gantt-mini-popover-wrap">
+          <button type="button" class="gantt-manpower-count" data-manpower-toggle title="Unique names on Responsible across this project's tasks">${manpower.length}</button>
+          <div class="gantt-mini-popover">
+            ${manpower.length ? manpower.map((n) => `<div class="gantt-mini-popover-item">${escapeHtml(n)}</div>`).join("") : `<p class="modal-hint">No responsible names logged yet.</p>`}
+          </div>
+        </span>
+        <span class="gantt-col-pcount gantt-mini-popover-wrap">
+          <button type="button" class="gantt-traveler-count" data-travelers-toggle title="Travelers in this project">${p.travelers.length}</button>
+          <div class="gantt-mini-popover">
+            ${p.travelers.length ? p.travelers.map((t) => `<div class="gantt-mini-popover-item">${escapeHtml(t.name)}</div>`).join("") : `<p class="modal-hint">No travelers yet.</p>`}
+            <label class="modal-label-hint" style="display:block; margin-top:8px;">Move a traveler here</label>
+            <select class="gantt-move-traveler-select">
+              <option value="">— choose —</option>
+              ${otherTravelerOptions}
+            </select>
+          </div>
+        </span>
+        <span class="gantt-col-pred"><input type="text" class="gantt-pred-input" data-field="predecessors" value="${predNums.join(", ")}" title="Row numbers this project starts after, e.g. 1, 3"></span>
+        <span class="gantt-col-succ"><span class="gantt-succ-display" title="Row numbers that start after this project">${succNums.join(", ") || "—"}</span></span>
+        <button class="gantt-row-del gantt-col-del" data-del-project title="Delete project">&times;</button>
+      </div>`;
+    }).join("");
+
+    // ---- date scale: month bands rather than individual days, since a
+    // project's own span usually runs weeks-to-months, not days ----
+    let rangeStart = state.projects[0].startDate;
+    let rangeEnd = state.projects[0].endDate;
+    state.projects.forEach((p) => {
+      if (p.startDate < rangeStart) rangeStart = p.startDate;
+      if (p.endDate > rangeEnd) rangeEnd = p.endDate;
+    });
+    rangeStart = addDays(rangeStart, -7);
+    rangeEnd = addDays(rangeEnd, 7);
+    const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
+    const totalWidth = totalDays * PROJECT_DAY_WIDTH;
+    const totalHeight = state.projects.length * GANTT_ROW_HEIGHT;
+    const today = todayStr();
+
+    const monthSegments = [];
+    let curKey = null, curWidth = 0, curLabel = "";
+    for (let i = 0; i < totalDays; i++) {
+      const d = addDays(rangeStart, i);
+      const dt = new Date(d + "T00:00:00");
+      const key = dt.getFullYear() + "-" + dt.getMonth();
+      if (key !== curKey) {
+        if (curKey !== null) monthSegments.push({ label: curLabel, width: curWidth });
+        curKey = key;
+        curLabel = dt.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+        curWidth = 0;
+      }
+      curWidth += PROJECT_DAY_WIDTH;
+    }
+    if (curKey !== null) monthSegments.push({ label: curLabel, width: curWidth });
+    header.innerHTML = `<div class="gantt-full-header-row" style="width:${totalWidth}px">${monthSegments.map((seg) => `<div class="gantt-full-day project-month-seg" style="width:${seg.width}px">${seg.label}</div>`).join("")}</div>`;
+
+    // ---- bars ----
+    const layout = {};
+    const barsHtml = state.projects.map((p, idx) => {
+      const offsetDays = daysBetween(rangeStart, p.startDate);
+      const spanDays = daysBetween(p.startDate, p.endDate) + 1;
+      const barLeft = offsetDays * PROJECT_DAY_WIDTH;
+      const barWidth = Math.max(PROJECT_DAY_WIDTH * 2 - 2, spanDays * PROJECT_DAY_WIDTH - 2);
+      layout[p.id] = { idx, left: barLeft, width: barWidth };
+      const color = `var(--status-${p.status})`;
+      const locked = (p.predecessors || []).length > 0;
+      const blocked = descendantsOfProject(p.id);
+      const predCandidates = state.projects.filter((pp) => pp.id !== p.id && !blocked.has(pp.id));
+      const predCheckboxes = predCandidates.length
+        ? predCandidates.map((pp) => `<label class="checkbox-row"><input type="checkbox" class="gantt-pred-cb" value="${pp.id}" ${(p.predecessors || []).includes(pp.id) ? "checked" : ""}> ${escapeHtml(pp.name)}</label>`).join("")
+        : `<p class="modal-hint">No other projects to depend on yet.</p>`;
+      const showLabelOutside = barWidth < 70;
+      return `
+        <div class="gantt-full-row${idx % 2 === 1 ? " row-alt" : ""}">
+          <div class="gantt-bar${locked ? " locked" : ""}" data-gantt-project="${p.id}"
+               style="left:${barLeft}px; width:${barWidth}px; background:${color};"
+               title="${escapeHtml(p.name)} — ${fmtDate(p.startDate)} → ${fmtDate(p.endDate)}${locked ? " (auto-scheduled from a predecessor — drag to detach)" : ""}">
+            <span class="gantt-bar-label${showLabelOutside ? " outside" : ""}">${escapeHtml(p.name)}</span>
+            <div class="gantt-bar-resize" title="Drag to change duration"></div>
+            <div class="gantt-link-handle" title="Drag to link this project to another (it becomes that project's predecessor)"></div>
+            <div class="gantt-bar-popover" data-popover-for="${p.id}">
+              <label>Status
+                <select data-gantt-field="status">
+                  ${PROJECT_STATUS_OPTIONS.map(([v, label]) => `<option value="${v}" ${p.status === v ? "selected" : ""}>${label}</option>`).join("")}
+                </select>
+              </label>
+              <div class="gantt-popover-preds">
+                <div class="modal-label-hint">Predecessors</div>
+                ${predCheckboxes}
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }).join("");
+
+    // ---- dependency arrows ----
+    const linkPaths = [];
+    state.projects.forEach((p) => {
+      const succLayout = layout[p.id];
+      (p.predecessors || []).forEach((predId) => {
+        const predLayout = layout[predId];
+        if (!predLayout || !succLayout) return;
+        const startX = predLayout.left + predLayout.width;
+        const startY = predLayout.idx * GANTT_ROW_HEIGHT + GANTT_ROW_HEIGHT / 2;
+        const endX = succLayout.left;
+        const endY = succLayout.idx * GANTT_ROW_HEIGHT + GANTT_ROW_HEIGHT / 2;
+        const midX = endX > startX ? (startX + endX) / 2 : startX + 8;
+        linkPaths.push(`<path class="gantt-link-path" d="M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}" marker-end="url(#projectArrowHead)"></path>`);
+      });
+    });
+    const linksSvg = `
+      <svg class="gantt-links-svg" width="${totalWidth}" height="${totalHeight}">
+        <defs>
+          <marker id="projectArrowHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path class="gantt-link-arrow" d="M0,0 L6,3 L0,6 Z"></path>
+          </marker>
+        </defs>
+        ${linkPaths.join("")}
+      </svg>`;
+
+    const todayLine = (today >= rangeStart && today <= rangeEnd)
+      ? `<div class="gantt-today-line" style="left:${daysBetween(rangeStart, today) * PROJECT_DAY_WIDTH}px; height:${totalHeight}px;" title="Today"></div>`
+      : "";
+
+    body.innerHTML = `<div class="gantt-full-body-inner" style="width:${totalWidth}px">${linksSvg}${todayLine}${barsHtml}</div>`;
+
+    // ---- wire labels ----
+    labels.querySelectorAll("[data-row-project]").forEach((row) => {
+      const projectId = row.dataset.rowProject;
+      const project = state.projects.find((pp) => pp.id === projectId);
+      if (!project) return;
+
+      const nameInput = row.querySelector('[data-field="name"]');
+      nameInput.addEventListener("change", async () => {
+        const prev = project.name;
+        const val = nameInput.value.trim() || "Untitled project";
+        if (val === prev) { nameInput.value = prev; return; }
+        project.name = val;
+        const ok = await saveRemote();
+        if (!ok) project.name = prev;
+        refreshProjectGanttView();
+      });
+
+      const clientInput = row.querySelector('[data-field="client"]');
+      clientInput.addEventListener("change", async () => {
+        const prev = project.client;
+        const val = clientInput.value.trim();
+        if (val === prev) return;
+        project.client = val;
+        const ok = await saveRemote();
+        if (!ok) project.client = prev;
+        refreshProjectGanttView();
+      });
+
+      const predInput = row.querySelector('[data-field="predecessors"]');
+      predInput.addEventListener("change", async () => {
+        const prevPreds = [...(project.predecessors || [])];
+        const prevStart = project.startDate, prevEnd = project.endDate;
+        const nums = predInput.value.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean).map((s) => parseInt(s, 10));
+        const blockedIds = descendantsOfProject(project.id);
+        const rowIdx = state.projects.indexOf(project);
+        const resolvedIds = [];
+        const invalid = [];
+        nums.forEach((n) => {
+          if (!Number.isFinite(n) || n < 1 || n > state.projects.length || (n - 1) === rowIdx) { invalid.push(n); return; }
+          const candidate = state.projects[n - 1];
+          if (blockedIds.has(candidate.id)) { invalid.push(n); return; }
+          if (!resolvedIds.includes(candidate.id)) resolvedIds.push(candidate.id);
+        });
+        project.predecessors = resolvedIds;
+        if (resolvedIds.length) {
+          const preds = resolvedIds.map((id) => state.projects.find((pp) => pp.id === id));
+          const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
+          const spanDays = daysBetween(project.startDate, project.endDate);
+          const newStart = new Date(latestEnd + 86400000).toISOString().slice(0, 10);
+          project.startDate = newStart;
+          project.endDate = addDays(newStart, spanDays);
+        }
+        recalcProjectSchedule();
+        const ok = await saveRemote();
+        if (!ok) { project.predecessors = prevPreds; project.startDate = prevStart; project.endDate = prevEnd; recalcProjectSchedule(); }
+        if (invalid.length) showStatus(`Ignored invalid row number(s): ${invalid.join(", ")}`, "error");
+        refreshProjectGanttView();
+      });
+
+      row.querySelector("[data-del-project]").addEventListener("click", async () => {
+        if (!confirm(`Delete "${project.name}" and all its travelers? This can't be undone.`)) return;
+        const removedIdx = state.projects.indexOf(project);
+        state.projects = state.projects.filter((pp) => pp.id !== projectId);
+        const affectedSuccessors = state.projects.filter((pp) => (pp.predecessors || []).includes(projectId));
+        const prevSuccessorPreds = affectedSuccessors.map((pp) => [...pp.predecessors]);
+        affectedSuccessors.forEach((pp) => { pp.predecessors = pp.predecessors.filter((id) => id !== projectId); });
+        const ok = await saveRemote();
+        if (!ok) {
+          state.projects.splice(removedIdx, 0, project);
+          affectedSuccessors.forEach((pp, i) => { pp.predecessors = prevSuccessorPreds[i]; });
+          return;
+        }
+        refreshProjectGanttView();
+      });
+
+      // Manpower / travelers mini-popovers: click-to-toggle, closing others.
+      const manpowerBtn = row.querySelector("[data-manpower-toggle]");
+      const manpowerPopover = manpowerBtn.nextElementSibling;
+      manpowerBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const wasOpen = manpowerPopover.classList.contains("open");
+        document.querySelectorAll(".gantt-mini-popover.open, .gantt-bar-popover.open").forEach((el) => el.classList.remove("open"));
+        if (!wasOpen) manpowerPopover.classList.add("open");
+      });
+      manpowerPopover.addEventListener("click", (e) => e.stopPropagation());
+
+      const travelersBtn = row.querySelector("[data-travelers-toggle]");
+      const travelersPopover = travelersBtn.nextElementSibling;
+      travelersBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const wasOpen = travelersPopover.classList.contains("open");
+        document.querySelectorAll(".gantt-mini-popover.open, .gantt-bar-popover.open").forEach((el) => el.classList.remove("open"));
+        if (!wasOpen) travelersPopover.classList.add("open");
+      });
+      travelersPopover.addEventListener("click", (e) => e.stopPropagation());
+      const moveSelect = travelersPopover.querySelector(".gantt-move-traveler-select");
+      if (moveSelect) {
+        moveSelect.addEventListener("change", async () => {
+          const val = moveSelect.value;
+          if (!val) return;
+          const [sourceProjectId, travelerId] = val.split("::");
+          const sourceProject = state.projects.find((pp) => pp.id === sourceProjectId);
+          if (!sourceProject) return;
+          const travelerIdx = sourceProject.travelers.findIndex((t) => t.id === travelerId);
+          if (travelerIdx === -1) return;
+          const [moved] = sourceProject.travelers.splice(travelerIdx, 1);
+          project.travelers.push(moved);
+          const ok = await saveRemote();
+          if (!ok) {
+            project.travelers.pop();
+            sourceProject.travelers.splice(travelerIdx, 0, moved);
+            return;
+          }
+          refreshProjectGanttView();
+        });
+      }
+    });
+
+    // ---- wire bars ----
+    body.querySelectorAll("[data-gantt-project]").forEach((barEl) => {
+      const projectId = barEl.dataset.ganttProject;
+      const project = state.projects.find((pp) => pp.id === projectId);
+      if (!project) return;
+      const popover = barEl.querySelector(".gantt-bar-popover");
+
+      popover.querySelector('[data-gantt-field="status"]').addEventListener("change", async (e) => {
+        const prevStatus = project.status;
+        project.status = e.target.value;
+        const ok = await saveRemote();
+        if (!ok) project.status = prevStatus;
+        refreshProjectGanttView();
+      });
+      popover.querySelectorAll(".gantt-pred-cb").forEach((cb) => {
+        cb.addEventListener("change", async () => {
+          const prevPreds = [...(project.predecessors || [])];
+          const prevStart = project.startDate, prevEnd = project.endDate;
+          const selected = Array.from(popover.querySelectorAll(".gantt-pred-cb:checked")).map((el) => el.value);
+          project.predecessors = selected;
+          if (selected.length) {
+            const preds = selected.map((id) => state.projects.find((pp) => pp.id === id)).filter(Boolean);
+            const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
+            const spanDays = daysBetween(project.startDate, project.endDate);
+            const newStart = new Date(latestEnd + 86400000).toISOString().slice(0, 10);
+            project.startDate = newStart;
+            project.endDate = addDays(newStart, spanDays);
+          }
+          recalcProjectSchedule();
+          const ok = await saveRemote();
+          if (!ok) { project.predecessors = prevPreds; project.startDate = prevStart; project.endDate = prevEnd; recalcProjectSchedule(); }
+          refreshProjectGanttView();
+        });
+      });
+      popover.addEventListener("click", (e) => e.stopPropagation());
+
+      let wasDragged = false;
+
+      // Move: drag the bar to reschedule. Like the task Gantt, a manual drag
+      // is the user overriding the schedule directly, so it severs this
+      // project's own predecessor link and its place in any other
+      // project's predecessor list.
+      {
+        let dragging = false;
+        let startX = 0, startLeft = 0, deltaDays = 0, scrollAdjustPx = 0, lastClientX = 0;
+        const updateMove = () => {
+          const dDays = Math.round((lastClientX - startX + scrollAdjustPx) / PROJECT_DAY_WIDTH);
+          if (dDays !== deltaDays) {
+            deltaDays = dDays;
+            wasDragged = wasDragged || dDays !== 0;
+            barEl.style.left = (startLeft + deltaDays * PROJECT_DAY_WIDTH) + "px";
+          }
+        };
+        const moveScroller = makeGanttAutoScroller(scrollEl, () => lastClientX, (applied) => { scrollAdjustPx += applied; updateMove(); });
+        barEl.addEventListener("pointerdown", (e) => {
+          if (e.target.closest(".gantt-bar-popover") || e.target.closest(".gantt-bar-resize") || e.target.closest(".gantt-link-handle")) return;
+          dragging = true;
+          wasDragged = false;
+          deltaDays = 0;
+          scrollAdjustPx = 0;
+          startX = e.clientX;
+          lastClientX = e.clientX;
+          startLeft = parseFloat(barEl.style.left) || 0;
+          barEl.setPointerCapture(e.pointerId);
+          barEl.classList.add("dragging");
+          moveScroller.start();
+        });
+        barEl.addEventListener("pointermove", (e) => {
+          if (!dragging) return;
+          lastClientX = e.clientX;
+          updateMove();
+        });
+        barEl.addEventListener("pointerup", async () => {
+          if (!dragging) return;
+          dragging = false;
+          moveScroller.stop();
+          barEl.classList.remove("dragging");
+          if (wasDragged && deltaDays !== 0) {
+            const prevStart = project.startDate, prevEnd = project.endDate;
+            const prevOwnPreds = [...(project.predecessors || [])];
+            const affectedSuccessors = state.projects.filter((pp) => (pp.predecessors || []).includes(projectId));
+            const prevSuccessorPreds = affectedSuccessors.map((pp) => [...pp.predecessors]);
+            project.predecessors = [];
+            affectedSuccessors.forEach((pp) => { pp.predecessors = pp.predecessors.filter((id) => id !== projectId); });
+            project.startDate = addDays(project.startDate, deltaDays);
+            project.endDate = addDays(project.endDate, deltaDays);
+            recalcProjectSchedule();
+            const ok = await saveRemote();
+            if (!ok) {
+              project.startDate = prevStart; project.endDate = prevEnd;
+              project.predecessors = prevOwnPreds;
+              affectedSuccessors.forEach((pp, i) => { pp.predecessors = prevSuccessorPreds[i]; });
+              recalcProjectSchedule();
+            }
+            refreshProjectGanttView();
+          }
+        });
+      }
+
+      // Resize: drag the right edge to change how long the project runs.
+      const resizeHandle = barEl.querySelector(".gantt-bar-resize");
+      if (resizeHandle) {
+        let resizing = false;
+        let resizeStartX = 0, startWidth = 0, resizeDeltaDays = 0, resizeChanged = false, resizeScrollAdjustPx = 0, resizeLastClientX = 0;
+        const updateResize = () => {
+          const dDays = Math.round((resizeLastClientX - resizeStartX + resizeScrollAdjustPx) / PROJECT_DAY_WIDTH);
+          if (dDays !== resizeDeltaDays) {
+            resizeDeltaDays = dDays;
+            resizeChanged = true;
+            const newWidth = Math.max(PROJECT_DAY_WIDTH * 2 - 2, startWidth + dDays * PROJECT_DAY_WIDTH);
+            barEl.style.width = newWidth + "px";
+          }
+        };
+        const resizeScroller = makeGanttAutoScroller(scrollEl, () => resizeLastClientX, (applied) => { resizeScrollAdjustPx += applied; updateResize(); });
+        resizeHandle.addEventListener("pointerdown", (e) => {
+          e.stopPropagation();
+          resizing = true;
+          resizeChanged = false;
+          resizeDeltaDays = 0;
+          resizeScrollAdjustPx = 0;
+          resizeStartX = e.clientX;
+          resizeLastClientX = e.clientX;
+          startWidth = parseFloat(barEl.style.width) || PROJECT_DAY_WIDTH;
+          resizeHandle.setPointerCapture(e.pointerId);
+          barEl.classList.add("dragging");
+          resizeScroller.start();
+        });
+        resizeHandle.addEventListener("pointermove", (e) => {
+          if (!resizing) return;
+          resizeLastClientX = e.clientX;
+          updateResize();
+        });
+        resizeHandle.addEventListener("pointerup", async (e) => {
+          e.stopPropagation();
+          if (!resizing) return;
+          resizing = false;
+          resizeScroller.stop();
+          barEl.classList.remove("dragging");
+          if (resizeChanged) {
+            const prevEnd = project.endDate;
+            const spanDays = Math.max(0, daysBetween(project.startDate, project.endDate) + resizeDeltaDays);
+            project.endDate = addDays(project.startDate, spanDays);
+            recalcProjectSchedule();
+            const ok = await saveRemote();
+            if (!ok) { project.endDate = prevEnd; recalcProjectSchedule(); }
+            refreshProjectGanttView();
+          }
+        });
+      }
+
+      // Link: drag from this bar to another to make THIS project a
+      // predecessor of whichever bar the pointer is released over.
+      const linkHandle = barEl.querySelector(".gantt-link-handle");
+      let linking = false;
+      let linkLastClientX = 0, linkLastClientY = 0, previewLine = null;
+      const linkScroller = makeGanttAutoScroller(scrollEl, () => linkLastClientX, () => {});
+      linkHandle.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        linking = true;
+        linkHandle.classList.add("linking");
+        const rect = linkHandle.getBoundingClientRect();
+        linkLastClientX = e.clientX;
+        linkLastClientY = e.clientY;
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("style", "position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;");
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", rect.left + rect.width / 2);
+        line.setAttribute("y1", rect.top + rect.height / 2);
+        line.setAttribute("x2", e.clientX);
+        line.setAttribute("y2", e.clientY);
+        line.setAttribute("stroke", "var(--accent)");
+        line.setAttribute("stroke-width", "2");
+        line.setAttribute("stroke-dasharray", "4 3");
+        svg.appendChild(line);
+        document.body.appendChild(svg);
+        previewLine = line;
+        linkHandle.setPointerCapture(e.pointerId);
+        linkScroller.start();
+      });
+      linkHandle.addEventListener("pointermove", (e) => {
+        if (!linking) return;
+        linkLastClientX = e.clientX;
+        linkLastClientY = e.clientY;
+        if (previewLine) { previewLine.setAttribute("x2", e.clientX); previewLine.setAttribute("y2", e.clientY); }
+      });
+      linkHandle.addEventListener("pointerup", async (e) => {
+        if (!linking) return;
+        linking = false;
+        linkHandle.classList.remove("linking");
+        linkScroller.stop();
+        if (previewLine) { previewLine.closest("svg").remove(); previewLine = null; }
+        const targetEl = document.elementFromPoint(e.clientX, e.clientY)?.closest(".gantt-bar");
+        if (targetEl && targetEl !== barEl) {
+          const targetProject = state.projects.find((pp) => pp.id === targetEl.dataset.ganttProject);
+          if (targetProject) await linkProjects(projectId, targetProject);
+        }
+      });
+
+      barEl.addEventListener("click", (e) => {
+        if (e.target.closest(".gantt-bar-popover") || e.target.closest(".gantt-bar-resize") || e.target.closest(".gantt-link-handle")) return;
+        if (wasDragged) { wasDragged = false; return; }
+        const wasOpen = popover.classList.contains("open");
+        document.querySelectorAll(".gantt-bar-popover.open, .gantt-mini-popover.open").forEach((p2) => p2.classList.remove("open"));
+        if (!wasOpen) popover.classList.add("open");
+      });
+    });
+  }
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".gantt-bar") || e.target.closest(".gantt-mini-popover-wrap")) return;
+    document.querySelectorAll(".gantt-mini-popover.open").forEach((p) => p.classList.remove("open"));
+  });
+
+  document.getElementById("projectGanttAddBtn").addEventListener("click", async () => {
+    const today = todayStr();
+    const newProject = {
+      id: uid(), name: "New Project", client: "", status: "on_track",
+      startDate: today, endDate: addDays(today, 13), description: "",
+      travelers: [], predecessors: [],
+    };
+    state.projects.push(newProject);
+    const ok = await saveRemote();
+    if (!ok) { state.projects.pop(); return; }
+    refreshProjectGanttView();
+    const nameField = document.querySelector(`.gantt-full-label-row[data-row-project="${newProject.id}"] [data-field="name"]`);
+    if (nameField) { nameField.focus(); nameField.select(); }
+  });
+
+  document.querySelector("#projectGanttView .gantt-full-scroll").addEventListener("scroll", (e) => {
+    document.querySelector("#projectGanttView .gantt-full-header-clip").scrollLeft = e.target.scrollLeft;
   });
 
   // ---------- init ----------

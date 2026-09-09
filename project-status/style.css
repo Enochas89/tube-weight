@@ -352,7 +352,23 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .gantt-col-name { flex: 1 1 auto; min-width: 0; }
 .gantt-col-resp { flex: 0 0 78px; }
 .gantt-col-pred, .gantt-col-succ { flex: 0 0 56px; }
+.gantt-col-pcount { flex: 0 0 64px; text-align: center; }
 .gantt-col-del { flex-shrink: 0; width: 16px; }
+.project-gantt-labels { width: 560px; }
+.gantt-manpower-count, .gantt-traveler-count {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 2px;
+  cursor: pointer;
+  font: inherit;
+}
+.gantt-manpower-count:hover, .gantt-traveler-count:hover { border-color: var(--border); color: var(--text); }
 .gantt-name-input, .gantt-resp-input, .gantt-pred-input {
   border: 1px solid transparent;
   background: transparent;
@@ -520,6 +536,35 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 }
 .gantt-bar-popover .checkbox-row { flex-direction: row; align-items: center; font-weight: 400; color: var(--text); margin-bottom: 0; }
 .gantt-popover-preds { max-height: 140px; overflow-y: auto; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 10px; }
+
+.gantt-mini-popover-wrap { position: relative; }
+.gantt-mini-popover {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 210px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.18);
+  padding: 10px 12px;
+  z-index: 25;
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--text);
+  cursor: default;
+}
+.gantt-mini-popover.open { display: block; }
+.gantt-mini-popover-item { padding: 5px 0; border-top: 1px solid var(--border); }
+.gantt-mini-popover-item:first-child { border-top: none; padding-top: 0; }
+.gantt-mini-popover select { width: 100%; font: inherit; font-size: 0.76rem; padding: 5px 6px; border: 1px solid var(--border); border-radius: 5px; margin-top: 4px; }
+.project-month-seg { font-weight: 700; color: var(--text); display: flex; align-items: center; justify-content: center; }
+.gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); opacity: 0.55; pointer-events: none; z-index: 1; }
 .task-table-no-impact { color: var(--text-dim); font-size: 0.55rem; margin-left: 3px; vertical-align: middle; }
 .task-card-title .status-dot { margin-top: 6px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
