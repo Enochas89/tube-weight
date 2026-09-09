@@ -11,6 +11,37 @@
   // Monday/ClickUp-style vibrant status colors rather than muted ones.
   const TASK_STATUS_COLOR = { not_started: "#c4c4c4", in_progress: "#fdab3d", delayed: "#e2445c", complete: "#00c875" };
   const GANTT_DAY_WIDTH = 34;
+  const GANTT_ROW_HEIGHT = 40;
+
+  // Scrolls the Gantt timeline while a drag's pointer sits near the left/
+  // right edge of the visible strip, the way MS Project keeps following a
+  // bar dragged past the current view. `getClientX` reads the live pointer
+  // position each tick; `onScroll(appliedPx)` lets the caller fold the
+  // resulting scroll delta into its own drag math.
+  function makeGanttAutoScroller(getClientX, onScroll) {
+    let timer = null;
+    function tick() {
+      const scrollEl = document.querySelector(".gantt-full-scroll");
+      if (!scrollEl) return;
+      const rect = scrollEl.getBoundingClientRect();
+      const edge = 50, maxSpeed = 16;
+      const clientX = getClientX();
+      let vx = 0;
+      if (clientX < rect.left + edge) vx = -maxSpeed * (1 - Math.max(0, clientX - rect.left) / edge);
+      else if (clientX > rect.right - edge) vx = maxSpeed * (1 - Math.max(0, rect.right - clientX) / edge);
+      if (vx !== 0) {
+        const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+        const prev = scrollEl.scrollLeft;
+        scrollEl.scrollLeft = Math.max(0, Math.min(maxScroll, scrollEl.scrollLeft + vx));
+        const applied = scrollEl.scrollLeft - prev;
+        if (applied !== 0) onScroll(applied);
+      }
+    }
+    return {
+      start() { if (!timer) timer = setInterval(tick, 40); },
+      stop() { if (timer) { clearInterval(timer); timer = null; } },
+    };
+  }
   const TASK_STATUS_OPTIONS = [
     ["not_started", "Not Started"],
     ["in_progress", "In Progress"],
@@ -1526,6 +1557,7 @@
     rangeEnd = addDays(rangeEnd, 3);
     const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
     const totalWidth = totalDays * GANTT_DAY_WIDTH;
+    const totalHeight = trav.tasks.length * GANTT_ROW_HEIGHT;
     const today = todayStr();
 
     const dayCells = [];
@@ -1542,9 +1574,17 @@
     header.innerHTML = `<div class="gantt-full-header-row" style="width:${totalWidth}px">${dayCells.join("")}</div>`;
 
     // ---- bars, each with a popover carrying every other editable field ----
-    body.innerHTML = `<div class="gantt-full-body-inner" style="width:${totalWidth}px">` + trav.tasks.map((t) => {
+    // `layout` records each bar's rendered box so the dependency-arrow SVG
+    // (built right after) can anchor a line to exactly where it ended up —
+    // including the narrower, re-centered box a milestone gets.
+    const layout = {};
+    const barsHtml = trav.tasks.map((t, idx) => {
       const offsetDays = daysBetween(rangeStart, t.startDate);
       const durDays = taskDuration(t);
+      const isMilestone = t.duration === 0;
+      const barLeft = isMilestone ? (offsetDays * GANTT_DAY_WIDTH + GANTT_DAY_WIDTH / 2 - 10) : (offsetDays * GANTT_DAY_WIDTH);
+      const barWidth = isMilestone ? 20 : (durDays * GANTT_DAY_WIDTH - 2);
+      layout[t.id] = { idx, left: barLeft, width: barWidth };
       const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
       const locked = (t.predecessors || []).length > 0;
       const blocked = descendantsOf(project, t.id);
@@ -1559,12 +1599,14 @@
 
       return `
         <div class="gantt-full-row${selectedGanttTaskIds.has(t.id) ? " is-selected" : ""}">
-          <div class="gantt-bar${locked ? " locked" : ""}" data-gantt-task="${t.id}"
-               style="left:${offsetDays * GANTT_DAY_WIDTH}px; width:${durDays * GANTT_DAY_WIDTH - 2}px; background:${color};"
+          <div class="gantt-bar${locked ? " locked" : ""}${isMilestone ? " milestone" : ""}" data-gantt-task="${t.id}"
+               style="left:${barLeft}px; width:${barWidth}px;${isMilestone ? "" : ` background:${color};`}"
                title="${escapeHtml(t.name)} — ${fmtDate(t.startDate)} → ${fmtDate(t.endDate)}${locked ? " (auto-scheduled from a predecessor)" : ""}">
+            ${isMilestone ? `<div class="gantt-diamond-shape" style="background:${color}"></div>` : `
             <div class="gantt-bar-fill" style="width:${t.progress || 0}%"></div>
             <span class="gantt-bar-label">${t.progress || 0}%</span>
-            <div class="gantt-bar-resize" title="Drag to change duration"></div>
+            <div class="gantt-bar-resize" title="Drag to change duration"></div>`}
+            <div class="gantt-link-handle" title="Drag to link this task to another (this task becomes its predecessor)"></div>
             <div class="gantt-bar-popover" data-popover-for="${t.id}">
               <label>Status
                 <select data-gantt-field="status">
@@ -1580,7 +1622,34 @@
             </div>
           </div>
         </div>`;
-    }).join("") + `</div>`;
+    }).join("");
+
+    // ---- dependency-arrow overlay: one elbow connector per in-traveler link ----
+    const linkPaths = [];
+    trav.tasks.forEach((t) => {
+      const succLayout = layout[t.id];
+      (t.predecessors || []).forEach((predId) => {
+        const predLayout = layout[predId];
+        if (!predLayout || !succLayout) return; // predecessor lives in another traveler, not drawable here
+        const startX = predLayout.left + predLayout.width;
+        const startY = predLayout.idx * GANTT_ROW_HEIGHT + GANTT_ROW_HEIGHT / 2;
+        const endX = succLayout.left;
+        const endY = succLayout.idx * GANTT_ROW_HEIGHT + GANTT_ROW_HEIGHT / 2;
+        const midX = Math.max(startX + 10, endX - 10);
+        linkPaths.push(`<path class="gantt-link-path" d="M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}" marker-end="url(#ganttArrowHead)"></path>`);
+      });
+    });
+    const linksSvg = `
+      <svg class="gantt-links-svg" width="${totalWidth}" height="${totalHeight}">
+        <defs>
+          <marker id="ganttArrowHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path class="gantt-link-arrow" d="M0,0 L6,3 L0,6 Z"></path>
+          </marker>
+        </defs>
+        ${linkPaths.join("")}
+      </svg>`;
+
+    body.innerHTML = `<div class="gantt-full-body-inner" style="width:${totalWidth}px">${linksSvg}${barsHtml}</div>`;
 
     // ---- wire the left-column labels ----
     labels.querySelectorAll("[data-row-task]").forEach((row) => {
@@ -1642,7 +1711,28 @@
       });
     });
 
-    // ---- wire the bars: popover fields, drag-to-move, drag-to-resize ----
+    // Links a source task as a predecessor of a target task (used by both
+    // the drag-to-link handle below and, indirectly, the popover checkbox
+    // list) — rejects a link that would form a cycle or already exists.
+    async function linkTasks(sourceId, targetTask) {
+      if (targetTask.id === sourceId) return;
+      if ((targetTask.predecessors || []).includes(sourceId)) { showStatus("Already linked.", "info"); return; }
+      const blocked = descendantsOf(project, targetTask.id);
+      if (blocked.has(sourceId)) { showStatus("Can't link — that would create a circular dependency.", "error"); return; }
+      const prevPreds = [...(targetTask.predecessors || [])];
+      const prevStart = targetTask.startDate, prevEnd = targetTask.endDate;
+      targetTask.predecessors = [...prevPreds, sourceId];
+      const preds = targetTask.predecessors.map((id) => allTasks(project).find((tk) => tk.id === id)).filter(Boolean);
+      const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
+      targetTask.startDate = nextWorkDay(new Date(latestEnd + 86400000).toISOString().slice(0, 10), project);
+      targetTask.endDate = endDateForDuration(targetTask.startDate, taskDuration(targetTask), project);
+      recalcSchedule(project);
+      const ok = await saveRemote();
+      if (!ok) { targetTask.predecessors = prevPreds; targetTask.startDate = prevStart; targetTask.endDate = prevEnd; recalcSchedule(project); }
+      refreshGanttViews(project, trav);
+    }
+
+    // ---- wire the bars: popover fields, drag-to-move, drag-to-resize, drag-to-link ----
     body.querySelectorAll("[data-gantt-task]").forEach((barEl) => {
       const taskId = barEl.dataset.ganttTask;
       const task = trav.tasks.find((tk) => tk.id === taskId);
@@ -1710,30 +1800,38 @@
 
       if (!locked) {
         let dragging = false;
-        let startX = 0, startLeft = 0, deltaDays = 0;
-        barEl.addEventListener("pointerdown", (e) => {
-          if (e.target.closest(".gantt-bar-popover") || e.target.closest(".gantt-bar-resize")) return;
-          dragging = true;
-          wasDragged = false;
-          deltaDays = 0;
-          startX = e.clientX;
-          startLeft = parseFloat(barEl.style.left) || 0;
-          barEl.setPointerCapture(e.pointerId);
-          barEl.classList.add("dragging");
-        });
-        barEl.addEventListener("pointermove", (e) => {
-          if (!dragging) return;
-          const dPx = e.clientX - startX;
-          const dDays = Math.round(dPx / GANTT_DAY_WIDTH);
+        let startX = 0, startLeft = 0, deltaDays = 0, scrollAdjustPx = 0, lastClientX = 0;
+        const updateMove = () => {
+          const dDays = Math.round((lastClientX - startX + scrollAdjustPx) / GANTT_DAY_WIDTH);
           if (dDays !== deltaDays) {
             deltaDays = dDays;
             wasDragged = wasDragged || dDays !== 0;
             barEl.style.left = (startLeft + deltaDays * GANTT_DAY_WIDTH) + "px";
           }
+        };
+        const moveScroller = makeGanttAutoScroller(() => lastClientX, (applied) => { scrollAdjustPx += applied; updateMove(); });
+        barEl.addEventListener("pointerdown", (e) => {
+          if (e.target.closest(".gantt-bar-popover") || e.target.closest(".gantt-bar-resize") || e.target.closest(".gantt-link-handle")) return;
+          dragging = true;
+          wasDragged = false;
+          deltaDays = 0;
+          scrollAdjustPx = 0;
+          startX = e.clientX;
+          lastClientX = e.clientX;
+          startLeft = parseFloat(barEl.style.left) || 0;
+          barEl.setPointerCapture(e.pointerId);
+          barEl.classList.add("dragging");
+          moveScroller.start();
+        });
+        barEl.addEventListener("pointermove", (e) => {
+          if (!dragging) return;
+          lastClientX = e.clientX;
+          updateMove();
         });
         barEl.addEventListener("pointerup", async () => {
           if (!dragging) return;
           dragging = false;
+          moveScroller.stop();
           barEl.classList.remove("dragging");
           if (wasDragged && deltaDays !== 0) {
             const prevStart = task.startDate, prevEnd = task.endDate;
@@ -1749,51 +1847,111 @@
 
       // Resize handle: drag the bar's right edge to change its duration
       // (and, since a genuine resize is a deliberate schedule choice, clear
-      // any "no impact" milestone flag the task might have had).
+      // any "no impact" milestone flag the task might have had). Milestones
+      // have no resize handle at all — a zero-duration marker isn't resized,
+      // it's cleared via the popover's "No impact" checkbox instead.
       const resizeHandle = barEl.querySelector(".gantt-bar-resize");
-      let resizing = false;
-      let resizeStartX = 0, startWidth = 0, resizeDeltaDays = 0, resizeChanged = false;
-      resizeHandle.addEventListener("pointerdown", (e) => {
+      if (resizeHandle) {
+        let resizing = false;
+        let resizeStartX = 0, startWidth = 0, resizeDeltaDays = 0, resizeChanged = false, resizeScrollAdjustPx = 0, resizeLastClientX = 0;
+        const updateResize = () => {
+          const dDays = Math.round((resizeLastClientX - resizeStartX + resizeScrollAdjustPx) / GANTT_DAY_WIDTH);
+          if (dDays !== resizeDeltaDays) {
+            resizeDeltaDays = dDays;
+            resizeChanged = true;
+            const newWidth = Math.max(GANTT_DAY_WIDTH - 2, startWidth + dDays * GANTT_DAY_WIDTH);
+            barEl.style.width = newWidth + "px";
+          }
+        };
+        const resizeScroller = makeGanttAutoScroller(() => resizeLastClientX, (applied) => { resizeScrollAdjustPx += applied; updateResize(); });
+        resizeHandle.addEventListener("pointerdown", (e) => {
+          e.stopPropagation();
+          resizing = true;
+          resizeChanged = false;
+          resizeDeltaDays = 0;
+          resizeScrollAdjustPx = 0;
+          resizeStartX = e.clientX;
+          resizeLastClientX = e.clientX;
+          startWidth = parseFloat(barEl.style.width) || GANTT_DAY_WIDTH;
+          resizeHandle.setPointerCapture(e.pointerId);
+          barEl.classList.add("dragging");
+          resizeScroller.start();
+        });
+        resizeHandle.addEventListener("pointermove", (e) => {
+          if (!resizing) return;
+          resizeLastClientX = e.clientX;
+          updateResize();
+        });
+        resizeHandle.addEventListener("pointerup", async (e) => {
+          e.stopPropagation();
+          if (!resizing) return;
+          resizing = false;
+          resizeScroller.stop();
+          barEl.classList.remove("dragging");
+          if (resizeChanged) {
+            const prevDuration = task.duration, prevEnd = task.endDate, prevNoImpact = task.noScheduleImpact;
+            const newDuration = Math.max(1, taskDuration(task) + resizeDeltaDays);
+            task.duration = newDuration;
+            task.noScheduleImpact = false;
+            task.endDate = endDateForDuration(task.startDate, newDuration, project);
+            recalcSchedule(project);
+            const ok = await saveRemote();
+            if (!ok) { task.duration = prevDuration; task.endDate = prevEnd; task.noScheduleImpact = prevNoImpact; recalcSchedule(project); }
+            refreshGanttViews(project, trav);
+          }
+        });
+      }
+
+      // Link handle: drag from this bar to another to make THIS task a
+      // predecessor of whichever bar the pointer is released over.
+      const linkHandle = barEl.querySelector(".gantt-link-handle");
+      let linking = false;
+      let linkLastClientX = 0, linkLastClientY = 0, previewLine = null;
+      const linkScroller = makeGanttAutoScroller(() => linkLastClientX, () => {});
+      linkHandle.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
-        resizing = true;
-        resizeChanged = false;
-        resizeDeltaDays = 0;
-        resizeStartX = e.clientX;
-        startWidth = parseFloat(barEl.style.width) || GANTT_DAY_WIDTH;
-        resizeHandle.setPointerCapture(e.pointerId);
-        barEl.classList.add("dragging");
+        linking = true;
+        linkHandle.classList.add("linking");
+        const rect = linkHandle.getBoundingClientRect();
+        linkLastClientX = e.clientX;
+        linkLastClientY = e.clientY;
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("style", "position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;");
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", rect.left + rect.width / 2);
+        line.setAttribute("y1", rect.top + rect.height / 2);
+        line.setAttribute("x2", e.clientX);
+        line.setAttribute("y2", e.clientY);
+        line.setAttribute("stroke", "var(--accent)");
+        line.setAttribute("stroke-width", "2");
+        line.setAttribute("stroke-dasharray", "4 3");
+        svg.appendChild(line);
+        document.body.appendChild(svg);
+        previewLine = line;
+        linkHandle.setPointerCapture(e.pointerId);
+        linkScroller.start();
       });
-      resizeHandle.addEventListener("pointermove", (e) => {
-        if (!resizing) return;
-        const dPx = e.clientX - resizeStartX;
-        const dDays = Math.round(dPx / GANTT_DAY_WIDTH);
-        if (dDays !== resizeDeltaDays) {
-          resizeDeltaDays = dDays;
-          resizeChanged = true;
-          const newWidth = Math.max(GANTT_DAY_WIDTH - 2, startWidth + dDays * GANTT_DAY_WIDTH);
-          barEl.style.width = newWidth + "px";
-        }
+      linkHandle.addEventListener("pointermove", (e) => {
+        if (!linking) return;
+        linkLastClientX = e.clientX;
+        linkLastClientY = e.clientY;
+        if (previewLine) { previewLine.setAttribute("x2", e.clientX); previewLine.setAttribute("y2", e.clientY); }
       });
-      resizeHandle.addEventListener("pointerup", async (e) => {
-        e.stopPropagation();
-        if (!resizing) return;
-        resizing = false;
-        barEl.classList.remove("dragging");
-        if (resizeChanged) {
-          const prevDuration = task.duration, prevEnd = task.endDate, prevNoImpact = task.noScheduleImpact;
-          const newDuration = Math.max(1, taskDuration(task) + resizeDeltaDays);
-          task.duration = newDuration;
-          task.noScheduleImpact = false;
-          task.endDate = endDateForDuration(task.startDate, newDuration, project);
-          recalcSchedule(project);
-          const ok = await saveRemote();
-          if (!ok) { task.duration = prevDuration; task.endDate = prevEnd; task.noScheduleImpact = prevNoImpact; recalcSchedule(project); }
-          refreshGanttViews(project, trav);
+      linkHandle.addEventListener("pointerup", async (e) => {
+        if (!linking) return;
+        linking = false;
+        linkHandle.classList.remove("linking");
+        linkScroller.stop();
+        if (previewLine) { previewLine.closest("svg").remove(); previewLine = null; }
+        const targetEl = document.elementFromPoint(e.clientX, e.clientY)?.closest(".gantt-bar");
+        if (targetEl && targetEl !== barEl) {
+          const targetTask = trav.tasks.find((tk) => tk.id === targetEl.dataset.ganttTask);
+          if (targetTask) await linkTasks(taskId, targetTask);
         }
       });
 
       barEl.addEventListener("click", (e) => {
-        if (e.target.closest(".gantt-bar-popover") || e.target.closest(".gantt-bar-resize")) return;
+        if (e.target.closest(".gantt-bar-popover") || e.target.closest(".gantt-bar-resize") || e.target.closest(".gantt-link-handle")) return;
         if (wasDragged) { wasDragged = false; return; }
         const wasOpen = popover.classList.contains("open");
         document.querySelectorAll(".gantt-bar-popover.open").forEach((p) => p.classList.remove("open"));

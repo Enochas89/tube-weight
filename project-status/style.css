@@ -405,6 +405,41 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   background: rgba(255, 255, 255, 0.65);
 }
 .gantt-bar.locked .gantt-bar-resize { cursor: not-allowed; }
+
+.gantt-bar.milestone { box-shadow: none; }
+.gantt-diamond-shape {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  transform: rotate(45deg);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.3);
+}
+
+.gantt-link-handle {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  margin-left: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  transform: translateY(-50%);
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity 0.15s;
+  touch-action: none;
+}
+.gantt-bar:hover .gantt-link-handle, .gantt-link-handle.linking { opacity: 1; }
+
+.gantt-links-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.gantt-link-path { fill: none; stroke: var(--text-dim); stroke-width: 1.5; }
+.gantt-link-arrow { fill: var(--text-dim); }
+
 .gantt-bar-popover {
   display: none;
   position: absolute;
