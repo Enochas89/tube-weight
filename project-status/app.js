@@ -2208,6 +2208,9 @@
   // Keeps the grid feeling like a full sheet instead of shrinking down to a
   // couple of rows when there are only one or two projects.
   const PROJECT_GANTT_MIN_ROWS = 15;
+  // Below this day-width, individual day numbers wouldn't fit legibly, so
+  // the header stays a single month-band row until the user zooms in.
+  const PROJECT_GANTT_DAY_LABEL_THRESHOLD = 14;
 
   function zoomProjectGantt(factor) {
     const prevScrollLeft = document.querySelector("#projectGanttView .gantt-full-scroll")?.scrollLeft || 0;
@@ -2331,7 +2334,9 @@
     const totalHeight = rowSlotCount * GANTT_ROW_HEIGHT;
     const today = todayStr();
 
+    const showDayNumbers = projectGanttDayWidth >= PROJECT_GANTT_DAY_LABEL_THRESHOLD;
     const monthSegments = [];
+    const dayCells = [];
     let curKey = null, curWidth = 0, curLabel = "";
     for (let i = 0; i < totalDays; i++) {
       const d = addDays(rangeStart, i);
@@ -2344,9 +2349,20 @@
         curWidth = 0;
       }
       curWidth += projectGanttDayWidth;
+      if (showDayNumbers) {
+        const dow = dt.getDay();
+        const isWeekend = dow === 0 || dow === 6;
+        const isToday = d === today;
+        dayCells.push(`<div class="gantt-full-day project-day-seg${isWeekend ? " weekend" : ""}${isToday ? " today" : ""}" style="width:${projectGanttDayWidth}px">${dt.getDate()}</div>`);
+      }
     }
     if (curKey !== null) monthSegments.push({ label: curLabel, width: curWidth });
-    header.innerHTML = `<div class="gantt-full-header-row" style="width:${totalWidth}px">${monthSegments.map((seg) => `<div class="gantt-full-day project-month-seg" style="width:${seg.width}px">${seg.label}</div>`).join("")}</div>`;
+    const monthSegClass = `gantt-full-day project-month-seg${showDayNumbers ? " compact" : ""}`;
+    const monthRow = `<div class="gantt-full-header-row project-month-row" style="width:${totalWidth}px">${monthSegments.map((seg) => `<div class="${monthSegClass}" style="width:${seg.width}px">${seg.label}</div>`).join("")}</div>`;
+    const dayRow = showDayNumbers ? `<div class="gantt-full-header-row project-day-row" style="width:${totalWidth}px">${dayCells.join("")}</div>` : "";
+    header.innerHTML = monthRow + dayRow;
+    const labelHeaderEl = document.querySelector("#projectGanttView .gantt-full-label-header");
+    if (labelHeaderEl) labelHeaderEl.style.height = showDayNumbers ? "42px" : "40px";
 
     // ---- bars ----
     const layout = {};

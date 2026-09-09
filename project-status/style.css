@@ -602,6 +602,12 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .gantt-traveler-item-pct { flex-shrink: 0; font-weight: 700; font-size: 0.72rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .gantt-mini-popover select { width: 100%; font: inherit; font-size: 0.76rem; padding: 5px 6px; border: 1px solid var(--border); border-radius: 5px; margin-top: 4px; }
 .project-month-seg { font-weight: 700; color: var(--text); display: flex; align-items: center; justify-content: center; }
+/* Only shrunk to make room for a day-number row underneath -- a lone month
+   row (no day numbers yet, still zoomed out) keeps the full 40px. */
+.project-month-seg.compact { height: 22px; border-bottom: 1px solid var(--border); }
+.project-day-seg { height: 20px; font-size: 0.62rem; font-weight: 400; }
+.project-day-seg.weekend { background: var(--bg); }
+.project-day-seg.today { color: var(--accent); font-weight: 700; }
 .gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); opacity: 0.55; pointer-events: none; z-index: 1; }
 .task-table-no-impact { color: var(--text-dim); font-size: 0.55rem; margin-left: 3px; vertical-align: middle; }
 .task-card-title .status-dot { margin-top: 6px; }
