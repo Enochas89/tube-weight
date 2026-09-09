@@ -433,6 +433,7 @@
     if (!isEditor) return;
     hideAllViews();
     document.getElementById("projectGanttView").classList.remove("hidden");
+    projectGanttDayWidth = PROJECT_GANTT_DAY_WIDTH_DEFAULT * 2;
     renderProjectGanttFull();
     updateProjectGanttZoomLabel();
   }
