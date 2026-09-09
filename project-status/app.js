@@ -1551,7 +1551,7 @@
         .filter((i) => i !== -1)
         .map((i) => i + 1);
       return `
-      <div class="gantt-full-label-row${selectedGanttTaskIds.has(t.id) ? " is-selected" : ""}" data-row-task="${t.id}">
+      <div class="gantt-full-label-row${idx % 2 === 1 ? " row-alt" : ""}${selectedGanttTaskIds.has(t.id) ? " is-selected" : ""}" data-row-task="${t.id}">
         <input type="checkbox" class="gantt-select gantt-col-check" data-select-row="${t.id}" ${selectedGanttTaskIds.has(t.id) ? "checked" : ""}>
         <span class="gantt-row-num gantt-col-num">${idx + 1}${t.noScheduleImpact ? `<span class="task-table-no-impact" title="No schedule impact — excluded from % complete">&#9679;</span>` : ""}</span>
         <span class="gantt-col-name"><input type="text" class="gantt-name-input" data-field="name" value="${escapeHtml(t.name)}" title="${escapeHtml(t.name)}"></span>
@@ -1613,14 +1613,17 @@
       const hasCandidates = project.travelers.some((ot) => ot.tasks.some((cand) => cand.id !== t.id && !blocked.has(cand.id)));
       const predCheckboxes = hasCandidates ? groupsHtml : `<p class="modal-hint">No other tasks to depend on yet.</p>`;
 
+      const showLabelInside = !isMilestone && barWidth >= 40;
+      const showLabelOutside = !isMilestone && barWidth < 40;
       return `
-        <div class="gantt-full-row${selectedGanttTaskIds.has(t.id) ? " is-selected" : ""}">
+        <div class="gantt-full-row${idx % 2 === 1 ? " row-alt" : ""}${selectedGanttTaskIds.has(t.id) ? " is-selected" : ""}">
           <div class="gantt-bar${locked ? " locked" : ""}${isMilestone ? " milestone" : ""}" data-gantt-task="${t.id}"
                style="left:${barLeft}px; width:${barWidth}px;${isMilestone ? "" : ` background:${color};`}"
                title="${escapeHtml(t.name)} — ${fmtDate(t.startDate)} → ${fmtDate(t.endDate)}${locked ? " (auto-scheduled from a predecessor)" : ""}">
-            ${isMilestone ? `<div class="gantt-diamond-shape" style="background:${color}"></div>` : `
+            ${isMilestone ? `<div class="gantt-diamond-shape"></div>` : `
             <div class="gantt-bar-fill" style="width:${t.progress || 0}%"></div>
-            <span class="gantt-bar-label">${t.progress || 0}%</span>
+            ${showLabelInside ? `<span class="gantt-bar-label">${t.progress || 0}%</span>` : ""}
+            ${showLabelOutside ? `<span class="gantt-bar-label outside">${t.progress || 0}%</span>` : ""}
             <div class="gantt-bar-resize" title="Drag to change duration"></div>`}
             <div class="gantt-link-handle" title="Drag to link this task to another (this task becomes its predecessor)"></div>
             <div class="gantt-bar-popover" data-popover-for="${t.id}">
@@ -1651,7 +1654,11 @@
         const startY = predLayout.idx * GANTT_ROW_HEIGHT + GANTT_ROW_HEIGHT / 2;
         const endX = succLayout.left;
         const endY = succLayout.idx * GANTT_ROW_HEIGHT + GANTT_ROW_HEIGHT / 2;
-        const midX = Math.max(startX + 10, endX - 10);
+        // The vertical jog sits at the midpoint of the gap when the successor
+        // is ahead (the normal case) so it doesn't hug — and overshoot past —
+        // either bar; when it isn't, fall back to a short stub off the start
+        // rather than jogging backwards through both bars.
+        const midX = endX > startX ? (startX + endX) / 2 : startX + 8;
         linkPaths.push(`<path class="gantt-link-path" d="M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}" marker-end="url(#ganttArrowHead)"></path>`);
       });
     });

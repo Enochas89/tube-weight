@@ -383,13 +383,16 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .gantt-full-month { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.03em; margin-top: 2px; }
 .gantt-full-body-inner { position: relative; }
 .gantt-full-row { height: 40px; position: relative; border-bottom: 1px solid var(--border); }
+.gantt-full-row.row-alt { background: var(--bg); }
 .gantt-full-row.is-selected { background: var(--accent-dim); }
+.gantt-full-label-row.row-alt { background: var(--bg); }
 
 .gantt-bar {
   position: absolute;
   top: 8px;
   height: 24px;
   border-radius: 5px;
+  border: 1px solid rgba(16, 24, 40, 0.18);
   cursor: grab;
   touch-action: none;
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.2);
@@ -404,11 +407,20 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   font-weight: 700;
   color: white;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
-  line-height: 24px;
+  line-height: 22px;
   padding: 0 8px 0 8px;
   pointer-events: none;
   white-space: nowrap;
   overflow: hidden;
+}
+.gantt-bar-label.outside {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 6px;
+  color: var(--text);
+  text-shadow: none;
+  font-weight: 600;
 }
 .gantt-bar-resize {
   position: absolute;
@@ -431,15 +443,16 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 }
 .gantt-bar.locked .gantt-bar-resize { cursor: not-allowed; }
 
-.gantt-bar.milestone { box-shadow: none; }
+.gantt-bar.milestone { box-shadow: none; border: none; }
 .gantt-diamond-shape {
   position: absolute;
-  top: 2px;
+  top: 3px;
   left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 2px;
   transform: rotate(45deg);
+  background: var(--brand-black);
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.3);
 }
 
@@ -462,8 +475,8 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .gantt-bar:hover .gantt-link-handle, .gantt-link-handle.linking { opacity: 1; }
 
 .gantt-links-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
-.gantt-link-path { fill: none; stroke: var(--text-dim); stroke-width: 1.5; }
-.gantt-link-arrow { fill: var(--text-dim); }
+.gantt-link-path { fill: none; stroke: var(--text-dim); stroke-width: 1.25; opacity: 0.6; }
+.gantt-link-arrow { fill: var(--text-dim); opacity: 0.6; }
 
 .gantt-bar-popover {
   display: none;
