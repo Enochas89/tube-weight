@@ -10,7 +10,6 @@
   const STATUS_LABELS = { on_track: "On Track", at_risk: "At Risk", delayed: "Delayed", complete: "Complete", on_hold: "On Hold" };
   // Monday/ClickUp-style vibrant status colors rather than muted ones.
   const TASK_STATUS_COLOR = { not_started: "#c4c4c4", in_progress: "#fdab3d", delayed: "#e2445c", complete: "#00c875" };
-  const GANTT_DAY_WIDTH = 30;
   const AVATAR_PALETTE = ["#579bfc", "#a25ddc", "#ff642e", "#fdab3d", "#00c875", "#66ccff", "#e2445c", "#7e5efd"];
 
   let state = { projects: [] };
@@ -315,7 +314,6 @@
     document.getElementById("listView").classList.add("hidden");
     document.getElementById("travelerListView").classList.add("hidden");
     document.getElementById("detailView").classList.add("hidden");
-    document.getElementById("taskTableView").classList.add("hidden");
   }
   function showList() {
     hideAllViews();
@@ -332,14 +330,6 @@
     document.getElementById("detailView").classList.remove("hidden");
     renderTravelerDetail(p, trav);
   }
-  function showTaskTable(p, trav) {
-    if (!isEditor || !p || !trav) return;
-    hideAllViews();
-    document.getElementById("taskTableView").classList.remove("hidden");
-    document.getElementById("taskTableTravelerName").textContent = trav.name;
-    renderTaskTable(p, trav);
-    renderGantt(p, trav);
-  }
 
   // Polls for changes made elsewhere (another editor, the shop-floor QR
   // flow, a claimed traveler) and re-renders whatever's currently on screen.
@@ -348,7 +338,6 @@
   // since this runs unattended in the background.
   async function silentRefresh() {
     if (!modalBackdrop.classList.contains("hidden")) return;
-    if (!document.getElementById("taskTableView").classList.contains("hidden")) return;
     try {
       const res = await fetch(API_URL);
       if (!res.ok) return;
@@ -881,14 +870,6 @@
 
   document.getElementById("backToListBtn").addEventListener("click", () => { location.hash = "project/" + currentProjectId; });
   document.getElementById("editProjectBtn").addEventListener("click", () => openTravelerModal(getProject(currentProjectId), getTraveler(getProject(currentProjectId), currentTravelerId)));
-  document.getElementById("openTaskTableBtn").addEventListener("click", () => {
-    const p = getProject(currentProjectId);
-    showTaskTable(p, getTraveler(p, currentTravelerId));
-  });
-  document.getElementById("backFromTaskTableBtn").addEventListener("click", () => {
-    const p = getProject(currentProjectId);
-    showTravelerDetail(p, getTraveler(p, currentTravelerId));
-  });
   document.getElementById("deleteProjectBtn").addEventListener("click", async () => {
     if (!confirm("Delete this traveler? This can't be undone.")) return;
     const p = getProject(currentProjectId);
@@ -1090,352 +1071,6 @@
   document.getElementById("addTaskBtn").addEventListener("click", () => {
     const p = getProject(currentProjectId);
     openTaskModal(p, getTraveler(p, currentTravelerId));
-  });
-
-  // ---------- task table (spreadsheet-style bulk edit) ----------
-  const TASK_STATUS_OPTIONS = [
-    ["not_started", "Not Started"],
-    ["in_progress", "In Progress"],
-    ["delayed", "Delayed"],
-    ["complete", "Complete"],
-  ];
-
-  // Keeps the table, the Gantt strip, and the project/traveler cards in sync
-  // after any edit made from either the table or the Gantt view.
-  function refreshTaskViews(project, trav) {
-    renderTaskTable(project, trav);
-    renderGantt(project, trav);
-    renderList();
-    renderTravelerList(project);
-  }
-
-  function renderTaskTable(project, trav) {
-    const tbody = document.getElementById("taskTableBody");
-    if (!trav.tasks.length) {
-      tbody.innerHTML = `<tr><td colspan="10" class="empty-state">No tasks yet. Click "+ Add Task" to get started.</td></tr>`;
-      return;
-    }
-    const sameTravIds = new Set(trav.tasks.map((t) => t.id));
-
-    tbody.innerHTML = trav.tasks.map((t, idx) => {
-      const hasPreds = (t.predecessors || []).length > 0;
-      const predNums = (t.predecessors || [])
-        .map((id) => trav.tasks.findIndex((tt) => tt.id === id))
-        .filter((i) => i !== -1)
-        .map((i) => i + 1);
-      const externalPredCount = (t.predecessors || []).filter((id) => !sameTravIds.has(id)).length;
-      const predsTitle = externalPredCount
-        ? `${externalPredCount} cross-traveler dependency(ies) not shown here — edit via this task's pencil icon in the card view.`
-        : "Row numbers this task starts after, e.g. 1, 3";
-      return `
-        <tr data-row-task="${t.id}" class="${t.status === "complete" ? "row-complete" : ""}">
-          <td>${idx + 1}</td>
-          <td class="task-table-name-col"><input type="text" data-field="name" value="${escapeHtml(t.name)}"></td>
-          <td><input type="text" data-field="responsible" value="${escapeHtml(t.responsible || "")}" placeholder="Unassigned"></td>
-          <td>
-            <select data-field="status">
-              ${TASK_STATUS_OPTIONS.map(([v, label]) => `<option value="${v}" ${t.status === v ? "selected" : ""}>${label}</option>`).join("")}
-            </select>
-          </td>
-          <td><input type="number" min="0" max="100" data-field="progress" value="${t.progress || 0}"></td>
-          <td><input type="date" data-field="startDate" value="${t.startDate}" ${hasPreds ? 'disabled title="Auto-calculated from predecessor end date"' : ""}></td>
-          <td><input type="number" min="1" data-field="duration" value="${taskDuration(t)}"></td>
-          <td><span class="task-table-end">${fmtDate(t.endDate)}</span></td>
-          <td><input type="text" class="task-table-preds" data-field="predecessors" value="${predNums.join(", ")}" title="${escapeHtml(predsTitle)}"></td>
-          <td><button class="task-table-del" data-del-row title="Delete task">&times;</button></td>
-        </tr>`;
-    }).join("");
-
-    tbody.querySelectorAll("tr[data-row-task]").forEach((row) => {
-      const taskId = row.dataset.rowTask;
-      const task = trav.tasks.find((t) => t.id === taskId);
-      if (!task) return;
-
-      const nameInput = row.querySelector('[data-field="name"]');
-      nameInput.addEventListener("change", async () => {
-        const prev = task.name;
-        const val = nameInput.value.trim() || "Untitled task";
-        if (val === prev) { nameInput.value = prev; return; }
-        task.name = val;
-        const ok = await saveRemote();
-        if (!ok) task.name = prev;
-        refreshTaskViews(project, trav);
-      });
-
-      const respInput = row.querySelector('[data-field="responsible"]');
-      respInput.addEventListener("change", async () => {
-        const prev = task.responsible;
-        const val = respInput.value.trim();
-        if (val === prev) return;
-        task.responsible = val;
-        const ok = await saveRemote();
-        if (!ok) task.responsible = prev;
-        refreshTaskViews(project, trav);
-      });
-
-      const statusSelect = row.querySelector('[data-field="status"]');
-      statusSelect.addEventListener("change", async () => {
-        const prevStatus = task.status;
-        const prevProgress = task.progress;
-        task.status = statusSelect.value;
-        if (task.status === "complete") task.progress = 100;
-        recalcSchedule(project);
-        const ok = await saveRemote();
-        if (!ok) { task.status = prevStatus; task.progress = prevProgress; recalcSchedule(project); }
-        refreshTaskViews(project, trav);
-      });
-
-      const progressInput = row.querySelector('[data-field="progress"]');
-      progressInput.addEventListener("change", async () => {
-        const prev = task.progress;
-        const val = Math.max(0, Math.min(100, Math.round(num(progressInput.value)) || 0));
-        task.progress = val;
-        const ok = await saveRemote();
-        if (!ok) { task.progress = prev; }
-        progressInput.value = task.progress;
-        refreshTaskViews(project, trav);
-      });
-
-      const startInput = row.querySelector('[data-field="startDate"]');
-      if (!startInput.disabled) {
-        startInput.addEventListener("change", async () => {
-          const prevStart = task.startDate, prevEnd = task.endDate;
-          task.startDate = startInput.value || prevStart;
-          task.endDate = endDateForDuration(task.startDate, taskDuration(task), project);
-          recalcSchedule(project);
-          const ok = await saveRemote();
-          if (!ok) { task.startDate = prevStart; task.endDate = prevEnd; recalcSchedule(project); }
-          refreshTaskViews(project, trav);
-        });
-      }
-
-      const durationInput = row.querySelector('[data-field="duration"]');
-      durationInput.addEventListener("change", async () => {
-        const prevDuration = task.duration, prevEnd = task.endDate;
-        const dur = Math.max(1, Math.round(num(durationInput.value)) || 1);
-        task.duration = dur;
-        task.endDate = endDateForDuration(task.startDate, dur, project);
-        recalcSchedule(project);
-        const ok = await saveRemote();
-        if (!ok) { task.duration = prevDuration; task.endDate = prevEnd; recalcSchedule(project); }
-        refreshTaskViews(project, trav);
-      });
-
-      const predsInput = row.querySelector('[data-field="predecessors"]');
-      predsInput.addEventListener("change", async () => {
-        const prevPreds = [...(task.predecessors || [])];
-        const prevStart = task.startDate, prevEnd = task.endDate;
-        const nums = predsInput.value.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean).map((s) => parseInt(s, 10));
-        const blocked = descendantsOf(project, task.id);
-        const rowIdx = trav.tasks.indexOf(task);
-        const resolvedIds = [];
-        const invalid = [];
-        nums.forEach((n) => {
-          if (!Number.isFinite(n) || n < 1 || n > trav.tasks.length || (n - 1) === rowIdx) { invalid.push(n); return; }
-          const candidate = trav.tasks[n - 1];
-          if (blocked.has(candidate.id)) { invalid.push(n); return; }
-          if (!resolvedIds.includes(candidate.id)) resolvedIds.push(candidate.id);
-        });
-        // This field only edits same-traveler dependencies by row number —
-        // any existing cross-traveler predecessor links are left untouched.
-        const externalPreds = prevPreds.filter((id) => !sameTravIds.has(id));
-        task.predecessors = [...externalPreds, ...resolvedIds];
-        if (resolvedIds.length) {
-          const preds = resolvedIds.map((id) => trav.tasks.find((t) => t.id === id));
-          const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
-          task.startDate = nextWorkDay(new Date(latestEnd + 86400000).toISOString().slice(0, 10), project);
-          task.endDate = endDateForDuration(task.startDate, taskDuration(task), project);
-        }
-        recalcSchedule(project);
-        const ok = await saveRemote();
-        if (!ok) { task.predecessors = prevPreds; task.startDate = prevStart; task.endDate = prevEnd; recalcSchedule(project); }
-        if (invalid.length) showStatus(`Ignored invalid row number(s): ${invalid.join(", ")}`, "error");
-        refreshTaskViews(project, trav);
-      });
-
-      row.querySelector("[data-del-row]").addEventListener("click", async () => {
-        if (!confirm("Delete this task?")) return;
-        const removedIdx = trav.tasks.indexOf(task);
-        trav.tasks = trav.tasks.filter((t) => t.id !== taskId);
-        const affectedDelays = trav.delays.filter((d) => d.taskId === taskId);
-        affectedDelays.forEach((d) => { d.taskId = null; });
-        const affectedNotes = trav.notes.filter((n) => n.taskId === taskId);
-        affectedNotes.forEach((n) => { n.taskId = null; });
-        const affectedPredTasks = allTasks(project).filter((t) => (t.predecessors || []).includes(taskId));
-        affectedPredTasks.forEach((t) => { t.predecessors = t.predecessors.filter((id) => id !== taskId); });
-        recalcSchedule(project);
-        const ok = await saveRemote();
-        if (!ok) {
-          trav.tasks.splice(removedIdx, 0, task);
-          affectedDelays.forEach((d) => { d.taskId = task.id; });
-          affectedNotes.forEach((n) => { n.taskId = task.id; });
-          affectedPredTasks.forEach((t) => { t.predecessors.push(taskId); });
-          recalcSchedule(project);
-        }
-        refreshTaskViews(project, trav);
-      });
-    });
-  }
-
-  document.getElementById("taskTableAddRowBtn").addEventListener("click", async () => {
-    const p = getProject(currentProjectId);
-    const trav = getTraveler(p, currentTravelerId);
-    if (!trav) return;
-    const today = todayStr();
-    const newTask = { id: uid(), name: "New Task", startDate: today, endDate: today, duration: 1, responsible: "", status: "not_started", progress: 0, predecessors: [] };
-    trav.tasks.push(newTask);
-    recalcSchedule(p);
-    const ok = await saveRemote();
-    if (!ok) { trav.tasks.pop(); return; }
-    refreshTaskViews(p, trav);
-    const nameField = document.querySelector(`tr[data-row-task="${newTask.id}"] [data-field="name"]`);
-    if (nameField) { nameField.focus(); nameField.select(); }
-  });
-
-  // ---------- Gantt strip (drag-to-reschedule timeline) ----------
-  function renderGantt(project, trav) {
-    const header = document.getElementById("ganttHeader");
-    const body = document.getElementById("ganttBody");
-    const labels = document.getElementById("ganttLabels");
-    if (!trav.tasks.length) {
-      header.innerHTML = "";
-      labels.innerHTML = "";
-      body.innerHTML = `<div class="empty-state">No tasks yet.</div>`;
-      return;
-    }
-
-    let rangeStart = trav.tasks[0].startDate;
-    let rangeEnd = trav.tasks[0].endDate;
-    trav.tasks.forEach((t) => {
-      if (t.startDate < rangeStart) rangeStart = t.startDate;
-      if (t.endDate > rangeEnd) rangeEnd = t.endDate;
-    });
-    rangeStart = addDays(rangeStart, -3);
-    rangeEnd = addDays(rangeEnd, 3);
-    const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
-    const totalWidth = totalDays * GANTT_DAY_WIDTH;
-    const today = todayStr();
-
-    const dayCells = [];
-    for (let i = 0; i < totalDays; i++) {
-      const d = addDays(rangeStart, i);
-      const dow = new Date(d + "T00:00:00").getDay();
-      const isWeekend = dow === 0 || dow === 6;
-      const isToday = d === today;
-      const dt = new Date(d + "T00:00:00");
-      const dayNum = dt.getDate();
-      const showMonth = dayNum === 1 || i === 0;
-      dayCells.push(`<div class="gantt-day${isWeekend ? " weekend" : ""}${isToday ? " today" : ""}" style="width:${GANTT_DAY_WIDTH}px">${showMonth ? `<div class="gantt-month">${dt.toLocaleDateString(undefined, { month: "short" })}</div>` : ""}<div>${dayNum}</div></div>`);
-    }
-    header.innerHTML = `<div class="gantt-header-row" style="width:${totalWidth}px">${dayCells.join("")}</div>`;
-
-    labels.innerHTML = trav.tasks.map((t, idx) => `<div class="gantt-label-row" title="${escapeHtml(t.name)}">#${idx + 1} ${escapeHtml(t.name)}</div>`).join("");
-
-    body.innerHTML = `<div class="gantt-body-inner" style="width:${totalWidth}px">` + trav.tasks.map((t) => {
-      const offsetDays = daysBetween(rangeStart, t.startDate);
-      const durDays = taskDuration(t);
-      const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
-      const locked = (t.predecessors || []).length > 0;
-      return `
-        <div class="gantt-row">
-          <div class="gantt-bar${locked ? " locked" : ""}" data-gantt-task="${t.id}"
-               style="left:${offsetDays * GANTT_DAY_WIDTH}px; width:${durDays * GANTT_DAY_WIDTH - 2}px; background:${color};"
-               title="${escapeHtml(t.name)} — ${fmtDate(t.startDate)} → ${fmtDate(t.endDate)}${locked ? " (auto-scheduled from a predecessor)" : " (drag to reschedule)"}">
-            <div class="gantt-bar-fill" style="width:${t.progress || 0}%"></div>
-            <span class="gantt-bar-label">${t.progress || 0}%</span>
-            <div class="gantt-bar-popover" data-popover-for="${t.id}">
-              <label>Status
-                <select data-gantt-field="status">
-                  ${TASK_STATUS_OPTIONS.map(([v, label]) => `<option value="${v}" ${t.status === v ? "selected" : ""}>${label}</option>`).join("")}
-                </select>
-              </label>
-              <label>% Complete <input type="number" min="0" max="100" data-gantt-field="progress" value="${t.progress || 0}"></label>
-            </div>
-          </div>
-        </div>`;
-    }).join("") + `</div>`;
-
-    body.querySelectorAll("[data-gantt-task]").forEach((barEl) => {
-      const taskId = barEl.dataset.ganttTask;
-      const task = trav.tasks.find((t) => t.id === taskId);
-      if (!task) return;
-      const popover = barEl.querySelector(".gantt-bar-popover");
-
-      popover.querySelector('[data-gantt-field="status"]').addEventListener("change", async (e) => {
-        const prevStatus = task.status, prevProgress = task.progress;
-        task.status = e.target.value;
-        if (task.status === "complete") task.progress = 100;
-        recalcSchedule(project);
-        const ok = await saveRemote();
-        if (!ok) { task.status = prevStatus; task.progress = prevProgress; recalcSchedule(project); }
-        refreshTaskViews(project, trav);
-      });
-      popover.querySelector('[data-gantt-field="progress"]').addEventListener("change", async (e) => {
-        const prev = task.progress;
-        task.progress = Math.max(0, Math.min(100, Math.round(num(e.target.value)) || 0));
-        const ok = await saveRemote();
-        if (!ok) task.progress = prev;
-        refreshTaskViews(project, trav);
-      });
-      popover.addEventListener("click", (e) => e.stopPropagation());
-
-      let wasDragged = false;
-      const locked = !!(task.predecessors && task.predecessors.length);
-
-      if (!locked) {
-        let dragging = false;
-        let startX = 0;
-        let startLeft = 0;
-        let deltaDays = 0;
-
-        barEl.addEventListener("pointerdown", (e) => {
-          if (e.target.closest(".gantt-bar-popover")) return;
-          dragging = true;
-          wasDragged = false;
-          deltaDays = 0;
-          startX = e.clientX;
-          startLeft = parseFloat(barEl.style.left) || 0;
-          barEl.setPointerCapture(e.pointerId);
-          barEl.classList.add("dragging");
-        });
-        barEl.addEventListener("pointermove", (e) => {
-          if (!dragging) return;
-          const dPx = e.clientX - startX;
-          const dDays = Math.round(dPx / GANTT_DAY_WIDTH);
-          if (dDays !== deltaDays) {
-            deltaDays = dDays;
-            wasDragged = wasDragged || dDays !== 0;
-            barEl.style.left = (startLeft + deltaDays * GANTT_DAY_WIDTH) + "px";
-          }
-        });
-        barEl.addEventListener("pointerup", async (e) => {
-          if (!dragging) return;
-          dragging = false;
-          barEl.classList.remove("dragging");
-          if (wasDragged && deltaDays !== 0) {
-            const prevStart = task.startDate, prevEnd = task.endDate;
-            task.startDate = addDays(task.startDate, deltaDays);
-            task.endDate = endDateForDuration(task.startDate, taskDuration(task), project);
-            recalcSchedule(project);
-            const ok = await saveRemote();
-            if (!ok) { task.startDate = prevStart; task.endDate = prevEnd; recalcSchedule(project); }
-            refreshTaskViews(project, trav);
-          }
-        });
-      }
-
-      barEl.addEventListener("click", (e) => {
-        if (e.target.closest(".gantt-bar-popover")) return;
-        if (wasDragged) { wasDragged = false; return; }
-        const wasOpen = popover.classList.contains("open");
-        document.querySelectorAll(".gantt-bar-popover.open").forEach((p) => p.classList.remove("open"));
-        if (!wasOpen) popover.classList.add("open");
-      });
-    });
-  }
-  document.addEventListener("click", (e) => {
-    if (e.target.closest(".gantt-bar")) return;
-    document.querySelectorAll(".gantt-bar-popover.open").forEach((p) => p.classList.remove("open"));
   });
 
   async function bulkSetTaskCompletion(complete) {
