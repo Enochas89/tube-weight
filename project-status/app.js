@@ -2210,7 +2210,7 @@
   const PROJECT_GANTT_MIN_ROWS = 15;
   // Below this day-width, individual day numbers wouldn't fit legibly, so
   // the header stays a single month-band row until the user zooms in.
-  const PROJECT_GANTT_DAY_LABEL_THRESHOLD = 14;
+  const PROJECT_GANTT_DAY_LABEL_THRESHOLD = 6;
 
   function zoomProjectGantt(factor) {
     const prevScrollLeft = document.querySelector("#projectGanttView .gantt-full-scroll")?.scrollLeft || 0;
