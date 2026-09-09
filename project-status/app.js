@@ -2201,6 +2201,9 @@
   // ---------- project overview (project-level Gantt) ----------
   const PROJECT_STATUS_OPTIONS = Object.entries(STATUS_LABELS);
   const PROJECT_DAY_WIDTH = 8;
+  // Keeps the grid feeling like a full sheet instead of shrinking down to a
+  // couple of rows when there are only one or two projects.
+  const PROJECT_GANTT_MIN_ROWS = 15;
 
   function refreshProjectGanttView() {
     renderProjectGanttFull();
@@ -2282,7 +2285,9 @@
         <span class="gantt-col-succ"><span class="gantt-succ-display" title="Row numbers that start after this project">${succNums.join(", ") || "—"}</span></span>
         <button class="gantt-row-del gantt-col-del" data-del-project title="Delete project">&times;</button>
       </div>`;
-    }).join("");
+    }).join("") + Array.from({ length: Math.max(0, PROJECT_GANTT_MIN_ROWS - state.projects.length) })
+      .map((_, i) => `<div class="gantt-full-label-row gantt-empty-row${(state.projects.length + i) % 2 === 1 ? " row-alt" : ""}"></div>`)
+      .join("");
 
     // ---- date scale: month bands rather than individual days, since a
     // project's own span usually runs weeks-to-months, not days ----
@@ -2296,7 +2301,8 @@
     rangeEnd = addDays(rangeEnd, 7);
     const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
     const totalWidth = totalDays * PROJECT_DAY_WIDTH;
-    const totalHeight = state.projects.length * GANTT_ROW_HEIGHT;
+    const rowSlotCount = Math.max(state.projects.length, PROJECT_GANTT_MIN_ROWS);
+    const totalHeight = rowSlotCount * GANTT_ROW_HEIGHT;
     const today = todayStr();
 
     const monthSegments = [];
@@ -2353,7 +2359,9 @@
             </div>
           </div>
         </div>`;
-    }).join("");
+    }).join("") + Array.from({ length: rowSlotCount - state.projects.length })
+      .map((_, i) => `<div class="gantt-full-row gantt-empty-row${(state.projects.length + i) % 2 === 1 ? " row-alt" : ""}"></div>`)
+      .join("");
 
     // ---- dependency arrows ----
     const linkPaths = [];
