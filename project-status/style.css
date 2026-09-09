@@ -340,6 +340,10 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--text-dim);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--panel);
 }
 .gantt-full-label-row.is-selected { background: var(--accent-dim); }
 .gantt-select { flex-shrink: 0; width: 14px; height: 14px; cursor: pointer; }
@@ -366,6 +370,14 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .gantt-succ-display { font-size: 0.74rem; color: var(--text-dim); padding: 4px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gantt-row-del { flex-shrink: 0; background: none; border: none; cursor: pointer; color: var(--text-dim); font-size: 0.95rem; padding: 2px 4px; }
 .gantt-row-del:hover { color: var(--status-delayed); }
+.gantt-full-right-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gantt-full-header-clip {
+  overflow-x: hidden;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--panel);
+}
 .gantt-full-scroll { flex: 1; min-width: 0; overflow-x: auto; }
 .gantt-full-header-row { display: flex; border-bottom: 1px solid var(--border); }
 .gantt-full-day {

@@ -2049,6 +2049,16 @@
     if (nameField) { nameField.focus(); nameField.select(); }
   });
 
+  // The date-scale header sits in its own sticky, horizontally-clipped strip
+  // above the scrolling body (position:sticky can't be used on the body's
+  // own header row, since giving that container horizontal scroll forces its
+  // vertical overflow to compute as "auto" too, making it -- not the page --
+  // the container sticky positioning resolves against). Keep the two in sync
+  // by mirroring the body's horizontal scroll onto the header strip.
+  document.querySelector(".gantt-full-scroll").addEventListener("scroll", (e) => {
+    document.querySelector(".gantt-full-header-clip").scrollLeft = e.target.scrollLeft;
+  });
+
   async function bulkSetGanttCompletion(complete) {
     const p = getProject(currentProjectId);
     const trav = p && getTraveler(p, currentTravelerId);
