@@ -2770,6 +2770,18 @@
     }
   }, { passive: false });
 
+  const projectGanttFullscreenBtn = document.getElementById("projectGanttFullscreenBtn");
+  projectGanttFullscreenBtn.addEventListener("click", () => {
+    const el = document.getElementById("projectGanttView");
+    if (document.fullscreenElement) document.exitFullscreen();
+    else el.requestFullscreen().catch(() => showStatus("This browser blocked full screen — check for a permission prompt.", "error"));
+  });
+  document.addEventListener("fullscreenchange", () => {
+    const isFull = document.fullscreenElement === document.getElementById("projectGanttView");
+    projectGanttFullscreenBtn.innerHTML = isFull ? "&#10021; Exit Full Screen" : "&#10021; Full Screen";
+    projectGanttFullscreenBtn.title = isFull ? "Exit full screen" : "Enter full screen";
+  });
+
   document.getElementById("projectGanttAddBtn").addEventListener("click", async () => {
     const today = todayStr();
     const newProject = {
