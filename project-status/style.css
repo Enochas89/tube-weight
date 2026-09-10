@@ -135,6 +135,39 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .btn-link { background: none; border: none; color: var(--accent); font-size: 0.85rem; text-decoration: underline; font-weight: 400; padding: 4px 0; }
 .btn-icon { background: none; border: none; cursor: pointer; color: var(--text-dim); font-size: 0.95rem; padding: 2px 6px; }
 .btn-icon:hover { color: var(--status-delayed); }
+.btn-icon.btn-share { font-size: 1rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; }
+.btn-icon.btn-share:hover { color: var(--accent); border-color: var(--accent); }
+.action-divider { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+
+/* ---------- dropdown menu (Import ▾) ---------- */
+.dropdown { position: relative; display: inline-flex; }
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.15);
+  min-width: 200px;
+  padding: 6px;
+  z-index: 30;
+}
+.dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.dropdown-item:hover { background: var(--accent-dim); color: var(--accent); }
 
 /* ---------- project list ---------- */
 .project-grid {
@@ -218,6 +251,8 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .detail-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
 .detail-title-row h2 { margin: 0; }
 .detail-client { margin: 2px 0 0; color: var(--text-dim); font-size: 0.9rem; }
+.detail-client-link { cursor: pointer; width: fit-content; }
+.detail-client-link:hover { color: var(--accent); text-decoration: underline; }
 .detail-description { margin: 12px 0 0; font-size: 0.88rem; color: var(--text-dim); }
 .detail-source {
   display: block; margin: 6px 0 0; font-size: 0.82rem; color: var(--text-dim);
@@ -240,6 +275,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .gantt-zoom-controls .btn-icon:hover { color: var(--accent); }
 #projectGanttZoomLabel { font-size: 0.76rem; font-weight: 700; color: var(--text-dim); min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
 .gantt-zoom-controls .btn-link { font-size: 0.72rem; margin-left: 4px; }
+.gantt-toolbar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .status-select {
   font-family: inherit;
   font-weight: 700;
@@ -255,7 +291,9 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .status-select.complete { background: var(--status-complete-bg); color: var(--status-complete); border-color: var(--status-complete); }
 .status-select.on_hold { background: var(--status-on_hold-bg); color: var(--status-on_hold); border-color: var(--status-on_hold); }
 
-.tab-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+.tab-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); margin-bottom: 18px; flex-wrap: wrap; }
+.tab-bar-tabs { display: flex; gap: 4px; }
+.tab-bar-actions { display: flex; gap: 10px; align-items: center; padding-bottom: 8px; }
 .tab-btn {
   background: none;
   border: none;
@@ -773,8 +811,11 @@ footer a:hover { text-decoration: underline; }
   .detail-header { padding: 14px 16px; }
   .detail-title-row { flex-direction: column; align-items: stretch; }
   .detail-actions { justify-content: flex-start; }
+  .action-divider { display: none; }
 
-  .tab-bar { overflow-x: auto; }
+  .tab-bar { flex-direction: column; align-items: stretch; overflow-x: visible; }
+  .tab-bar-tabs { overflow-x: auto; }
+  .tab-bar-actions { padding-bottom: 10px; }
   .tab-btn { padding: 10px 12px; white-space: nowrap; }
 
   .modal { padding: 18px 16px; }

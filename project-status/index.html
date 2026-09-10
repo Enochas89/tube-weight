@@ -33,11 +33,16 @@
     <div class="panel-header-row">
       <h2>Projects</h2>
       <div class="header-row-actions">
-        <button class="btn-secondary" id="shareListBtn">Share Link</button>
+        <button class="btn-icon btn-share" id="shareListBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
         <button class="btn-secondary editor-only hidden" id="openProjectGanttBtn">Project Overview</button>
-        <button class="btn-secondary editor-only hidden" id="importMspBtn">Import from MS Project</button>
+        <div class="dropdown editor-only hidden" id="importMenuWrap">
+          <button type="button" class="btn-secondary" id="importMenuBtn">Import &#9662;</button>
+          <div class="dropdown-menu hidden" id="importMenu">
+            <button type="button" class="dropdown-item" id="importMspBtn">Import from MS Project</button>
+            <button type="button" class="dropdown-item" id="importExcelBtn">Import from Excel</button>
+          </div>
+        </div>
         <input type="file" id="importFileInput" accept=".xml" class="hidden">
-        <button class="btn-secondary editor-only hidden" id="importExcelBtn">Import from Excel</button>
         <input type="file" id="importExcelInput" accept=".xlsx,.xls" multiple class="hidden">
         <button class="btn-primary editor-only hidden" id="newProjectBtn">+ New Project</button>
       </div>
@@ -57,8 +62,9 @@
         <div class="detail-actions">
           <select id="travelerListProjectStatus" class="status-select hidden"></select>
           <span id="travelerListProjectStatusBadge" class="status-badge hidden"></span>
-          <button class="btn-secondary" id="shareProjectListBtn">Share Link</button>
+          <button class="btn-icon btn-share" id="shareProjectListBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
           <button class="btn-secondary editor-only hidden" id="editProjectFromListBtn">Edit Project</button>
+          <span class="action-divider editor-only hidden"></span>
           <button class="btn-danger editor-only hidden" id="deleteProjectFromListBtn">Delete</button>
         </div>
       </div>
@@ -68,9 +74,14 @@
     <div class="panel-header-row">
       <h3>Travelers</h3>
       <div class="header-row-actions">
-        <button class="btn-secondary editor-only hidden" id="importMspTravelerBtn">Import from MS Project</button>
+        <div class="dropdown editor-only hidden" id="importTravelerMenuWrap">
+          <button type="button" class="btn-secondary" id="importTravelerMenuBtn">Import &#9662;</button>
+          <div class="dropdown-menu hidden" id="importTravelerMenu">
+            <button type="button" class="dropdown-item" id="importMspTravelerBtn">Import from MS Project</button>
+            <button type="button" class="dropdown-item" id="importExcelTravelerBtn">Import from Excel</button>
+          </div>
+        </div>
         <input type="file" id="importFileInputTraveler" accept=".xml" class="hidden">
-        <button class="btn-secondary editor-only hidden" id="importExcelTravelerBtn">Import from Excel</button>
         <input type="file" id="importExcelInputTraveler" accept=".xlsx,.xls" multiple class="hidden">
         <button class="btn-primary editor-only hidden" id="newTravelerBtn">+ Add Traveler</button>
       </div>
@@ -85,13 +96,14 @@
       <div class="detail-title-row">
         <div>
           <h2 id="detailName">Traveler Name</h2>
-          <p id="detailClient" class="detail-client"></p>
+          <p id="detailClient" class="detail-client detail-client-link" title="Back to Travelers"></p>
         </div>
         <div class="detail-actions">
           <select id="detailStatus" class="status-select hidden"></select>
           <span id="detailStatusBadge" class="status-badge hidden"></span>
-          <button class="btn-secondary" id="shareProjectBtn">Share Link</button>
+          <button class="btn-icon btn-share" id="shareProjectBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
           <button class="btn-secondary editor-only hidden" id="editProjectBtn">Edit Traveler</button>
+          <span class="action-divider editor-only hidden"></span>
           <button class="btn-danger editor-only hidden" id="deleteProjectBtn">Delete</button>
         </div>
       </div>
@@ -100,20 +112,21 @@
     </div>
 
     <nav class="tab-bar">
-      <button class="tab-btn active" data-tab="tasks">Tasks</button>
-      <button class="tab-btn" data-tab="delays">Delays</button>
-      <button class="tab-btn" data-tab="notes">Notes</button>
+      <div class="tab-bar-tabs">
+        <button class="tab-btn active" data-tab="tasks">Tasks</button>
+        <button class="tab-btn" data-tab="delays">Delays</button>
+        <button class="tab-btn" data-tab="notes">Notes</button>
+      </div>
+      <div class="tab-bar-actions">
+        <button class="btn-secondary editor-only hidden" id="openGanttViewBtn" data-tab-visible="tasks">Gantt View</button>
+        <button class="btn-primary editor-only hidden" id="addTaskBtn" data-tab-visible="tasks">+ Add Task</button>
+        <button class="btn-primary editor-only hidden" id="addDelayBtn" data-tab-visible="delays">+ Log Delay</button>
+        <button class="btn-primary editor-only hidden" id="addNoteBtn" data-tab-visible="notes">+ Add Note</button>
+      </div>
     </nav>
 
     <!-- Tasks tab -->
     <div class="tab-panel" data-tab-panel="tasks">
-      <div class="panel-header-row">
-        <h3>Tasks</h3>
-        <div class="header-row-actions">
-          <button class="btn-secondary editor-only hidden" id="openGanttViewBtn">Gantt View</button>
-          <button class="btn-secondary editor-only hidden" id="addTaskBtn">+ Add Task</button>
-        </div>
-      </div>
       <div id="taskBulkBar" class="task-bulk-bar hidden">
         <span id="taskBulkCount">0 selected</span>
         <span class="task-bulk-actions">
@@ -127,19 +140,11 @@
 
     <!-- Delays tab -->
     <div class="tab-panel hidden" data-tab-panel="delays">
-      <div class="panel-header-row">
-        <h3>Delays</h3>
-        <button class="btn-secondary editor-only hidden" id="addDelayBtn">+ Log Delay</button>
-      </div>
       <div id="delaysList" class="log-list"></div>
     </div>
 
     <!-- Notes tab -->
     <div class="tab-panel hidden" data-tab-panel="notes">
-      <div class="panel-header-row">
-        <h3>Notes</h3>
-        <button class="btn-secondary editor-only hidden" id="addNoteBtn">+ Add Note</button>
-      </div>
       <div id="notesList" class="log-list"></div>
     </div>
   </section>
@@ -202,16 +207,18 @@
           <p class="detail-client">Drag a bar to reschedule, drag its right edge to resize, click it to edit status/manpower/travelers/links</p>
         </div>
         <div class="detail-actions">
-          <div class="gantt-zoom-controls">
-            <button type="button" class="btn-icon" id="projectGanttZoomOut" title="Zoom out">&minus;</button>
-            <span id="projectGanttZoomLabel">100%</span>
-            <button type="button" class="btn-icon" id="projectGanttZoomIn" title="Zoom in">+</button>
-            <button type="button" class="btn-link" id="projectGanttZoomReset" title="Reset zoom">Reset</button>
-          </div>
-          <button class="btn-secondary" id="projectGanttFullscreenBtn" title="Enter full screen">&#10021; Full Screen</button>
           <button class="btn-primary" id="projectGanttAddBtn">+ Add Project</button>
         </div>
       </div>
+    </div>
+    <div class="gantt-toolbar-row">
+      <div class="gantt-zoom-controls">
+        <button type="button" class="btn-icon" id="projectGanttZoomOut" title="Zoom out">&minus;</button>
+        <span id="projectGanttZoomLabel">100%</span>
+        <button type="button" class="btn-icon" id="projectGanttZoomIn" title="Zoom in">+</button>
+        <button type="button" class="btn-link" id="projectGanttZoomReset" title="Reset zoom">Reset</button>
+      </div>
+      <button class="btn-secondary" id="projectGanttFullscreenBtn" title="Enter full screen">&#10021; Full Screen</button>
     </div>
     <div class="gantt-full">
       <div class="gantt-full-labels project-gantt-labels">

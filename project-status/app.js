@@ -512,6 +512,28 @@
     });
   }
 
+  // Wires an "Import ▾" toggle/menu pair: click to open, click an item or
+  // click outside to close. Item buttons keep their own existing listeners.
+  function wireDropdown(toggleId, menuId) {
+    const toggle = document.getElementById(toggleId);
+    const menu = document.getElementById(menuId);
+    if (!toggle || !menu) return;
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = menu.classList.contains("hidden");
+      document.querySelectorAll(".dropdown-menu").forEach((m) => m.classList.add("hidden"));
+      menu.classList.toggle("hidden", !willOpen);
+    });
+    menu.addEventListener("click", (e) => {
+      if (e.target.closest(".dropdown-item")) menu.classList.add("hidden");
+    });
+  }
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".dropdown-menu").forEach((m) => m.classList.add("hidden"));
+  });
+  wireDropdown("importMenuBtn", "importMenu");
+  wireDropdown("importTravelerMenuBtn", "importTravelerMenu");
+
   document.getElementById("newProjectBtn").addEventListener("click", () => openProjectModal());
   document.getElementById("openProjectGanttBtn").addEventListener("click", () => showProjectGanttView());
   document.getElementById("backFromProjectGanttBtn").addEventListener("click", () => { showList(); });
@@ -955,6 +977,7 @@
     document.getElementById("detailName").textContent = trav.name;
     document.getElementById("detailClient").textContent = "Part of " + p.name;
     document.getElementById("detailDescription").textContent = trav.description || "";
+    updateTabActionVisibility(document.querySelector(".tab-btn.active")?.dataset.tab || "tasks");
     const sourceEl = document.getElementById("detailSource");
     if (trav.sourcePath) {
       sourceEl.textContent = "📁 K Drive: " + trav.sourcePath;
@@ -993,6 +1016,7 @@
   }
 
   document.getElementById("backToListBtn").addEventListener("click", () => { location.hash = "project/" + currentProjectId; });
+  document.getElementById("detailClient").addEventListener("click", () => { location.hash = "project/" + currentProjectId; });
   document.getElementById("editProjectBtn").addEventListener("click", () => openTravelerModal(getProject(currentProjectId), getTraveler(getProject(currentProjectId), currentTravelerId)));
   document.getElementById("openGanttViewBtn").addEventListener("click", () => {
     const p = getProject(currentProjectId);
@@ -1012,6 +1036,13 @@
     location.hash = "project/" + currentProjectId;
   });
 
+  // The tab-bar's own "+ Add" button swaps to match whichever tab is active
+  // (Tasks / Delays / Notes), rather than each tab repeating its own header row.
+  function updateTabActionVisibility(tab) {
+    document.querySelectorAll(".tab-bar-actions [data-tab-visible]").forEach((el) => {
+      el.style.display = el.dataset.tabVisible === tab ? "" : "none";
+    });
+  }
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
@@ -1020,6 +1051,7 @@
       document.querySelectorAll(".tab-panel").forEach((panel) => {
         panel.classList.toggle("hidden", panel.dataset.tabPanel !== tab);
       });
+      updateTabActionVisibility(tab);
     });
   });
 
