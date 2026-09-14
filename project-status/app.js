@@ -7,6 +7,7 @@
   // if Explorer's hosting or URL ever changes.
   const EXPLORER_URL = "https://flexserver.tail5bc9f4.ts.net";
   const AUTH_KEY = "projectStatus.editPassword";
+  const MODE_KEY = "projectStatus.uiMode";
   const STATUS_LABELS = { on_track: "On Track", at_risk: "At Risk", delayed: "Delayed", complete: "Complete", on_hold: "On Hold" };
   // Monday/ClickUp-style vibrant status colors rather than muted ones.
   const TASK_STATUS_COLOR = { not_started: "#c4c4c4", in_progress: "#fdab3d", delayed: "#e2445c", complete: "#00c875" };
@@ -55,6 +56,11 @@
   let currentProjectId = null;
   let currentTravelerId = null;
   let isEditor = false;
+  // Signed-in editors can still browse in read-only "View" mode — separate
+  // from `isEditor` (which tracks whether they *can* edit at all) so editing
+  // affordances only surface once they deliberately switch to "Manage".
+  let uiMode = "manage";
+  function canManage() { return isEditor && uiMode === "manage"; }
   const selectedTaskIds = new Set();
   const selectedGanttTaskIds = new Set();
 
@@ -296,9 +302,28 @@
   function updateEditorUI() {
     document.getElementById("signInBtn").classList.toggle("hidden", isEditor);
     document.getElementById("editorBadge").classList.toggle("hidden", !isEditor);
-    document.querySelectorAll(".editor-only").forEach((el) => el.classList.toggle("hidden", !isEditor));
+    document.getElementById("modeViewBtn").classList.toggle("active", uiMode === "view");
+    document.getElementById("modeManageBtn").classList.toggle("active", uiMode === "manage");
+    document.querySelectorAll(".editor-only").forEach((el) => el.classList.toggle("hidden", !canManage()));
     route();
   }
+
+  function setUiMode(mode) {
+    uiMode = mode === "view" ? "view" : "manage";
+    localStorage.setItem(MODE_KEY, uiMode);
+    // The two Gantt views are Manage-only and aren't part of the hash router
+    // (they're reached only via button clicks) — if that's where the user is
+    // standing when they flip to View, drop back to the nearest routed
+    // screen instead of leaving them on a view that just lost its controls.
+    if (uiMode === "view") {
+      const inGanttView = !document.getElementById("ganttView").classList.contains("hidden");
+      const inProjectGanttView = !document.getElementById("projectGanttView").classList.contains("hidden");
+      if (inGanttView || inProjectGanttView) route();
+    }
+    updateEditorUI();
+  }
+  document.getElementById("modeViewBtn").addEventListener("click", () => setUiMode("view"));
+  document.getElementById("modeManageBtn").addEventListener("click", () => setUiMode("manage"));
 
   document.getElementById("signInBtn").addEventListener("click", () => {
     const body = `
@@ -422,7 +447,7 @@
     renderTravelerDetail(p, trav);
   }
   function showGanttView(p, trav) {
-    if (!isEditor || !p || !trav) return;
+    if (!canManage() || !p || !trav) return;
     hideAllViews();
     selectedGanttTaskIds.clear();
     document.getElementById("ganttView").classList.remove("hidden");
@@ -430,7 +455,7 @@
     renderGanttFull(p, trav);
   }
   function showProjectGanttView() {
-    if (!isEditor) return;
+    if (!canManage()) return;
     hideAllViews();
     document.getElementById("projectGanttView").classList.remove("hidden");
     projectGanttDayWidth = PROJECT_GANTT_DAY_WIDTH_DEFAULT * 2;
@@ -482,7 +507,7 @@
   function renderList() {
     const grid = document.getElementById("projectGrid");
     if (state.projects.length === 0) {
-      grid.innerHTML = `<div class="empty-state">No projects yet.${isEditor ? ' Click "+ New Project" to add one.' : " Check back once the project manager has added one."}</div>`;
+      grid.innerHTML = `<div class="empty-state">No projects yet.${canManage() ? ' Click "+ New Project" to add one.' : " Check back once the project manager has added one."}</div>`;
       return;
     }
     grid.innerHTML = state.projects.map((p) => {
@@ -863,7 +888,7 @@
 
     const statusSelect = document.getElementById("travelerListProjectStatus");
     const statusBadgeReadonly = document.getElementById("travelerListProjectStatusBadge");
-    if (isEditor) {
+    if (canManage()) {
       statusSelect.classList.remove("hidden");
       statusBadgeReadonly.classList.add("hidden");
       statusSelect.innerHTML = Object.entries(STATUS_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
@@ -886,11 +911,11 @@
 
     const grid = document.getElementById("travelerGrid");
     if (!p.travelers.length) {
-      grid.innerHTML = `<div class="empty-state">No travelers yet.${isEditor ? ' Click "+ New Traveler" to add one, or import from MS Project/Excel.' : ""}</div>`;
+      grid.innerHTML = `<div class="empty-state">No travelers yet.${canManage() ? ' Click "+ New Traveler" to add one, or import from MS Project/Excel.' : ""}</div>`;
     } else {
       grid.innerHTML = p.travelers.map((trav) => {
         const progress = travelerProgress(trav);
-        const deleteBtn = isEditor ? `<button class="btn-icon card-delete-btn" type="button" data-delete-traveler="${trav.id}" title="Delete traveler">&times;</button>` : "";
+        const deleteBtn = canManage() ? `<button class="btn-icon card-delete-btn" type="button" data-delete-traveler="${trav.id}" title="Delete traveler">&times;</button>` : "";
         return `
           <div class="project-card" data-traveler-id="${trav.id}">
             <div class="project-card-top">
@@ -912,7 +937,7 @@
             </div>
             <div class="card-actions-row">
               <button class="btn-secondary card-open-btn" type="button">Open &rarr;</button>
-              ${isEditor ? `<button class="btn-chip" type="button" data-note-traveler="${trav.id}">+ Note</button>` : ""}
+              ${canManage() ? `<button class="btn-chip" type="button" data-note-traveler="${trav.id}">+ Note</button>` : ""}
             </div>
           </div>`;
       }).join("");
@@ -989,7 +1014,7 @@
 
     const statusSelect = document.getElementById("detailStatus");
     const statusBadgeReadonly = document.getElementById("detailStatusBadge");
-    if (isEditor) {
+    if (canManage()) {
       statusSelect.classList.remove("hidden");
       statusBadgeReadonly.classList.add("hidden");
       statusSelect.innerHTML = Object.entries(STATUS_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
@@ -1076,7 +1101,7 @@
     Array.from(selectedTaskIds).forEach((id) => { if (!liveIds.has(id)) selectedTaskIds.delete(id); });
     updateTaskBulkBar();
     if (!trav.tasks.length) {
-      wrap.innerHTML = `<div class="empty-state">No tasks yet.${isEditor ? ' Click "+ Add Task" to get started.' : ""}</div>`;
+      wrap.innerHTML = `<div class="empty-state">No tasks yet.${canManage() ? ' Click "+ Add Task" to get started.' : ""}</div>`;
       return;
     }
 
@@ -1084,7 +1109,7 @@
     wrap.innerHTML = trav.tasks.map((t, taskIdx) => {
       const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
       const isToday = todayMs >= new Date(t.startDate + "T00:00:00").getTime() && todayMs <= new Date(t.endDate + "T00:00:00").getTime();
-      const actions = isEditor ? `
+      const actions = canManage() ? `
             <span class="task-actions">
               <button class="btn-icon" data-edit-task="${t.id}" title="Edit">&#9998;</button>
               <button class="btn-icon" data-delete-task="${t.id}" title="Delete">&times;</button>
@@ -1112,7 +1137,7 @@
 
       const entries = taskSubEntries(trav, t.id);
       const entriesHtml = entries.map((e) => {
-        const del = isEditor ? `<button class="btn-icon" data-delete-${e.kind}="${e.id}" title="Delete">&times;</button>` : "";
+        const del = canManage() ? `<button class="btn-icon" data-delete-${e.kind}="${e.id}" title="Delete">&times;</button>` : "";
         const meta = e.kind === "delay"
           ? `${fmtDate(e.date)}${e.days ? " &bull; " + e.days + " day(s)" : ""}`
           : `${fmtDate(e.date)}${e.author ? " &bull; " + escapeHtml(e.author) : ""}`;
@@ -1125,14 +1150,14 @@
             <div class="log-item-text">${escapeHtml(e.kind === "delay" ? e.reason : e.text)}</div>
           </div>`;
       }).join("");
-      const subActions = isEditor ? `
+      const subActions = canManage() ? `
           <div class="task-card-actions">
             <button class="btn-chip" data-add-delay-task="${t.id}">+ Delay</button>
             <button class="btn-chip" data-add-note-task="${t.id}">+ Note</button>
           </div>` : "";
 
       const currentBanner = isToday ? `<div class="current-marker">Current &bull; ${fmtDate(todayStr())}</div>` : "";
-      const checkbox = isEditor ? `<label class="task-select-wrap"><input type="checkbox" class="task-select-checkbox" data-select-task="${t.id}" ${selectedTaskIds.has(t.id) ? "checked" : ""}></label>` : "";
+      const checkbox = canManage() ? `<label class="task-select-wrap"><input type="checkbox" class="task-select-checkbox" data-select-task="${t.id}" ${selectedTaskIds.has(t.id) ? "checked" : ""}></label>` : "";
 
       return `
         ${currentBanner}
@@ -1155,7 +1180,7 @@
           </div>
           <div class="task-card-dates${isToday ? " is-today" : ""}">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)} &bull; ${taskDuration(t)} day${taskDuration(t) === 1 ? "" : "s"}</div>
           ${linksHtml}
-          ${entries.length || isEditor ? `<div class="task-card-sub">${entriesHtml}${subActions}</div>` : ""}
+          ${entries.length || canManage() ? `<div class="task-card-sub">${entriesHtml}${subActions}</div>` : ""}
         </div>`;
     }).join("");
 
@@ -1279,7 +1304,7 @@
     const sorted = [...trav.delays].sort((a, b) => b.date.localeCompare(a.date));
     list.innerHTML = sorted.map((d) => {
       const task = trav.tasks.find((t) => t.id === d.taskId);
-      const del = isEditor ? `<button class="btn-icon" data-delete-delay="${d.id}" title="Delete">&times;</button>` : "";
+      const del = canManage() ? `<button class="btn-icon" data-delete-delay="${d.id}" title="Delete">&times;</button>` : "";
       return `
         <div class="log-item delay">
           <div class="log-item-head">
@@ -1289,7 +1314,7 @@
           <div class="log-item-text">${escapeHtml(d.reason)}</div>
         </div>`;
     }).join("");
-    if (isEditor) {
+    if (canManage()) {
       list.querySelectorAll("[data-delete-delay]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const removed = trav.delays.find((d) => d.id === btn.dataset.deleteDelay);
@@ -1314,7 +1339,7 @@
     const sorted = [...trav.notes].sort((a, b) => b.date.localeCompare(a.date));
     list.innerHTML = sorted.map((n) => {
       const task = trav.tasks.find((t) => t.id === n.taskId);
-      const del = isEditor ? `<button class="btn-icon" data-delete-note="${n.id}" title="Delete">&times;</button>` : "";
+      const del = canManage() ? `<button class="btn-icon" data-delete-note="${n.id}" title="Delete">&times;</button>` : "";
       return `
       <div class="log-item note">
         <div class="log-item-head">
@@ -1324,7 +1349,7 @@
         <div class="log-item-text">${escapeHtml(n.text)}</div>
       </div>`;
     }).join("");
-    if (isEditor) {
+    if (canManage()) {
       list.querySelectorAll("[data-delete-note]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const removed = trav.notes.find((n) => n.id === btn.dataset.deleteNote);
@@ -2860,6 +2885,7 @@
   // ---------- init ----------
   (async () => {
     isEditor = !!getStoredPassword();
+    uiMode = localStorage.getItem(MODE_KEY) === "view" ? "view" : "manage";
     await loadRemote();
     updateEditorUI();
     route();

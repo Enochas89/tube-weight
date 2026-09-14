@@ -85,6 +85,23 @@ body {
 }
 .editor-badge .btn-link { color: rgba(255, 255, 255, 0.7); font-weight: 400; text-decoration: underline; }
 .editor-badge .btn-link:hover { color: white; }
+.mode-toggle { display: flex; background: rgba(0, 0, 0, 0.18); border-radius: 999px; padding: 2px; gap: 2px; }
+.mode-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: rgba(244, 180, 0, 0.7);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.mode-toggle-btn:hover { color: var(--brand-yellow); }
+.mode-toggle-btn.active { background: var(--brand-yellow); color: var(--brand-black); }
+.mode-toggle-btn.active:hover { color: var(--brand-black); }
 
 .status-toast {
   position: fixed;

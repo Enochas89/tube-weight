@@ -16,7 +16,13 @@
   </div>
   <div class="edit-auth">
     <button id="signInBtn" class="btn-secondary">Sign in to edit</button>
-    <span id="editorBadge" class="editor-badge hidden">Editing <button id="signOutBtn" class="btn-link">Sign out</button></span>
+    <span id="editorBadge" class="editor-badge hidden">
+      <span class="mode-toggle" role="group" aria-label="View or manage">
+        <button type="button" class="mode-toggle-btn" id="modeViewBtn" title="Browse read-only">View</button>
+        <button type="button" class="mode-toggle-btn" id="modeManageBtn" title="Add, edit, and reschedule">Manage</button>
+      </span>
+      <button id="signOutBtn" class="btn-link">Sign out</button>
+    </span>
   </div>
   <div class="powered-by">
     <span class="powered-by-label">Powered by</span>
