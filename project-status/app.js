@@ -1690,6 +1690,11 @@
         <div class="modal-field"><label>Progress (%)</label><input type="number" id="f-progress" min="0" max="100" value="${task?.progress ?? 0}"></div>
       </div>
       <label class="checkbox-row"><input type="checkbox" id="f-no-impact" ${task?.noScheduleImpact ? "checked" : ""}> No impact on schedule <span class="modal-label-hint">(excluded from overall % complete)</span></label>
+      ${isEdit && task.status === "complete" ? `
+      <div class="modal-field">
+        <button type="button" class="btn-secondary" id="f-reopen-task">&#8634; Re-add to Task List</button>
+        <span class="modal-label-hint">Sets it back to Not Started / 0% — for when a task got swiped or marked complete by mistake.</span>
+      </div>` : ""}
     `;
     openModal(isEdit ? "Edit Task" : "Add Task", body, async () => {
       const name = document.getElementById("f-name").value.trim();
@@ -1747,6 +1752,29 @@
     document.getElementById("f-status").addEventListener("change", (e) => {
       if (e.target.value === "complete") document.getElementById("f-progress").value = 100;
     });
+
+    const reopenBtn = document.getElementById("f-reopen-task");
+    if (reopenBtn) {
+      reopenBtn.addEventListener("click", async () => {
+        reopenBtn.disabled = true;
+        const prev = { status: task.status, progress: task.progress, completedAt: task.completedAt };
+        task.status = "not_started";
+        task.progress = 0;
+        task.completedAt = null;
+        recalcSchedule(project);
+        const ok = await saveRemote();
+        if (!ok) {
+          Object.assign(task, prev);
+          recalcSchedule(project);
+          reopenBtn.disabled = false;
+          return;
+        }
+        renderTaskList(project, trav);
+        renderList();
+        renderTravelerList(project);
+        closeModal();
+      });
+    }
   }
 
   function openDelayModal(project, trav, presetTask) {
