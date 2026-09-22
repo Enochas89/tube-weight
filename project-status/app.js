@@ -114,6 +114,24 @@
     return t.duration || Math.max(1, daysBetween(t.startDate, t.endDate) + 1);
   }
 
+  // "One-tap complete" actions (swipe, bulk Mark Complete) don't ask for a
+  // date — they mean "this got done today." Snap the task's end date (and
+  // duration, since taskDuration() prefers the stored value over recomputing
+  // it) to today so recalcSchedule's predecessor-chain reflow picks it up:
+  // finishing early pulls every downstream task earlier, finishing late
+  // pushes them later — same ripple either direction. Start date only moves
+  // if today is somehow before it (completed before its own planned start).
+  function markTaskCompletedToday(task) {
+    const today = todayStr();
+    const start = today < task.startDate ? today : task.startDate;
+    task.startDate = start;
+    task.endDate = today;
+    task.duration = Math.max(1, daysBetween(start, today) + 1);
+    task.status = "complete";
+    task.progress = 100;
+    task.completedAt = Date.now();
+  }
+
   // Project-level "block out Sat/Sun" — non-working days are skipped when
   // scheduling a task's span or the gap after a predecessor, but a manually
   // chosen start date is never moved on its own.
@@ -1337,10 +1355,8 @@
         content.style.transform = `translateX(${cardEl.offsetWidth}px)`;
         bg.style.opacity = "1";
         setTimeout(async () => {
-          const prev = { status: task.status, progress: task.progress, completedAt: task.completedAt };
-          task.status = "complete";
-          task.progress = 100;
-          task.completedAt = Date.now();
+          const prev = { status: task.status, progress: task.progress, completedAt: task.completedAt, startDate: task.startDate, endDate: task.endDate, duration: task.duration };
+          markTaskCompletedToday(task);
           recalcSchedule(project);
           const ok = await saveRemote();
           if (!ok) { Object.assign(task, prev); recalcSchedule(project); }
@@ -1368,18 +1384,22 @@
     if (!trav) return;
     const targets = trav.tasks.filter((t) => selectedTaskIds.has(t.id));
     if (!targets.length) return;
-    const prev = targets.map((t) => ({ id: t.id, status: t.status, progress: t.progress, completedAt: t.completedAt }));
+    const prev = targets.map((t) => ({ id: t.id, status: t.status, progress: t.progress, completedAt: t.completedAt, startDate: t.startDate, endDate: t.endDate, duration: t.duration }));
     targets.forEach((t) => {
-      t.status = complete ? "complete" : "not_started";
-      t.progress = complete ? 100 : 0;
-      t.completedAt = complete ? Date.now() : null;
+      if (complete) {
+        markTaskCompletedToday(t);
+      } else {
+        t.status = "not_started";
+        t.progress = 0;
+        t.completedAt = null;
+      }
     });
     recalcSchedule(p);
     const ok = await saveRemote();
     if (!ok) {
-      prev.forEach(({ id, status, progress, completedAt }) => {
+      prev.forEach(({ id, status, progress, completedAt, startDate, endDate, duration }) => {
         const t = trav.tasks.find((tk) => tk.id === id);
-        if (t) { t.status = status; t.progress = progress; t.completedAt = completedAt; }
+        if (t) { t.status = status; t.progress = progress; t.completedAt = completedAt; t.startDate = startDate; t.endDate = endDate; t.duration = duration; }
       });
       recalcSchedule(p);
       return;
