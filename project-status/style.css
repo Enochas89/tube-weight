@@ -273,17 +273,52 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .task-card {
   position: relative;
   overflow: hidden;
+  border-radius: 14px;
+}
+.task-card-content {
+  position: relative;
+  z-index: 1;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 16px 20px 16px 26px;
   box-shadow: 0 2px 8px rgba(16, 24, 40, 0.07);
 }
+.task-swipe-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 26px;
+  background: #00c875;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  opacity: 0;
+  border-radius: 14px;
+}
+.task-swipe-check { font-size: 1.25rem; }
+.task-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #00c875;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .task-card-stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; }
 .task-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .task-card-title { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .task-select-checkbox { margin-top: 4px; flex-shrink: 0; width: 16px; height: 16px; cursor: pointer; }
-.task-card.is-selected { box-shadow: 0 0 0 2px var(--accent, #2563eb) inset, 0 2px 8px rgba(16, 24, 40, 0.07); }
+.task-card.is-selected .task-card-content { box-shadow: 0 0 0 2px var(--accent, #2563eb) inset, 0 2px 8px rgba(16, 24, 40, 0.07); }
 .task-bulk-bar {
   display: flex;
   align-items: center;

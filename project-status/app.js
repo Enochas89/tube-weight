@@ -905,6 +905,10 @@
     if (n > 0) document.getElementById("taskBulkCount").textContent = `${n} selected`;
   }
 
+  function isMobileView() {
+    return window.matchMedia("(max-width: 640px)").matches;
+  }
+
   function renderTaskList(project, trav) {
     const wrap = document.getElementById("taskListWrap");
     // Drop selections for tasks that no longer exist (e.g. deleted elsewhere).
@@ -917,7 +921,21 @@
     }
 
     const todayMs = new Date(todayStr() + "T00:00:00").getTime();
-    wrap.innerHTML = trav.tasks.map((t, taskIdx) => {
+    // Task numbers (#1, #2, ...) are a stable contract with the email-based
+    // update automation (assistant/apply_traveler_update.js expects them to
+    // match trav.tasks' array position) — always compute them from the
+    // traveler's real task order, before any mobile-only visual reordering.
+    const numbered = trav.tasks.map((t, i) => ({ t, taskNumber: i + 1 }));
+    const mobile = isMobileView();
+    const displayOrder = mobile
+      ? [...numbered].sort((a, b) => {
+          const aDone = a.t.status === "complete", bDone = b.t.status === "complete";
+          if (aDone !== bDone) return aDone ? -1 : 1;
+          return aDone && bDone ? (b.t.completedAt || 0) - (a.t.completedAt || 0) : 0;
+        })
+      : numbered;
+
+    wrap.innerHTML = displayOrder.map(({ t, taskNumber }) => {
       const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
       const isToday = todayMs >= new Date(t.startDate + "T00:00:00").getTime() && todayMs <= new Date(t.endDate + "T00:00:00").getTime();
       const actions = isEditor ? `
@@ -969,29 +987,35 @@
 
       const currentBanner = isToday ? `<div class="current-marker">Current &bull; ${fmtDate(todayStr())}</div>` : "";
       const checkbox = isEditor ? `<input type="checkbox" class="task-select-checkbox" data-select-task="${t.id}" ${selectedTaskIds.has(t.id) ? "checked" : ""}>` : "";
+      const statusMark = t.status === "complete"
+        ? `<span class="task-check" title="Complete">&#10003;</span>`
+        : `<span class="status-dot" style="background:${color}"></span>`;
 
       return `
         ${currentBanner}
         <div class="task-card${selectedTaskIds.has(t.id) ? " is-selected" : ""}" data-task-card="${t.id}">
-          <div class="task-card-stripe" style="background:${color}"></div>
-          <div class="task-card-top">
-            <div class="task-card-title">
-              ${checkbox}
-              <span class="status-dot" style="background:${color}"></span>
-              <span class="task-number" title="Task # for email updates (e.g. Tasks ${taskIdx + 1}, 100%)">#${taskIdx + 1}</span>
-              <span class="task-name">${escapeHtml(t.name)}</span>
-              ${t.noScheduleImpact ? `<span class="no-impact-badge" title="Excluded from overall % complete">No impact</span>` : ""}
+          <div class="task-swipe-bg"><span class="task-swipe-check">&#10003;</span>Complete</div>
+          <div class="task-card-content">
+            <div class="task-card-stripe" style="background:${color}"></div>
+            <div class="task-card-top">
+              <div class="task-card-title">
+                ${checkbox}
+                ${statusMark}
+                <span class="task-number" title="Task # for email updates (e.g. Tasks ${taskNumber}, 100%)">#${taskNumber}</span>
+                <span class="task-name">${escapeHtml(t.name)}</span>
+                ${t.noScheduleImpact ? `<span class="no-impact-badge" title="Excluded from overall % complete">No impact</span>` : ""}
+              </div>
+              ${actions}
             </div>
-            ${actions}
+            <div class="task-card-owner-row">${owner}</div>
+            <div class="task-card-progress">
+              <div class="progress-bar"><div class="progress-bar-fill" style="width:${t.progress || 0}%;"></div></div>
+              <span class="task-card-pct">${t.progress || 0}%</span>
+            </div>
+            <div class="task-card-dates${isToday ? " is-today" : ""}">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)} &bull; ${taskDuration(t)} day${taskDuration(t) === 1 ? "" : "s"}</div>
+            ${linksHtml}
+            ${entries.length || isEditor ? `<div class="task-card-sub">${entriesHtml}${subActions}</div>` : ""}
           </div>
-          <div class="task-card-owner-row">${owner}</div>
-          <div class="task-card-progress">
-            <div class="progress-bar"><div class="progress-bar-fill" style="width:${t.progress || 0}%;"></div></div>
-            <span class="task-card-pct">${t.progress || 0}%</span>
-          </div>
-          <div class="task-card-dates${isToday ? " is-today" : ""}">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)} &bull; ${taskDuration(t)} day${taskDuration(t) === 1 ? "" : "s"}</div>
-          ${linksHtml}
-          ${entries.length || isEditor ? `<div class="task-card-sub">${entriesHtml}${subActions}</div>` : ""}
         </div>`;
     }).join("");
 
@@ -1066,6 +1090,82 @@
         renderNotes(project, trav);
       });
     });
+
+    // Swipe-right-to-complete — mobile only. Completed tasks re-sort to the
+    // top (see displayOrder above), so a card is never re-attached here once
+    // it's done; no need for a swipe-left "undo" path.
+    if (isEditor && mobile) {
+      wrap.querySelectorAll("[data-task-card]").forEach((cardEl) => {
+        const task = trav.tasks.find((tk) => tk.id === cardEl.dataset.taskCard);
+        if (task && task.status !== "complete") attachTaskSwipe(cardEl, project, trav, task);
+      });
+    }
+  }
+
+  function attachTaskSwipe(cardEl, project, trav, task) {
+    const content = cardEl.querySelector(".task-card-content");
+    const bg = cardEl.querySelector(".task-swipe-bg");
+    if (!content || !bg) return;
+    let startX = 0, startY = 0, dx = 0, axis = null, active = false;
+    const threshold = () => Math.min(110, cardEl.offsetWidth * 0.35);
+
+    const reset = () => {
+      content.style.transition = "transform .18s ease";
+      content.style.transform = "translateX(0)";
+      bg.style.opacity = "0";
+    };
+
+    cardEl.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      dx = 0; axis = null; active = true;
+      content.style.transition = "none";
+    }, { passive: true });
+
+    cardEl.addEventListener("touchmove", (e) => {
+      if (!active) return;
+      const touch = e.touches[0];
+      const ddx = touch.clientX - startX;
+      const ddy = touch.clientY - startY;
+      if (!axis) {
+        if (Math.abs(ddx) < 8 && Math.abs(ddy) < 8) return;
+        axis = Math.abs(ddx) > Math.abs(ddy) ? "x" : "y";
+        if (axis === "y") { active = false; return; }
+      }
+      e.preventDefault();
+      dx = Math.max(0, ddx);
+      const capped = Math.min(dx, cardEl.offsetWidth);
+      content.style.transform = `translateX(${capped}px)`;
+      bg.style.opacity = String(Math.min(1, capped / threshold()));
+    }, { passive: false });
+
+    const finish = () => {
+      if (!active) return;
+      active = false;
+      if (axis === "x" && dx > threshold()) {
+        content.style.transition = "transform .15s ease";
+        content.style.transform = `translateX(${cardEl.offsetWidth}px)`;
+        bg.style.opacity = "1";
+        setTimeout(async () => {
+          const prev = { status: task.status, progress: task.progress, completedAt: task.completedAt };
+          task.status = "complete";
+          task.progress = 100;
+          task.completedAt = Date.now();
+          recalcSchedule(project);
+          const ok = await saveRemote();
+          if (!ok) { Object.assign(task, prev); recalcSchedule(project); }
+          renderTaskList(project, trav);
+          renderList();
+          renderTravelerList(project);
+        }, 160);
+      } else {
+        reset();
+      }
+    };
+
+    cardEl.addEventListener("touchend", finish);
+    cardEl.addEventListener("touchcancel", () => { active = false; reset(); });
   }
 
   document.getElementById("addTaskBtn").addEventListener("click", () => {
@@ -1079,17 +1179,18 @@
     if (!trav) return;
     const targets = trav.tasks.filter((t) => selectedTaskIds.has(t.id));
     if (!targets.length) return;
-    const prev = targets.map((t) => ({ id: t.id, status: t.status, progress: t.progress }));
+    const prev = targets.map((t) => ({ id: t.id, status: t.status, progress: t.progress, completedAt: t.completedAt }));
     targets.forEach((t) => {
       t.status = complete ? "complete" : "not_started";
       t.progress = complete ? 100 : 0;
+      t.completedAt = complete ? Date.now() : null;
     });
     recalcSchedule(p);
     const ok = await saveRemote();
     if (!ok) {
-      prev.forEach(({ id, status, progress }) => {
+      prev.forEach(({ id, status, progress, completedAt }) => {
         const t = trav.tasks.find((tk) => tk.id === id);
-        if (t) { t.status = status; t.progress = progress; }
+        if (t) { t.status = status; t.progress = progress; t.completedAt = completedAt; }
       });
       recalcSchedule(p);
       return;
@@ -1350,14 +1451,20 @@
         startDate = nextWorkDay(new Date(latestEnd + 86400000).toISOString().slice(0, 10), project);
       }
       const endDate = endDateForDuration(startDate, duration, project);
+      const newStatus = document.getElementById("f-status").value;
+      // Only stamp a fresh completedAt on the transition into "complete" —
+      // re-saving an already-complete task (e.g. just editing its owner)
+      // must not bump it back to the top of the mobile swipe-sorted list.
+      const wasComplete = isEdit && task.status === "complete";
       const vals = {
         name, startDate, endDate, duration, predecessors,
         responsible: document.getElementById("f-owner").value.trim(),
-        status: document.getElementById("f-status").value,
-        progress: document.getElementById("f-status").value === "complete"
+        status: newStatus,
+        progress: newStatus === "complete"
           ? 100
           : Math.max(0, Math.min(100, Math.round(num(document.getElementById("f-progress").value)))),
         noScheduleImpact: document.getElementById("f-no-impact").checked,
+        completedAt: newStatus === "complete" ? (wasComplete ? task.completedAt : Date.now()) : null,
       };
       let prev = null;
       let addedTask = null;
