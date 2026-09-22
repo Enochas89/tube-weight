@@ -277,6 +277,41 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   text-decoration: none; width: fit-content;
 }
 .detail-source:hover { color: var(--accent); text-decoration: underline; }
+.completion-check-row {
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  white-space: nowrap;
+  margin: 10px 0 0;
+}
+.completion-check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #00c875;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+}
+.completion-check-counter {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 15px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #00c875;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
 .detail-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .gantt-zoom-controls {
   display: flex;
@@ -370,6 +405,27 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   border-radius: 14px;
 }
 .task-swipe-check { font-size: 1.25rem; }
+.float-check-fx {
+  position: fixed;
+  z-index: 2000;
+  pointer-events: none;
+  font-size: 1.8rem;
+  font-weight: 900;
+  line-height: 1;
+  color: #00c875;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transform: translate(-50%, -50%);
+  animation: floatCheckFx 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+@keyframes floatCheckFx {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(-8deg); }
+  18% { opacity: 1; transform: translate(-50%, -60%) scale(1.35) rotate(4deg); }
+  35% { opacity: 1; transform: translate(-50%, -80%) scale(1) rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%, -170%) scale(1) rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .float-check-fx { animation-duration: 0.01s; }
+}
 .task-check {
   flex-shrink: 0;
   width: 18px;

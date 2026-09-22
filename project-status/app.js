@@ -522,6 +522,31 @@
     return Math.round(counted.reduce((a, t) => a + (t.progress || 0), 0) / counted.length);
   }
 
+  // Little green checks across the traveler header, one per completed task,
+  // left to right. When there isn't room for another icon, the last one
+  // becomes a running counter instead of wrapping or shrinking the icons.
+  function renderCompletionRow(trav) {
+    const el = document.getElementById("detailCompletionRow");
+    const counted = trav.tasks.filter((t) => !t.noScheduleImpact);
+    const completed = counted.filter((t) => t.status === "complete").length;
+    const total = counted.length;
+    if (!total || !completed) {
+      el.style.display = "none";
+      el.innerHTML = "";
+      return;
+    }
+    el.style.display = "flex";
+    el.title = `${completed} of ${total} task${total === 1 ? "" : "s"} complete`;
+    const check = `<span class="completion-check">&#10003;</span>`;
+    el.innerHTML = check.repeat(completed);
+    if (el.scrollWidth <= el.clientWidth) return;
+    let shown = completed;
+    while (shown > 1 && el.scrollWidth > el.clientWidth) {
+      shown -= 1;
+      el.innerHTML = check.repeat(shown - 1) + `<span class="completion-check-counter">${completed}</span>`;
+    }
+  }
+
   function renderList() {
     const grid = document.getElementById("projectGrid");
     if (state.projects.length === 0) {
@@ -1122,6 +1147,7 @@
     const liveIds = new Set(trav.tasks.map((t) => t.id));
     Array.from(selectedTaskIds).forEach((id) => { if (!liveIds.has(id)) selectedTaskIds.delete(id); });
     updateTaskBulkBar();
+    renderCompletionRow(trav);
     if (!trav.tasks.length) {
       wrap.innerHTML = `<div class="empty-state">No tasks yet.${canManage() ? ' Click "+ Add Task" to get started.' : ""}</div>`;
       return;
@@ -1309,6 +1335,21 @@
     }
   }
 
+  // "Like button" float-up — a big check pops from the card and drifts up
+  // while fading out. Appended to <body> (not the card) so it survives the
+  // task-list re-render that happens a moment later when the card moves.
+  function spawnFloatCheck(cardEl) {
+    const rect = cardEl.getBoundingClientRect();
+    const fx = document.createElement("span");
+    fx.className = "float-check-fx";
+    fx.textContent = "✓";
+    fx.style.left = `${rect.left + 34}px`;
+    fx.style.top = `${rect.top + rect.height / 2}px`;
+    document.body.appendChild(fx);
+    fx.addEventListener("animationend", () => fx.remove());
+    setTimeout(() => fx.remove(), 1500);
+  }
+
   function attachTaskSwipe(cardEl, project, trav, task) {
     const content = cardEl.querySelector(".task-card-content");
     const bg = cardEl.querySelector(".task-swipe-bg");
@@ -1351,6 +1392,7 @@
       if (!active) return;
       active = false;
       if (axis === "x" && dx > threshold()) {
+        spawnFloatCheck(cardEl);
         content.style.transition = "transform .15s ease";
         content.style.transform = `translateX(${cardEl.offsetWidth}px)`;
         bg.style.opacity = "1";
