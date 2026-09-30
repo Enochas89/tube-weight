@@ -613,7 +613,19 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   touch-action: none;
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.2);
 }
-.gantt-bar.locked { cursor: grab; opacity: 0.75; }
+/* Dimmed look for locked (auto-scheduled) bars, via an overlay rather than
+   `opacity` -- opacity < 1 creates a new stacking context, which used to
+   trap the bar's z-index:20 popover inside it so a later row in the DOM
+   could paint right over the open popover. */
+.gantt-bar.locked { cursor: grab; }
+.gantt-bar.locked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: inherit;
+  pointer-events: none;
+}
 .gantt-bar.dragging { cursor: grabbing; z-index: 5; box-shadow: 0 4px 12px rgba(16, 24, 40, 0.3); }
 .gantt-bar-fill { position: absolute; inset: 0; width: 0; background: rgba(0, 0, 0, 0.22); border-radius: 5px 0 0 5px; pointer-events: none; }
 .gantt-bar-label {
@@ -690,7 +702,12 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 }
 .gantt-bar:hover .gantt-link-handle, .gantt-link-handle.linking { opacity: 1; }
 
-.gantt-links-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+/* z-index lifts the connector lines out of the z-index:auto layer they'd
+   otherwise share with the row divs -- without it, rows painted later in
+   the DOM (any row below the first) draw their background right over the
+   lines, since plain position:relative rows with no z-index paint in DOM
+   order at that shared stack level. */
+.gantt-links-svg { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; overflow: visible; }
 .gantt-link-path { fill: none; stroke: var(--text-dim); stroke-width: 1.25; opacity: 0.6; }
 .gantt-link-arrow { fill: var(--text-dim); opacity: 0.6; }
 
