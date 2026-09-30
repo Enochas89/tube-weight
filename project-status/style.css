@@ -860,8 +860,8 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .mp-empty { padding: 40px; text-align: center; color: var(--text-dim); }
 
 /* ---------- team roster modal ---------- */
-.team-add-row { display: flex; gap: 6px; margin-top: 4px; }
-.team-add-row input { flex: 1 1 auto; min-width: 0; }
+.team-add-row { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.team-add-row input, .team-add-row select { flex: 1 1 auto; min-width: 0; }
 .team-roster-list { max-height: 320px; overflow-y: auto; margin-top: 14px; }
 .team-person-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
 .team-person-row input {

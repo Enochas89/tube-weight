@@ -1880,12 +1880,17 @@
             </div>`).join("") : `<p class="modal-hint">No one yet.</p>`}
         `;
       }).join("");
+    const addDeptDefault = lastAddedDept || depts[0] || "";
     return `
       <div class="modal-field">
         <label>Add person</label>
         <div class="team-add-row">
           <input type="text" id="f-team-name" placeholder="Name">
-          <input type="text" id="f-team-dept" list="teamDeptOptions" placeholder="Department" value="${escapeHtml(lastAddedDept || depts[0] || "")}">
+          <select id="f-team-dept">
+            ${depts.map((d) => `<option value="${escapeHtml(d)}"${d === addDeptDefault ? " selected" : ""}>${escapeHtml(d)}</option>`).join("")}
+            <option value="__new__">+ New department…</option>
+          </select>
+          <input type="text" id="f-team-dept-new" placeholder="New department name" class="hidden">
           <button type="button" class="btn-secondary" id="teamAddBtn">+ Add</button>
         </div>
         <datalist id="teamDeptOptions">${depts.map((d) => `<option value="${escapeHtml(d)}">`).join("")}</datalist>
@@ -1900,11 +1905,17 @@
   }
   function wireTeamRosterBody() {
     const nameInput = document.getElementById("f-team-name");
-    const deptInput = document.getElementById("f-team-dept");
+    const deptSelect = document.getElementById("f-team-dept");
+    const deptNewInput = document.getElementById("f-team-dept-new");
+    deptSelect.addEventListener("change", () => {
+      const isNew = deptSelect.value === "__new__";
+      deptNewInput.classList.toggle("hidden", !isNew);
+      if (isNew) deptNewInput.focus();
+    });
     document.getElementById("teamAddBtn").addEventListener("click", async () => {
       const name = nameInput.value.trim();
       if (!name) { nameInput.focus(); return; }
-      const department = deptInput.value.trim() || "Unassigned";
+      const department = (deptSelect.value === "__new__" ? deptNewInput.value.trim() : deptSelect.value) || "Unassigned";
       ensureTeam();
       state.team.push({ id: uid(), name, department });
       const ok = await saveRemote();
