@@ -3423,16 +3423,24 @@
     }
   }, { passive: false });
 
+  function wireFullscreenToggle(btn, view) {
+    btn.addEventListener("click", () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else view.requestFullscreen().catch(() => showStatus("This browser blocked full screen — check for a permission prompt.", "error"));
+    });
+  }
   const projectGanttFullscreenBtn = document.getElementById("projectGanttFullscreenBtn");
-  projectGanttFullscreenBtn.addEventListener("click", () => {
-    const el = document.getElementById("projectGanttView");
-    if (document.fullscreenElement) document.exitFullscreen();
-    else el.requestFullscreen().catch(() => showStatus("This browser blocked full screen — check for a permission prompt.", "error"));
-  });
+  const projectGanttViewEl = document.getElementById("projectGanttView");
+  wireFullscreenToggle(projectGanttFullscreenBtn, projectGanttViewEl);
+  const manpowerGanttFullscreenBtn = document.getElementById("manpowerGanttFullscreenBtn");
+  const manpowerGanttViewEl = document.getElementById("manpowerGanttView");
+  wireFullscreenToggle(manpowerGanttFullscreenBtn, manpowerGanttViewEl);
   document.addEventListener("fullscreenchange", () => {
-    const isFull = document.fullscreenElement === document.getElementById("projectGanttView");
-    projectGanttFullscreenBtn.innerHTML = isFull ? "&#10021; Exit Full Screen" : "&#10021; Full Screen";
-    projectGanttFullscreenBtn.title = isFull ? "Exit full screen" : "Enter full screen";
+    [[projectGanttFullscreenBtn, projectGanttViewEl], [manpowerGanttFullscreenBtn, manpowerGanttViewEl]].forEach(([btn, view]) => {
+      const isFull = document.fullscreenElement === view;
+      btn.innerHTML = isFull ? "&#10021; Exit Full Screen" : "&#10021; Full Screen";
+      btn.title = isFull ? "Exit full screen" : "Enter full screen";
+    });
   });
 
   document.getElementById("projectGanttAddBtn").addEventListener("click", async () => {

@@ -483,7 +483,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 /* Break out of <main>'s centered 1200px column so the Gantt view alone
    spans the full viewport width -- there's rarely such a thing as too
    much room for a timeline. */
-#ganttView, #projectGanttView {
+#ganttView, #projectGanttView, #manpowerGanttView {
   width: 100vw;
   max-width: 100vw;
   margin-left: calc(50% - 50vw);
@@ -495,7 +495,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
    top-level viewport, so it needs to size and lay itself out explicitly
    instead of relying on the page around it. The grid gets a fixed-height
    flex column with its own internal scroll so rows fill the screen. */
-#projectGanttView:fullscreen {
+#projectGanttView:fullscreen, #manpowerGanttView:fullscreen {
   width: 100vw;
   height: 100vh;
   max-width: 100vw;
@@ -506,7 +506,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   display: flex;
   flex-direction: column;
 }
-#projectGanttView:fullscreen .gantt-full {
+#projectGanttView:fullscreen .gantt-full, #manpowerGanttView:fullscreen .gantt-full {
   flex: 1;
   min-height: 0;
   align-items: stretch;
