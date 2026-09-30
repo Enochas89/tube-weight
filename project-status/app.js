@@ -3470,9 +3470,20 @@
 
   // ---------- init ----------
   (async () => {
-    isEditor = !!getStoredPassword();
+    // A stored password only means the user signed in *at some point* -- if
+    // EDIT_PASSWORD was ever rotated since, this stays looking like a valid
+    // session (Editor badge shown) until the user tries to save something,
+    // which then fails 401 with an easy-to-miss toast (the row/edit visibly
+    // reverts, so it just looks like "nothing happened"). Validate up front
+    // instead so a stale session gets caught and cleared before that happens.
+    const storedPw = getStoredPassword();
+    const [, verified] = await Promise.all([loadRemote(), storedPw ? verifyPassword(storedPw) : false]);
+    isEditor = storedPw ? verified : false;
+    if (storedPw && !isEditor) {
+      setStoredPassword("");
+      showStatus("Your edit session expired — sign in again to keep editing.", "error", true);
+    }
     uiMode = localStorage.getItem(MODE_KEY) === "view" ? "view" : "manage";
-    await loadRemote();
     updateEditorUI();
     route();
     setInterval(silentRefresh, 15000);
