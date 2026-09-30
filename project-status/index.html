@@ -263,7 +263,14 @@
           <h2 id="manpowerGanttTitle">Man Power</h2>
           <p class="detail-client">Click a bar to see the task, traveler, and dates behind it</p>
         </div>
+        <div class="detail-actions">
+          <button class="btn-secondary hidden" id="manageTeamBtn">Manage Team</button>
+        </div>
       </div>
+    </div>
+    <div class="gantt-toolbar-row hidden" id="manpowerToolbarRow">
+      <label class="modal-label-hint" for="manpowerDeptFilter">Department</label>
+      <select id="manpowerDeptFilter"></select>
     </div>
     <div class="gantt-full">
       <div class="gantt-full-labels">
@@ -284,6 +291,8 @@
   </section>
 
 </main>
+
+<datalist id="teamNameOptions"></datalist>
 
 <!-- ===================== MODAL ===================== -->
 <div id="modalBackdrop" class="modal-backdrop hidden">

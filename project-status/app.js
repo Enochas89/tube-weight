@@ -242,6 +242,33 @@
       if (!changed) break;
     }
   }
+  // ---------- team roster (company-wide people + department) ----------
+  // Kept as free-standing state.team, separate from the free-text
+  // "Responsible" field on tasks — Responsible stays freeform (so a quick
+  // ad-hoc name still works and old data never breaks), and the roster is
+  // just a name/department list that the Man Power views cross-reference
+  // by exact name match (matched by [[project-retubeco-traveler-automation]]'s
+  // lesson: no fuzzy matching on identity, fail to "Unassigned" instead of
+  // guessing) plus feeds a <datalist> so typed names line up with it.
+  const DEFAULT_DEPARTMENTS = ["Machine Shop", "Fab Shop", "Engineering"];
+  function ensureTeam() { if (!Array.isArray(state.team)) state.team = []; }
+  function allDepartments() {
+    const set = new Set(DEFAULT_DEPARTMENTS);
+    (state.team || []).forEach((person) => { if (person.department) set.add(person.department); });
+    return Array.from(set);
+  }
+  function departmentSortIndex(dept) {
+    const i = DEFAULT_DEPARTMENTS.indexOf(dept);
+    return i === -1 ? DEFAULT_DEPARTMENTS.length + 1 : i;
+  }
+  // Keeps the <datalist> that backs every Responsible input's autocomplete
+  // in sync with the roster -- called once on load and after any roster edit.
+  function renderTeamNameOptions() {
+    ensureTeam();
+    const dl = document.getElementById("teamNameOptions");
+    if (dl) dl.innerHTML = state.team.map((p) => `<option value="${escapeHtml(p.name)}">`).join("");
+  }
+
   // Unique "Responsible" names across every task in every traveler under a
   // project — the project overview's manpower list, with no separate field
   // to keep in sync.
@@ -381,9 +408,12 @@
       const data = await res.json();
       state = (data && Array.isArray(data.projects)) ? data : { projects: [] };
       state.projects.forEach(migrateProject);
+      ensureTeam();
+      renderTeamNameOptions();
       hideStatus();
     } catch (e) {
       state = { projects: [] };
+      ensureTeam();
       showStatus("Could not load data — check your connection and reload the page.", "error", true);
     }
   }
@@ -497,6 +527,8 @@
     manpowerGanttMode = { scope: "traveler", project: p, traveler: trav };
     document.getElementById("manpowerGanttView").classList.remove("hidden");
     document.getElementById("manpowerGanttTitle").textContent = `Man Power — ${trav.name}`;
+    document.getElementById("manageTeamBtn").classList.add("hidden");
+    document.getElementById("manpowerToolbarRow").classList.add("hidden");
     renderManpowerGantt();
   }
   function showManpowerGanttMaster() {
@@ -505,6 +537,8 @@
     manpowerGanttMode = { scope: "master" };
     document.getElementById("manpowerGanttView").classList.remove("hidden");
     document.getElementById("manpowerGanttTitle").textContent = "Man Power Overview — All Projects";
+    document.getElementById("manageTeamBtn").classList.remove("hidden");
+    document.getElementById("manpowerToolbarRow").classList.remove("hidden");
     renderManpowerGantt();
   }
 
@@ -540,33 +574,75 @@
     });
     return laneEnds.length;
   }
+  // Populates the department <select> from the current roster while
+  // preserving whatever the user had picked, if it still exists.
+  function updateManpowerDeptFilterOptions() {
+    const select = document.getElementById("manpowerDeptFilter");
+    const prev = select.value || "all";
+    const depts = allDepartments();
+    select.innerHTML = `<option value="all">All Departments</option>` +
+      depts.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("") +
+      `<option value="Unassigned">Unassigned</option>`;
+    select.value = Array.from(select.options).some((o) => o.value === prev) ? prev : "all";
+  }
   function renderManpowerGantt() {
     const labels = document.getElementById("manpowerGanttLabels");
     const header = document.getElementById("manpowerGanttHeader");
     const body = document.getElementById("manpowerGanttBody");
     if (!manpowerGanttMode) return;
+    const isMaster = manpowerGanttMode.scope === "master";
 
+    ensureTeam();
+    const rosterByName = new Map(state.team.map((p) => [p.name, p]));
     const assignments = manpowerAssignments(manpowerGanttMode);
-    if (!assignments.length) {
-      labels.innerHTML = "";
-      header.innerHTML = "";
-      body.innerHTML = `<div class="mp-empty">No one's assigned yet — add names to a task's Responsible field and they'll show up here.</div>`;
-      return;
-    }
 
     const byPerson = new Map();
     assignments.forEach((a) => {
       if (!byPerson.has(a.personName)) byPerson.set(a.personName, []);
       byPerson.get(a.personName).push(a);
     });
-    const people = Array.from(byPerson.keys()).sort((a, b) => a.localeCompare(b));
+    // The master view also surfaces roster people with zero current tasks
+    // -- an empty row is exactly what "who's available" looks like.
+    if (isMaster) {
+      state.team.forEach((p) => { if (!byPerson.has(p.name)) byPerson.set(p.name, []); });
+      updateManpowerDeptFilterOptions();
+    }
 
-    let rangeStart = assignments[0].task.startDate;
-    let rangeEnd = assignments[0].task.endDate;
-    assignments.forEach((a) => {
-      if (a.task.startDate < rangeStart) rangeStart = a.task.startDate;
-      if (a.task.endDate > rangeEnd) rangeEnd = a.task.endDate;
+    let people = Array.from(byPerson.keys()).map((name) => ({
+      name,
+      department: rosterByName.get(name)?.department || "Unassigned",
+      items: byPerson.get(name),
+    }));
+    const deptFilter = isMaster ? (document.getElementById("manpowerDeptFilter").value || "all") : "all";
+    if (isMaster && deptFilter !== "all") people = people.filter((p) => p.department === deptFilter);
+    people.sort((a, b) => {
+      const ai = departmentSortIndex(a.department), bi = departmentSortIndex(b.department);
+      if (ai !== bi) return ai - bi;
+      if (a.department !== b.department) return a.department.localeCompare(b.department);
+      return a.name.localeCompare(b.name);
     });
+
+    if (!people.length) {
+      labels.innerHTML = "";
+      header.innerHTML = "";
+      body.innerHTML = `<div class="mp-empty">${isMaster ? "No one on the roster yet — click \"Manage Team\" to add people." : "No one's assigned yet — add names to a task's Responsible field and they'll show up here."}</div>`;
+      return;
+    }
+
+    let rangeStart, rangeEnd;
+    if (assignments.length) {
+      rangeStart = assignments[0].task.startDate;
+      rangeEnd = assignments[0].task.endDate;
+      assignments.forEach((a) => {
+        if (a.task.startDate < rangeStart) rangeStart = a.task.startDate;
+        if (a.task.endDate > rangeEnd) rangeEnd = a.task.endDate;
+      });
+    } else {
+      // Nobody has a task yet (a brand-new roster) -- center a plain window
+      // on today so idle rows still have a timeline to sit in.
+      rangeStart = todayStr();
+      rangeEnd = addDays(rangeStart, 13);
+    }
     rangeStart = addDays(rangeStart, -3);
     rangeEnd = addDays(rangeEnd, 3);
     const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
@@ -586,12 +662,18 @@
     }
     header.innerHTML = `<div class="gantt-full-header-row" style="width:${totalWidth}px">${dayCells.join("")}</div>`;
 
-    const isMaster = manpowerGanttMode.scope === "master";
     let labelsHtml = "";
     let rowsHtml = "";
-    people.forEach((name, idx) => {
-      const items = byPerson.get(name).slice().sort((a, b) => a.task.startDate.localeCompare(b.task.startDate));
-      const laneCount = layoutLanes(items);
+    let lastDept = null;
+    people.forEach((person, idx) => {
+      const { name } = person;
+      if (isMaster && person.department !== lastDept) {
+        lastDept = person.department;
+        labelsHtml += `<div class="mp-dept-header">${escapeHtml(lastDept)}</div>`;
+        rowsHtml += `<div class="mp-dept-header"></div>`;
+      }
+      const items = person.items.slice().sort((a, b) => a.task.startDate.localeCompare(b.task.startDate));
+      const laneCount = Math.max(1, layoutLanes(items));
       const rowHeight = laneCount * MP_LANE_HEIGHT + MP_ROW_PAD;
       const altClass = idx % 2 === 1 ? " row-alt" : "";
 
@@ -599,7 +681,7 @@
         <div class="mp-label-row${altClass}" style="height:${rowHeight}px">
           <span class="mp-avatar" style="background:${avatarColor(name)}">${escapeHtml(initials(name))}</span>
           <span class="mp-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
-          <span class="mp-count">${items.length}</span>
+          <span class="mp-count">${items.length || ""}</span>
         </div>`;
 
       const barsHtml = items.map((it) => {
@@ -677,6 +759,8 @@
       if (!data || !Array.isArray(data.projects)) return;
       data.projects.forEach(migrateProject);
       state = data;
+      ensureTeam();
+      renderTeamNameOptions();
       route();
     } catch (e) {
       // background poll -- fails silently, next interval will retry
@@ -779,6 +863,8 @@
   document.getElementById("openProjectGanttBtn").addEventListener("click", () => showProjectGanttView());
   document.getElementById("backFromProjectGanttBtn").addEventListener("click", () => { showList(); });
   document.getElementById("openMasterManpowerBtn").addEventListener("click", () => showManpowerGanttMaster());
+  document.getElementById("manageTeamBtn").addEventListener("click", () => openTeamModal());
+  document.getElementById("manpowerDeptFilter").addEventListener("change", () => renderManpowerGantt());
 
   // ---------- MS Project XML import ----------
   // Reads only direct children by local name — namespace-agnostic (MSP XML
@@ -1733,6 +1819,8 @@
   function openModal(title, bodyHtml, onSave) {
     modalTitle.textContent = title;
     modalBody.innerHTML = bodyHtml;
+    modalSaveBtn.classList.remove("hidden");
+    modalCancelBtn.textContent = "Cancel";
     modalBackdrop.classList.remove("hidden");
     modalSaveBtn.onclick = async () => {
       modalSaveBtn.disabled = true;
@@ -1744,6 +1832,110 @@
       }
       if (result !== false) closeModal();
     };
+  }
+  // A "live" modal for list-management UIs (the team roster) where every
+  // row edits and saves itself immediately -- there's nothing left to commit
+  // with a Save button, so it's hidden and Cancel is relabeled to Close.
+  function openLiveModal(title, bodyHtml) {
+    modalTitle.textContent = title;
+    modalBody.innerHTML = bodyHtml;
+    modalSaveBtn.classList.add("hidden");
+    modalCancelBtn.textContent = "Close";
+    modalBackdrop.classList.remove("hidden");
+    modalSaveBtn.onclick = null;
+  }
+
+  // ---------- team roster modal (add/rename/move/remove people, live-saving) ----------
+  function teamRosterBodyHtml() {
+    ensureTeam();
+    const depts = allDepartments();
+    const byDept = new Map();
+    depts.forEach((d) => byDept.set(d, []));
+    state.team.forEach((p) => {
+      const d = p.department && p.department.trim() ? p.department.trim() : "Unassigned";
+      if (!byDept.has(d)) byDept.set(d, []);
+      byDept.get(d).push(p);
+    });
+    const orderedDepts = Array.from(byDept.keys()).sort((a, b) => {
+      const ai = departmentSortIndex(a), bi = departmentSortIndex(b);
+      return ai !== bi ? ai - bi : a.localeCompare(b);
+    });
+    const groupsHtml = orderedDepts
+      .filter((d) => byDept.get(d).length || DEFAULT_DEPARTMENTS.includes(d))
+      .map((d) => {
+        const people = byDept.get(d).slice().sort((a, b) => a.name.localeCompare(b.name));
+        return `
+          <div class="checkbox-group-label">${escapeHtml(d)} (${people.length})</div>
+          ${people.length ? people.map((p) => `
+            <div class="team-person-row">
+              <span class="mp-avatar" style="background:${avatarColor(p.name)}">${escapeHtml(initials(p.name))}</span>
+              <input type="text" class="team-person-name" data-person-id="${p.id}" data-field="name" value="${escapeHtml(p.name)}">
+              <input type="text" class="team-person-dept" data-person-id="${p.id}" data-field="department" list="teamDeptOptions" value="${escapeHtml(p.department || "")}">
+              <button type="button" class="team-person-del" data-person-id="${p.id}" title="Remove">&times;</button>
+            </div>`).join("") : `<p class="modal-hint">No one yet.</p>`}
+        `;
+      }).join("");
+    return `
+      <div class="modal-field">
+        <label>Add person</label>
+        <div class="team-add-row">
+          <input type="text" id="f-team-name" placeholder="Name">
+          <input type="text" id="f-team-dept" list="teamDeptOptions" placeholder="Department" value="${escapeHtml(depts[0] || "")}">
+          <button type="button" class="btn-secondary" id="teamAddBtn">+ Add</button>
+        </div>
+        <datalist id="teamDeptOptions">${depts.map((d) => `<option value="${escapeHtml(d)}">`).join("")}</datalist>
+      </div>
+      <div id="teamRosterList" class="team-roster-list">${groupsHtml}</div>
+    `;
+  }
+  function refreshTeamModal() {
+    modalBody.innerHTML = teamRosterBodyHtml();
+    wireTeamRosterBody();
+    renderManpowerGantt();
+  }
+  function wireTeamRosterBody() {
+    const nameInput = document.getElementById("f-team-name");
+    const deptInput = document.getElementById("f-team-dept");
+    document.getElementById("teamAddBtn").addEventListener("click", async () => {
+      const name = nameInput.value.trim();
+      if (!name) { nameInput.focus(); return; }
+      const department = deptInput.value.trim() || "Unassigned";
+      ensureTeam();
+      state.team.push({ id: uid(), name, department });
+      const ok = await saveRemote();
+      if (!ok) { state.team.pop(); return; }
+      renderTeamNameOptions();
+      refreshTeamModal();
+    });
+    modalBody.querySelectorAll(".team-person-name, .team-person-dept").forEach((input) => {
+      input.addEventListener("change", async () => {
+        const person = state.team.find((p) => p.id === input.dataset.personId);
+        if (!person) return;
+        const prev = { ...person };
+        const val = input.value.trim();
+        if (input.dataset.field === "name" && !val) { input.value = person.name; return; }
+        person[input.dataset.field] = val;
+        const ok = await saveRemote();
+        if (!ok) { Object.assign(person, prev); }
+        renderTeamNameOptions();
+        refreshTeamModal();
+      });
+    });
+    modalBody.querySelectorAll(".team-person-del").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const idx = state.team.findIndex((p) => p.id === btn.dataset.personId);
+        if (idx === -1) return;
+        const [removed] = state.team.splice(idx, 1);
+        const ok = await saveRemote();
+        if (!ok) { state.team.splice(idx, 0, removed); return; }
+        renderTeamNameOptions();
+        refreshTeamModal();
+      });
+    });
+  }
+  function openTeamModal() {
+    openLiveModal("Manage Team", teamRosterBodyHtml());
+    wireTeamRosterBody();
   }
 
   function openProjectModal(project) {
@@ -1860,7 +2052,7 @@
         <label>Predecessors <span class="modal-label-hint">(starts after these finish — can be in any traveler)</span></label>
         <div class="checkbox-list">${predCheckboxes}</div>
       </div>
-      <div class="modal-field"><label>Responsible <span class="modal-label-hint">(separate multiple people with commas)</span></label><input type="text" id="f-owner" value="${escapeHtml(task?.responsible || "")}" placeholder="e.g. Jane Doe, Sam Lee"></div>
+      <div class="modal-field"><label>Responsible <span class="modal-label-hint">(separate multiple people with commas)</span></label><input type="text" id="f-owner" list="teamNameOptions" value="${escapeHtml(task?.responsible || "")}" placeholder="e.g. Jane Doe, Sam Lee"></div>
       <div class="modal-row">
         <div class="modal-field"><label>Status</label>
           <select id="f-status">
@@ -2069,7 +2261,7 @@
         <input type="checkbox" class="gantt-select gantt-col-check" data-select-row="${t.id}" ${selectedGanttTaskIds.has(t.id) ? "checked" : ""}>
         <span class="gantt-row-num gantt-col-num">${idx + 1}${t.noScheduleImpact ? `<span class="task-table-no-impact" title="No schedule impact — excluded from % complete">&#9679;</span>` : ""}</span>
         <span class="gantt-col-name"><input type="text" class="gantt-name-input" data-field="name" value="${escapeHtml(t.name)}" title="${escapeHtml(t.name)}"></span>
-        <span class="gantt-col-resp"><input type="text" class="gantt-resp-input" data-field="responsible" value="${escapeHtml(t.responsible || "")}" placeholder="Unassigned"></span>
+        <span class="gantt-col-resp"><input type="text" class="gantt-resp-input" data-field="responsible" list="teamNameOptions" value="${escapeHtml(t.responsible || "")}" placeholder="Unassigned"></span>
         <span class="gantt-col-pred"><input type="text" class="gantt-pred-input" data-field="predecessors" value="${predNums.join(", ")}" title="${escapeHtml(predTitle)}"></span>
         <span class="gantt-col-succ"><span class="gantt-succ-display" title="Row numbers that start after this task">${succNums.join(", ") || "—"}</span></span>
         <button class="gantt-row-del gantt-col-del" data-del-row title="Delete task">&times;</button>

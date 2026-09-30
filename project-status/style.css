@@ -796,6 +796,22 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 }
 .mp-name { font-weight: 600; font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
 .mp-count { flex-shrink: 0; font-size: 0.68rem; color: var(--text-dim); }
+/* Department divider row -- same fixed height on both the label column and
+   the body column (no inline height on either) so the two stay aligned. */
+.mp-dept-header {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
+}
 .mp-row { position: relative; border-bottom: 1px solid var(--border); box-sizing: border-box; }
 .mp-row.row-alt { background: var(--bg); }
 .mp-bar {
@@ -842,6 +858,28 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .mp-pop-meta { color: var(--text-dim); margin-bottom: 3px; }
 .mp-pop-link { margin-top: 6px; }
 .mp-empty { padding: 40px; text-align: center; color: var(--text-dim); }
+
+/* ---------- team roster modal ---------- */
+.team-add-row { display: flex; gap: 6px; margin-top: 4px; }
+.team-add-row input { flex: 1 1 auto; min-width: 0; }
+.team-roster-list { max-height: 320px; overflow-y: auto; margin-top: 14px; }
+.team-person-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+.team-person-row input {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  min-width: 0;
+}
+.team-person-row input:hover { border-color: var(--border); }
+.team-person-row input:focus { border-color: var(--accent); background: var(--bg); outline: none; }
+.team-person-name { flex: 1 1 auto; font-weight: 600; }
+.team-person-dept { flex: 0 0 130px; color: var(--text-dim); }
+.team-person-del { flex-shrink: 0; background: none; border: none; cursor: pointer; color: var(--text-dim); font-size: 0.95rem; padding: 2px 6px; }
+.team-person-del:hover { color: var(--status-delayed); }
 .project-month-seg { font-weight: 700; color: var(--text); display: flex; align-items: center; justify-content: center; }
 /* Only shrunk to make room for a day-number row underneath -- a lone month
    row (no day numbers yet, still zoomed out) keeps the full 40px. */
