@@ -251,6 +251,11 @@
   // lesson: no fuzzy matching on identity, fail to "Unassigned" instead of
   // guessing) plus feeds a <datalist> so typed names line up with it.
   const DEFAULT_DEPARTMENTS = ["Machine Shop", "Fab Shop", "Engineering"];
+  // Remembers the last department typed into "Add person" so the field
+  // doesn't keep resetting to depts[0] ("Machine Shop") after every add --
+  // that reset made it look like new people could only ever go into
+  // Machine Shop unless you noticed and retyped the department each time.
+  let lastAddedDept = null;
   function ensureTeam() { if (!Array.isArray(state.team)) state.team = []; }
   function allDepartments() {
     const set = new Set(DEFAULT_DEPARTMENTS);
@@ -1880,7 +1885,7 @@
         <label>Add person</label>
         <div class="team-add-row">
           <input type="text" id="f-team-name" placeholder="Name">
-          <input type="text" id="f-team-dept" list="teamDeptOptions" placeholder="Department" value="${escapeHtml(depts[0] || "")}">
+          <input type="text" id="f-team-dept" list="teamDeptOptions" placeholder="Department" value="${escapeHtml(lastAddedDept || depts[0] || "")}">
           <button type="button" class="btn-secondary" id="teamAddBtn">+ Add</button>
         </div>
         <datalist id="teamDeptOptions">${depts.map((d) => `<option value="${escapeHtml(d)}">`).join("")}</datalist>
@@ -1904,6 +1909,7 @@
       state.team.push({ id: uid(), name, department });
       const ok = await saveRemote();
       if (!ok) { state.team.pop(); return; }
+      lastAddedDept = department;
       renderTeamNameOptions();
       refreshTeamModal();
     });
