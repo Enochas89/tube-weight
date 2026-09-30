@@ -55,6 +55,9 @@
   let state = { projects: [] };
   let currentProjectId = null;
   let currentTravelerId = null;
+  // Which scope the man-power gantt is currently showing -- either one
+  // traveler's tasks, or every task across every project (the master view).
+  let manpowerGanttMode = null;
   let isEditor = false;
   // Signed-in editors can still browse in read-only "View" mode — separate
   // from `isEditor` (which tracks whether they *can* edit at all) so editing
@@ -448,6 +451,7 @@
     document.getElementById("detailView").classList.add("hidden");
     document.getElementById("ganttView").classList.add("hidden");
     document.getElementById("projectGanttView").classList.add("hidden");
+    document.getElementById("manpowerGanttView").classList.add("hidden");
   }
   function showList() {
     hideAllViews();
@@ -487,6 +491,174 @@
       scrollEl.dispatchEvent(new Event("scroll"));
     }
   }
+  function showManpowerGanttTraveler(p, trav) {
+    if (!canManage() || !p || !trav) return;
+    hideAllViews();
+    manpowerGanttMode = { scope: "traveler", project: p, traveler: trav };
+    document.getElementById("manpowerGanttView").classList.remove("hidden");
+    document.getElementById("manpowerGanttTitle").textContent = `Man Power — ${trav.name}`;
+    renderManpowerGantt();
+  }
+  function showManpowerGanttMaster() {
+    if (!canManage()) return;
+    hideAllViews();
+    manpowerGanttMode = { scope: "master" };
+    document.getElementById("manpowerGanttView").classList.remove("hidden");
+    document.getElementById("manpowerGanttTitle").textContent = "Man Power Overview — All Projects";
+    renderManpowerGantt();
+  }
+
+  const MP_LANE_HEIGHT = 28;
+  const MP_ROW_PAD = 10;
+  // Flattens tasks into one entry per (person, task) pair -- a task with
+  // "Jane, Sam" in Responsible shows up as one bar on each of their rows.
+  function manpowerAssignments(mode) {
+    const rows = [];
+    const projects = mode.scope === "master" ? state.projects : [mode.project];
+    projects.forEach((p) => {
+      const travelers = mode.scope === "master" ? p.travelers : [mode.traveler];
+      travelers.forEach((trav) => {
+        trav.tasks.forEach((t) => {
+          parseNames(t.responsible).forEach((personName) => {
+            rows.push({ personName, task: t, project: p, traveler: trav });
+          });
+        });
+      });
+    });
+    return rows;
+  }
+  // Greedy interval packing: assignments that overlap in time for the same
+  // person get stacked into separate lanes instead of drawn on top of each
+  // other, so double-booking is visible rather than hidden.
+  function layoutLanes(items) {
+    const laneEnds = [];
+    items.forEach((item) => {
+      let lane = laneEnds.findIndex((end) => end <= item.task.startDate);
+      if (lane === -1) { lane = laneEnds.length; laneEnds.push(item.task.endDate); }
+      else laneEnds[lane] = item.task.endDate;
+      item.lane = lane;
+    });
+    return laneEnds.length;
+  }
+  function renderManpowerGantt() {
+    const labels = document.getElementById("manpowerGanttLabels");
+    const header = document.getElementById("manpowerGanttHeader");
+    const body = document.getElementById("manpowerGanttBody");
+    if (!manpowerGanttMode) return;
+
+    const assignments = manpowerAssignments(manpowerGanttMode);
+    if (!assignments.length) {
+      labels.innerHTML = "";
+      header.innerHTML = "";
+      body.innerHTML = `<div class="mp-empty">No one's assigned yet — add names to a task's Responsible field and they'll show up here.</div>`;
+      return;
+    }
+
+    const byPerson = new Map();
+    assignments.forEach((a) => {
+      if (!byPerson.has(a.personName)) byPerson.set(a.personName, []);
+      byPerson.get(a.personName).push(a);
+    });
+    const people = Array.from(byPerson.keys()).sort((a, b) => a.localeCompare(b));
+
+    let rangeStart = assignments[0].task.startDate;
+    let rangeEnd = assignments[0].task.endDate;
+    assignments.forEach((a) => {
+      if (a.task.startDate < rangeStart) rangeStart = a.task.startDate;
+      if (a.task.endDate > rangeEnd) rangeEnd = a.task.endDate;
+    });
+    rangeStart = addDays(rangeStart, -3);
+    rangeEnd = addDays(rangeEnd, 3);
+    const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
+    const totalWidth = totalDays * GANTT_DAY_WIDTH;
+    const today = todayStr();
+
+    const dayCells = [];
+    for (let i = 0; i < totalDays; i++) {
+      const d = addDays(rangeStart, i);
+      const dow = new Date(d + "T00:00:00").getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      const isToday = d === today;
+      const dt = new Date(d + "T00:00:00");
+      const dayNum = dt.getDate();
+      const showMonth = dayNum === 1 || i === 0;
+      dayCells.push(`<div class="gantt-full-day${isWeekend ? " weekend" : ""}${isToday ? " today" : ""}" style="width:${GANTT_DAY_WIDTH}px">${showMonth ? `<div class="gantt-full-month">${dt.toLocaleDateString(undefined, { month: "short" })}</div>` : ""}<div>${dayNum}</div></div>`);
+    }
+    header.innerHTML = `<div class="gantt-full-header-row" style="width:${totalWidth}px">${dayCells.join("")}</div>`;
+
+    const isMaster = manpowerGanttMode.scope === "master";
+    let labelsHtml = "";
+    let rowsHtml = "";
+    people.forEach((name, idx) => {
+      const items = byPerson.get(name).slice().sort((a, b) => a.task.startDate.localeCompare(b.task.startDate));
+      const laneCount = layoutLanes(items);
+      const rowHeight = laneCount * MP_LANE_HEIGHT + MP_ROW_PAD;
+      const altClass = idx % 2 === 1 ? " row-alt" : "";
+
+      labelsHtml += `
+        <div class="mp-label-row${altClass}" style="height:${rowHeight}px">
+          <span class="mp-avatar" style="background:${avatarColor(name)}">${escapeHtml(initials(name))}</span>
+          <span class="mp-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+          <span class="mp-count">${items.length}</span>
+        </div>`;
+
+      const barsHtml = items.map((it) => {
+        const t = it.task;
+        const offsetDays = daysBetween(rangeStart, t.startDate);
+        const isMilestone = t.duration === 0;
+        const durDays = taskDuration(t);
+        const barLeft = isMilestone ? (offsetDays * GANTT_DAY_WIDTH + GANTT_DAY_WIDTH / 2 - 10) : (offsetDays * GANTT_DAY_WIDTH);
+        const barWidth = isMilestone ? 20 : Math.max(GANTT_DAY_WIDTH - 2, durDays * GANTT_DAY_WIDTH - 2);
+        const top = MP_ROW_PAD / 2 + it.lane * MP_LANE_HEIGHT;
+        const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
+        const statusLabel = (TASK_STATUS_OPTIONS.find(([v]) => v === t.status) || [null, t.status])[1];
+        const context = isMaster ? `${escapeHtml(it.project.name)} / ${escapeHtml(it.traveler.name)}` : "";
+        return `
+          <div class="mp-bar" data-mp-bar style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
+               title="${escapeHtml(t.name)}${context ? " — " + context : ""}">
+            <span class="mp-bar-label">${escapeHtml(t.name)}</span>
+            <div class="mp-bar-popover" data-mp-popover>
+              <div class="mp-pop-title">${escapeHtml(t.name)}</div>
+              ${context ? `<div class="mp-pop-meta">${context}</div>` : ""}
+              <div class="mp-pop-meta">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)}</div>
+              <div class="mp-pop-meta">${escapeHtml(statusLabel)} &middot; ${t.progress || 0}%</div>
+              <button type="button" class="btn-link mp-pop-link" data-mp-goto="${it.project.id}|${it.traveler.id}">Go to traveler &rarr;</button>
+            </div>
+          </div>`;
+      }).join("");
+
+      rowsHtml += `<div class="mp-row${altClass}" style="height:${rowHeight}px">${barsHtml}</div>`;
+    });
+
+    labels.innerHTML = labelsHtml;
+    body.innerHTML = `<div class="gantt-full-body-inner" style="width:${totalWidth}px">${rowsHtml}</div>`;
+
+    body.querySelectorAll("[data-mp-bar]").forEach((barEl) => {
+      barEl.addEventListener("click", (e) => {
+        if (e.target.closest("[data-mp-goto]")) return;
+        e.stopPropagation();
+        const popover = barEl.querySelector("[data-mp-popover]");
+        const wasOpen = popover.classList.contains("open");
+        body.querySelectorAll(".mp-bar-popover.open").forEach((p) => p.classList.remove("open"));
+        if (!wasOpen) popover.classList.add("open");
+      });
+    });
+    body.querySelectorAll("[data-mp-goto]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const [projectId, travelerId] = btn.dataset.mpGoto.split("|");
+        const p = getProject(projectId);
+        const trav = p && getTraveler(p, travelerId);
+        if (!p || !trav) return;
+        currentProjectId = p.id;
+        currentTravelerId = trav.id;
+        showTravelerDetail(p, trav);
+      });
+    });
+  }
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".mp-bar-popover.open").forEach((p) => p.classList.remove("open"));
+  });
 
   // Polls for changes made elsewhere (another editor, the shop-floor QR
   // flow, a claimed traveler) and re-renders whatever's currently on screen.
@@ -497,6 +669,7 @@
     if (!modalBackdrop.classList.contains("hidden")) return;
     if (!document.getElementById("ganttView").classList.contains("hidden")) return;
     if (!document.getElementById("projectGanttView").classList.contains("hidden")) return;
+    if (!document.getElementById("manpowerGanttView").classList.contains("hidden")) return;
     try {
       const res = await fetch(API_URL);
       if (!res.ok) return;
@@ -605,6 +778,7 @@
   document.getElementById("newProjectBtn").addEventListener("click", () => openProjectModal());
   document.getElementById("openProjectGanttBtn").addEventListener("click", () => showProjectGanttView());
   document.getElementById("backFromProjectGanttBtn").addEventListener("click", () => { showList(); });
+  document.getElementById("openMasterManpowerBtn").addEventListener("click", () => showManpowerGanttMaster());
 
   // ---------- MS Project XML import ----------
   // Reads only direct children by local name — namespace-agnostic (MSP XML
@@ -1091,6 +1265,15 @@
     showGanttView(p, getTraveler(p, currentTravelerId));
   });
   document.getElementById("backFromGanttViewBtn").addEventListener("click", () => {
+    const p = getProject(currentProjectId);
+    showTravelerDetail(p, getTraveler(p, currentTravelerId));
+  });
+  document.getElementById("openManpowerGanttBtn").addEventListener("click", () => {
+    const p = getProject(currentProjectId);
+    showManpowerGanttTraveler(p, getTraveler(p, currentTravelerId));
+  });
+  document.getElementById("backFromManpowerGanttBtn").addEventListener("click", () => {
+    if (manpowerGanttMode && manpowerGanttMode.scope === "master") { showList(); return; }
     const p = getProject(currentProjectId);
     showTravelerDetail(p, getTraveler(p, currentTravelerId));
   });

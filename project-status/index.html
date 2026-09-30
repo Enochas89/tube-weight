@@ -41,6 +41,7 @@
       <div class="header-row-actions">
         <button class="btn-icon btn-share" id="shareListBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
         <button class="btn-secondary editor-only hidden" id="openProjectGanttBtn">Project Overview</button>
+        <button class="btn-secondary editor-only hidden" id="openMasterManpowerBtn">Man Power Overview</button>
         <div class="dropdown editor-only hidden" id="importMenuWrap">
           <button type="button" class="btn-secondary" id="importMenuBtn">Import &#9662;</button>
           <div class="dropdown-menu hidden" id="importMenu">
@@ -126,6 +127,7 @@
       </div>
       <div class="tab-bar-actions">
         <button class="btn-secondary editor-only hidden" id="openGanttViewBtn" data-tab-visible="tasks">Gantt View</button>
+        <button class="btn-secondary editor-only hidden" id="openManpowerGanttBtn" data-tab-visible="tasks">Man Power</button>
         <button class="btn-primary editor-only hidden" id="addTaskBtn" data-tab-visible="tasks">+ Add Task</button>
         <button class="btn-primary editor-only hidden" id="addDelayBtn" data-tab-visible="delays">+ Log Delay</button>
         <button class="btn-primary editor-only hidden" id="addNoteBtn" data-tab-visible="notes">+ Add Note</button>
@@ -247,6 +249,35 @@
         </div>
         <div class="gantt-full-scroll">
           <div id="projectGanttBody"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== MAN POWER GANTT (read-only, one row per person) ===================== -->
+  <section id="manpowerGanttView" class="view hidden">
+    <div class="detail-header">
+      <button class="btn-link" id="backFromManpowerGanttBtn">&larr; Back</button>
+      <div class="detail-title-row">
+        <div>
+          <h2 id="manpowerGanttTitle">Man Power</h2>
+          <p class="detail-client">Click a bar to see the task, traveler, and dates behind it</p>
+        </div>
+      </div>
+    </div>
+    <div class="gantt-full">
+      <div class="gantt-full-labels">
+        <div class="gantt-full-label-header">
+          <span class="gantt-col-name">Name</span>
+        </div>
+        <div id="manpowerGanttLabels"></div>
+      </div>
+      <div class="gantt-full-right-col">
+        <div class="gantt-full-header-clip">
+          <div id="manpowerGanttHeader"></div>
+        </div>
+        <div class="gantt-full-scroll">
+          <div id="manpowerGanttBody"></div>
         </div>
       </div>
     </div>
