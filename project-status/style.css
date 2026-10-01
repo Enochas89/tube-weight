@@ -782,6 +782,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   box-sizing: border-box;
 }
 .mp-label-row.row-alt { background: var(--bg); }
+.mp-avatar-wrap { position: relative; flex-shrink: 0; display: inline-flex; }
 .mp-avatar {
   flex-shrink: 0;
   width: 26px;
@@ -794,6 +795,22 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   font-weight: 700;
   color: white;
 }
+/* Shop-icon badge pinned to an avatar's corner, showing which department
+   (Machine Shop / Fab Shop / Engineering) that person belongs to. */
+.mp-avatar-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 1.5px;
+  box-sizing: border-box;
+  object-fit: contain;
+}
+.dept-header-icon { width: 14px; height: 14px; object-fit: contain; vertical-align: -2px; margin-right: 5px; }
 .mp-name { font-weight: 600; font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
 .mp-count { flex-shrink: 0; font-size: 0.68rem; color: var(--text-dim); }
 /* Department divider row -- same fixed height on both the label column and

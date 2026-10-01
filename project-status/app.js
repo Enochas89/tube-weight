@@ -251,6 +251,32 @@
   // lesson: no fuzzy matching on identity, fail to "Unassigned" instead of
   // guessing) plus feeds a <datalist> so typed names line up with it.
   const DEFAULT_DEPARTMENTS = ["Machine Shop", "Fab Shop", "Engineering"];
+  // Shop icons -- only the three default departments have art; a custom
+  // department typed in by a user just renders without one.
+  const DEPARTMENT_ICONS = {
+    "Machine Shop": "assets/icons/machine.png",
+    "Fab Shop": "assets/icons/fab.png",
+    "Engineering": "assets/icons/engineering.png",
+  };
+  function deptIconHtml(dept, cls) {
+    const src = DEPARTMENT_ICONS[dept];
+    return src ? `<img class="${cls}" src="${src}" alt="" title="${escapeHtml(dept)}">` : "";
+  }
+  // A department header/group label, prefixed with its shop icon when one
+  // exists for that department name.
+  function deptLabelHtml(dept) {
+    return `${deptIconHtml(dept, "dept-header-icon")}${escapeHtml(dept)}`;
+  }
+  // An avatar circle with a small shop-icon badge pinned to its corner, so a
+  // person's department reads at a glance wherever their avatar shows up.
+  function avatarWithDeptHtml(name, department, extraClass) {
+    const badge = deptIconHtml(department, "mp-avatar-badge");
+    return `
+      <span class="mp-avatar-wrap">
+        <span class="mp-avatar${extraClass || ""}" style="background:${avatarColor(name)}">${escapeHtml(initials(name))}</span>
+        ${badge}
+      </span>`;
+  }
   // Remembers the last department typed into "Add person" so the field
   // doesn't keep resetting to depts[0] ("Machine Shop") after every add --
   // that reset made it look like new people could only ever go into
@@ -705,7 +731,7 @@
       const deptLabel = person.isUnassignedBucket ? "Unassigned Tasks" : person.department;
       if (isMaster && deptLabel !== lastDept) {
         lastDept = deptLabel;
-        labelsHtml += `<div class="mp-dept-header">${escapeHtml(lastDept)}</div>`;
+        labelsHtml += `<div class="mp-dept-header">${deptLabelHtml(lastDept)}</div>`;
         rowsHtml += `<div class="mp-dept-header"></div>`;
       }
       const items = person.items.slice().sort((a, b) => a.task.startDate.localeCompare(b.task.startDate));
@@ -713,9 +739,12 @@
       const rowHeight = laneCount * MP_LANE_HEIGHT + MP_ROW_PAD;
       const altClass = idx % 2 === 1 ? " row-alt" : "";
 
+      const avatarHtml = person.isUnassignedBucket
+        ? `<span class="mp-avatar mp-avatar-unassigned">?</span>`
+        : avatarWithDeptHtml(name, person.department);
       labelsHtml += `
         <div class="mp-label-row${altClass}" style="height:${rowHeight}px">
-          <span class="mp-avatar${person.isUnassignedBucket ? " mp-avatar-unassigned" : ""}" style="background:${person.isUnassignedBucket ? "" : avatarColor(name)}">${person.isUnassignedBucket ? "?" : escapeHtml(initials(name))}</span>
+          ${avatarHtml}
           <span class="mp-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
           <span class="mp-count">${items.length || ""}</span>
         </div>`;
@@ -1937,10 +1966,10 @@
       .map((d) => {
         const people = byDept.get(d).slice().sort((a, b) => a.name.localeCompare(b.name));
         return `
-          <div class="checkbox-group-label">${escapeHtml(d)} (${people.length})</div>
+          <div class="checkbox-group-label">${deptLabelHtml(d)} (${people.length})</div>
           ${people.length ? people.map((p) => `
             <div class="team-person-row">
-              <span class="mp-avatar" style="background:${avatarColor(p.name)}">${escapeHtml(initials(p.name))}</span>
+              ${avatarWithDeptHtml(p.name, p.department)}
               <input type="text" class="team-person-name" data-person-id="${p.id}" data-field="name" value="${escapeHtml(p.name)}">
               <input type="text" class="team-person-dept" data-person-id="${p.id}" data-field="department" list="teamDeptOptions" value="${escapeHtml(p.department || "")}">
               <button type="button" class="team-person-del" data-person-id="${p.id}" title="Remove">&times;</button>
