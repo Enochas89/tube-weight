@@ -758,8 +758,14 @@
     labels.innerHTML = labelsHtml;
     body.innerHTML = `<div class="gantt-full-body-inner" style="width:${totalWidth}px">${rowsHtml}</div>`;
 
+    // Stop every click inside an open popover from bubbling to the bar's own
+    // toggle handler (or past it to the document-level close-all listener)
+    // -- covers the label/meta/padding areas too, not just the input/button.
+    body.querySelectorAll("[data-mp-popover]").forEach((pop) => {
+      pop.addEventListener("click", (e) => e.stopPropagation());
+    });
+
     body.querySelectorAll("[data-mp-assign]").forEach((input) => {
-      input.addEventListener("click", (e) => e.stopPropagation());
       input.addEventListener("change", async () => {
         const it = barItems[Number(input.dataset.mpAssign)];
         const task = it.task;
@@ -779,7 +785,11 @@
 
     body.querySelectorAll("[data-mp-bar]").forEach((barEl) => {
       barEl.addEventListener("click", (e) => {
-        if (e.target.closest("[data-mp-goto], [data-mp-assign]")) return;
+        // Any click landing inside the already-open popover (the assign
+        // label/padding, not just the input/goto button) must not fall
+        // through to the toggle below -- it was closing the popover out
+        // from under anyone trying to reach the "Assign to" field.
+        if (e.target.closest("[data-mp-popover]")) return;
         e.stopPropagation();
         const popover = barEl.querySelector("[data-mp-popover]");
         const wasOpen = popover.classList.contains("open");
