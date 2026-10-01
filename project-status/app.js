@@ -267,15 +267,6 @@
   function deptLabelHtml(dept) {
     return `${deptIconHtml(dept, "dept-header-icon")}${escapeHtml(dept)}`;
   }
-  // The Man Power gantt's department divider, rendered as a solid shop
-  // banner rather than an inline label -- the icon sits in its own chip
-  // flush at the far-left edge of the chart (not inline with the text) so
-  // it reads as a banner badge, not a label prefix.
-  function deptBannerHtml(dept) {
-    const src = DEPARTMENT_ICONS[dept];
-    const chip = src ? `<span class="mp-dept-banner-icon"><img src="${src}" alt="" title="${escapeHtml(dept)}"></span>` : "";
-    return `${chip}<span class="mp-dept-banner-text">${escapeHtml(dept)}</span>`;
-  }
   // An avatar circle with a small shop-icon badge pinned to its corner, so a
   // person's department reads at a glance wherever their avatar shows up.
   function avatarWithDeptHtml(name, department, extraClass) {
@@ -735,13 +726,37 @@
     // index -- needed because a name can hold a comma, so re-deriving "which
     // assignee is this bar" from stringified data attributes would be fragile.
     const barItems = [];
+    // Department membership is shown as a vertical banner strip running
+    // down the far-left edge of the label column -- one strip per
+    // consecutive run of same-department rows, sized to that run's total
+    // height so it reads as a continuous band next to those avatars rather
+    // than a divider between them. Accumulated here and flushed into
+    // labelsHtml whenever the department changes (or the list ends).
+    let groupRowsHtml = "";
+    let groupHeight = 0;
+    let groupDept = null;
+    function flushDeptGroup() {
+      if (groupDept === null) return;
+      const src = DEPARTMENT_ICONS[groupDept];
+      const icon = src ? `<img class="mp-dept-strip-icon" src="${src}" alt="" title="${escapeHtml(groupDept)}">` : "";
+      labelsHtml += `
+        <div class="mp-dept-group">
+          <div class="mp-dept-strip" style="height:${groupHeight}px">
+            ${icon}
+            <span class="mp-dept-strip-label">${escapeHtml(groupDept)}</span>
+          </div>
+          <div class="mp-dept-group-rows">${groupRowsHtml}</div>
+        </div>`;
+      groupRowsHtml = "";
+      groupHeight = 0;
+    }
     people.forEach((person, idx) => {
       const { name } = person;
       const deptLabel = person.isUnassignedBucket ? "Unassigned Tasks" : person.department;
       if (isMaster && deptLabel !== lastDept) {
+        flushDeptGroup();
         lastDept = deptLabel;
-        labelsHtml += `<div class="mp-dept-header">${deptBannerHtml(lastDept)}</div>`;
-        rowsHtml += `<div class="mp-dept-header"></div>`;
+        groupDept = deptLabel;
       }
       const items = person.items.slice().sort((a, b) => a.task.startDate.localeCompare(b.task.startDate));
       const laneCount = Math.max(1, layoutLanes(items));
@@ -751,12 +766,18 @@
       const avatarHtml = person.isUnassignedBucket
         ? `<span class="mp-avatar mp-avatar-unassigned">?</span>`
         : avatarWithDeptHtml(name, person.department);
-      labelsHtml += `
+      const rowHtml = `
         <div class="mp-label-row${altClass}" style="height:${rowHeight}px">
           ${avatarHtml}
           <span class="mp-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
           <span class="mp-count">${items.length || ""}</span>
         </div>`;
+      if (isMaster) {
+        groupRowsHtml += rowHtml;
+        groupHeight += rowHeight;
+      } else {
+        labelsHtml += rowHtml;
+      }
 
       const barsHtml = items.map((it) => {
         const t = it.task;
@@ -792,6 +813,7 @@
 
       rowsHtml += `<div class="mp-row${altClass}" style="height:${rowHeight}px">${barsHtml}</div>`;
     });
+    flushDeptGroup();
 
     labels.innerHTML = labelsHtml;
     body.innerHTML = `<div class="gantt-full-body-inner" style="width:${totalWidth}px">${rowsHtml}</div>`;

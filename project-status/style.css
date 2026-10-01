@@ -813,35 +813,51 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .dept-header-icon { width: 20px; height: 20px; object-fit: contain; vertical-align: -5px; margin-right: 6px; }
 .mp-name { font-weight: 600; font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
 .mp-count { flex-shrink: 0; font-size: 0.68rem; color: var(--text-dim); }
-/* Department divider row -- same fixed height on both the label column and
-   the body column (no inline height on either) so the two stay aligned. */
-.mp-dept-header {
-  height: 40px;
+/* Department banner -- a vertical strip pinned to the far-left edge of the
+   label column, running the full height of that department's run of rows
+   (not a horizontal divider between them), so the shop icon stays visible
+   the whole time its people are on screen. */
+/* Lines the "Name" column header up with the avatar/name text below it,
+   which is pushed right by the strip -- this header row has no strip of
+   its own (it's not part of any one department). */
+#manpowerGanttView .gantt-full-label-header { padding-left: calc(34px + 12px); }
+.mp-dept-group { display: flex; align-items: stretch; }
+.mp-dept-group-rows { flex: 1 1 auto; min-width: 0; }
+.mp-dept-strip {
+  flex-shrink: 0;
+  width: 34px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 0;
-  font-size: 0.72rem;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 0;
+  background: var(--brand-black);
+  border-right: 2px solid var(--brand-yellow);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.mp-dept-strip-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 50%;
+  padding: 3px;
+  box-sizing: border-box;
+}
+.mp-dept-strip-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  text-orientation: mixed;
+  color: #fff;
+  font-size: 0.68rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #fff;
-  background: var(--brand-black);
-  border-bottom: 2px solid var(--brand-yellow);
-  box-sizing: border-box;
+  white-space: nowrap;
 }
-/* Shop icon chip -- pinned flush at the far left edge of the banner (no
-   padding before it) so it reads as a badge on the banner, not text. */
-.mp-dept-banner-icon {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #fff;
-}
-.mp-dept-banner-icon img { width: 30px; height: 30px; object-fit: contain; }
-.mp-dept-banner-text { padding: 0 12px; }
 .mp-row { position: relative; border-bottom: 1px solid var(--border); box-sizing: border-box; }
 .mp-row.row-alt { background: var(--bg); }
 .mp-bar {
