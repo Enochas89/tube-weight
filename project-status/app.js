@@ -267,6 +267,15 @@
   function deptLabelHtml(dept) {
     return `${deptIconHtml(dept, "dept-header-icon")}${escapeHtml(dept)}`;
   }
+  // The Man Power gantt's department divider, rendered as a solid shop
+  // banner rather than an inline label -- the icon sits in its own chip
+  // flush at the far-left edge of the chart (not inline with the text) so
+  // it reads as a banner badge, not a label prefix.
+  function deptBannerHtml(dept) {
+    const src = DEPARTMENT_ICONS[dept];
+    const chip = src ? `<span class="mp-dept-banner-icon"><img src="${src}" alt="" title="${escapeHtml(dept)}"></span>` : "";
+    return `${chip}<span class="mp-dept-banner-text">${escapeHtml(dept)}</span>`;
+  }
   // An avatar circle with a small shop-icon badge pinned to its corner, so a
   // person's department reads at a glance wherever their avatar shows up.
   function avatarWithDeptHtml(name, department, extraClass) {
@@ -731,7 +740,7 @@
       const deptLabel = person.isUnassignedBucket ? "Unassigned Tasks" : person.department;
       if (isMaster && deptLabel !== lastDept) {
         lastDept = deptLabel;
-        labelsHtml += `<div class="mp-dept-header">${deptLabelHtml(lastDept)}</div>`;
+        labelsHtml += `<div class="mp-dept-header">${deptBannerHtml(lastDept)}</div>`;
         rowsHtml += `<div class="mp-dept-header"></div>`;
       }
       const items = person.items.slice().sort((a, b) => a.task.startDate.localeCompare(b.task.startDate));
