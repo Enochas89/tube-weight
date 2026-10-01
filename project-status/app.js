@@ -258,18 +258,20 @@
     "Fab Shop": "assets/icons/fab.png",
     "Engineering/Tech Serv": "assets/icons/engineering.png",
   };
-  // Per-shop banner color for the Man Power gantt's left-edge strip --
+  // Per-shop banner color for the Man Power gantt's left-edge icon strip --
   // deliberately picked to stay clear of the task-status bar colors
   // (green/amber/red/blue-gray/gray) so a shop's color is never mistaken
   // for a status. Unmapped departments (a custom one, or "Unassigned
-  // Tasks") fall back to brand black.
+  // Tasks") get no banner fill at all -- there's no shop to color-code,
+  // so a plain unfilled strip (just the border) reads better than a solid
+  // black block standing in for nothing.
   const DEPARTMENT_COLORS = {
     "Machine Shop": "#2f4858",
     "Fab Shop": "#7a4a30",
     "Engineering/Tech Serv": "#3b6e4f",
   };
   function deptColor(dept) {
-    return DEPARTMENT_COLORS[dept] || "var(--brand-black)";
+    return DEPARTMENT_COLORS[dept] || "transparent";
   }
   function deptIconHtml(dept, cls) {
     const src = DEPARTMENT_ICONS[dept];
@@ -753,10 +755,10 @@
       const src = DEPARTMENT_ICONS[groupDept];
       const icon = src ? `<img class="mp-dept-strip-icon" src="${src}" alt="" title="${escapeHtml(groupDept)}">` : "";
       labelsHtml += `
-        <div class="mp-dept-group">
+        <div class="mp-dept-group" style="height:${groupHeight}px">
+          <span class="mp-dept-title" style="height:${groupHeight}px">${escapeHtml(groupDept)}</span>
           <div class="mp-dept-strip" style="height:${groupHeight}px; background:${deptColor(groupDept)};">
             ${icon}
-            <span class="mp-dept-strip-label">${escapeHtml(groupDept)}</span>
           </div>
           <div class="mp-dept-group-rows">${groupRowsHtml}</div>
         </div>`;

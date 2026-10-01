@@ -820,48 +820,58 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 /* Lines the "Name" column header up with the avatar/name text below it,
    which is pushed right by the strip -- this header row has no strip of
    its own (it's not part of any one department). */
-#manpowerGanttView .gantt-full-label-header { padding-left: calc(48px + 12px); }
+#manpowerGanttView .gantt-full-label-header { padding-left: calc(26px + 64px + 12px); }
 /* A visible seam between one department's strip and the next -- without
-   this, two groups that both fall back to the same color (an unmapped
+   this, two groups sitting right on top of each other (an unmapped
    custom department next to the Unassigned Tasks bucket, say) read as one
-   continuous banner instead of two. */
+   continuous band instead of two. */
 .mp-dept-group + .mp-dept-group .mp-dept-strip { border-top: 2px solid var(--panel); }
 .mp-dept-group { display: flex; align-items: stretch; }
 .mp-dept-group-rows { flex: 1 1 auto; min-width: 0; }
-.mp-dept-strip {
+/* The shop name, outside the colored strip entirely -- its own plain
+   column to the left of it, not printed over the banner fill. */
+.mp-dept-title {
   flex-shrink: 0;
-  width: 48px;
+  width: 26px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  text-orientation: mixed;
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  box-sizing: border-box;
+}
+.mp-dept-strip {
+  flex-shrink: 0;
+  width: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 10px 0;
-  /* background-color comes from the inline style per department */
+  /* background-color comes from the inline style per department -- an
+     unmapped department gets no fill at all (see deptColor), not a solid
+     black block standing in for nothing. */
   border-right: 2px solid var(--brand-yellow);
   box-sizing: border-box;
   overflow: hidden;
 }
 .mp-dept-strip-icon {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 50px;
+  height: 50px;
   object-fit: contain;
   background: #fff;
   border-radius: 50%;
-  padding: 4px;
+  padding: 5px;
   box-sizing: border-box;
-}
-.mp-dept-strip-label {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  text-orientation: mixed;
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
 }
 .mp-row { position: relative; border-bottom: 1px solid var(--border); box-sizing: border-box; }
 .mp-row.row-alt { background: var(--bg); }
