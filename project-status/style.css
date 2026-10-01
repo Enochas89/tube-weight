@@ -885,7 +885,6 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   touch-action: none;
   display: flex;
   align-items: center;
-  overflow: hidden;
 }
 /* Dragged straight up/down to reassign to another person's row -- only
    `transform` ever moves during that drag, never `left`/`width`, so the
@@ -902,6 +901,8 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .mp-bar-popover {
   display: none;

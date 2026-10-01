@@ -879,9 +879,10 @@
               </span>
             </button>`;
         }).join("");
+        const namesTitle = group.map((it) => it.task.name).join(", ");
         return `
           <div class="mp-bar mp-bar-combined${person.isUnassignedBucket ? " mp-bar-unassigned" : ""}" data-mp-bar data-mp-bar-idx="${barIdx}" style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
-               title="${group.length} tasks${person.isUnassignedBucket ? "" : " for " + escapeHtml(name)}">
+               title="${escapeHtml(namesTitle)}">
             <span class="mp-bar-label">${group.length} tasks &#9662;</span>
             <div class="mp-bar-popover mp-bar-popover-combined" data-mp-popover>
               <div class="mp-pop-title">${group.length} tasks${person.isUnassignedBucket ? "" : " — " + escapeHtml(name)}</div>
