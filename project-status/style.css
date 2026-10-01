@@ -816,7 +816,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 /* Department divider row -- same fixed height on both the label column and
    the body column (no inline height on either) so the two stay aligned. */
 .mp-dept-header {
-  height: 26px;
+  height: 32px;
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -829,6 +829,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   border-bottom: 1px solid var(--border);
   box-sizing: border-box;
 }
+.mp-dept-header .dept-header-icon { width: 26px; height: 26px; vertical-align: -7px; margin-right: 7px; }
 .mp-row { position: relative; border-bottom: 1px solid var(--border); box-sizing: border-box; }
 .mp-row.row-alt { background: var(--bg); }
 .mp-bar {
