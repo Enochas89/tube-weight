@@ -258,6 +258,19 @@
     "Fab Shop": "assets/icons/fab.png",
     "Engineering/Tech Serv": "assets/icons/engineering.png",
   };
+  // Per-shop banner color for the Man Power gantt's left-edge strip --
+  // deliberately picked to stay clear of the task-status bar colors
+  // (green/amber/red/blue-gray/gray) so a shop's color is never mistaken
+  // for a status. Unmapped departments (a custom one, or "Unassigned
+  // Tasks") fall back to brand black.
+  const DEPARTMENT_COLORS = {
+    "Machine Shop": "#3a4f91",
+    "Fab Shop": "#c2561c",
+    "Engineering/Tech Serv": "#1f7a6c",
+  };
+  function deptColor(dept) {
+    return DEPARTMENT_COLORS[dept] || "var(--brand-black)";
+  }
   function deptIconHtml(dept, cls) {
     const src = DEPARTMENT_ICONS[dept];
     return src ? `<img class="${cls}" src="${src}" alt="" title="${escapeHtml(dept)}">` : "";
@@ -741,7 +754,7 @@
       const icon = src ? `<img class="mp-dept-strip-icon" src="${src}" alt="" title="${escapeHtml(groupDept)}">` : "";
       labelsHtml += `
         <div class="mp-dept-group">
-          <div class="mp-dept-strip" style="height:${groupHeight}px">
+          <div class="mp-dept-strip" style="height:${groupHeight}px; background:${deptColor(groupDept)};">
             ${icon}
             <span class="mp-dept-strip-label">${escapeHtml(groupDept)}</span>
           </div>

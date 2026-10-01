@@ -832,7 +832,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   justify-content: center;
   gap: 8px;
   padding: 8px 0;
-  background: var(--brand-black);
+  /* background-color comes from the inline style per department */
   border-right: 2px solid var(--brand-yellow);
   box-sizing: border-box;
   overflow: hidden;
