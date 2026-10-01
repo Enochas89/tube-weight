@@ -819,7 +819,7 @@
         const barIdx = barItems.length;
         barItems.push(it);
         return `
-          <div class="mp-bar${person.isUnassignedBucket ? " mp-bar-unassigned" : ""}" data-mp-bar style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
+          <div class="mp-bar${person.isUnassignedBucket ? " mp-bar-unassigned" : ""}" data-mp-bar data-mp-bar-idx="${barIdx}" style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
                title="${escapeHtml(t.name)}${context ? " — " + context : ""}">
             <span class="mp-bar-label">${escapeHtml(t.name)}</span>
             <div class="mp-bar-popover" data-mp-popover>
@@ -837,7 +837,7 @@
           </div>`;
       }).join("");
 
-      rowsHtml += `<div class="mp-row${altClass}" style="height:${rowHeight}px">${barsHtml}</div>`;
+      rowsHtml += `<div class="mp-row${altClass}" data-mp-row-idx="${idx}" style="height:${rowHeight}px">${barsHtml}</div>`;
     });
     flushDeptGroup();
 
@@ -851,33 +851,104 @@
       pop.addEventListener("click", (e) => e.stopPropagation());
     });
 
+    // Shared by both reassignment paths (the popover's "Assign to" text
+    // input, and dragging a bar onto a different person's row below) --
+    // swaps `it`'s task from its old assignee to a new one in the
+    // Responsible field, leaving every other name on that task alone.
+    // Returns false (and touches nothing) when the assignee didn't actually
+    // change, so callers know whether a re-render/save is even needed.
+    async function reassignTask(it, newPersonName) {
+      const task = it.task;
+      const newVal = newPersonName || "";
+      const oldVal = it.personName;
+      if (newVal === (oldVal || "")) return false;
+      const prev = task.responsible;
+      const names = parseNames(task.responsible);
+      const filtered = oldVal ? names.filter((n) => n !== oldVal) : names.slice();
+      if (newVal && !filtered.includes(newVal)) filtered.push(newVal);
+      task.responsible = filtered.join(", ");
+      const ok = await saveRemote();
+      if (!ok) task.responsible = prev;
+      return true;
+    }
+    // Resolves a `.mp-row` element back to the person it belongs to, via
+    // the row-order index stamped on it at render time.
+    function personForRow(rowEl) {
+      return rowEl ? people[Number(rowEl.dataset.mpRowIdx)] : null;
+    }
+
     body.querySelectorAll("[data-mp-assign]").forEach((input) => {
       input.addEventListener("change", async () => {
         const it = barItems[Number(input.dataset.mpAssign)];
-        const task = it.task;
-        const newVal = input.value.trim();
-        const oldVal = it.personName;
-        if (newVal === (oldVal || "")) return;
-        const prev = task.responsible;
-        const names = parseNames(task.responsible);
-        const filtered = oldVal ? names.filter((n) => n !== oldVal) : names.slice();
-        if (newVal && !filtered.includes(newVal)) filtered.push(newVal);
-        task.responsible = filtered.join(", ");
-        const ok = await saveRemote();
-        if (!ok) task.responsible = prev;
-        renderManpowerGantt();
+        const changed = await reassignTask(it, input.value.trim());
+        if (changed) renderManpowerGantt();
       });
     });
 
     body.querySelectorAll("[data-mp-bar]").forEach((barEl) => {
+      const it = barItems[Number(barEl.dataset.mpBarIdx)];
+      const popover = barEl.querySelector("[data-mp-popover]");
+      let wasDragged = false;
+
+      // Drag the bar up/down onto another person's row to reassign it --
+      // left/right stays locked (no `left`/`width` change, ever) so the
+      // task's dates can't be touched this way, only who it's on.
+      if (canManage()) {
+        let dragging = false;
+        let startY = 0, startClientX = 0, targetRowEl = null;
+        barEl.addEventListener("pointerdown", (e) => {
+          if (e.target.closest("[data-mp-popover]")) return;
+          dragging = true;
+          wasDragged = false;
+          startY = e.clientY;
+          startClientX = e.clientX;
+          targetRowEl = barEl.closest(".mp-row");
+          barEl.setPointerCapture(e.pointerId);
+          barEl.classList.add("dragging");
+          barEl.style.pointerEvents = "none";
+        });
+        barEl.addEventListener("pointermove", (e) => {
+          if (!dragging) return;
+          const deltaY = e.clientY - startY;
+          if (Math.abs(deltaY) > 3) wasDragged = true;
+          barEl.style.transform = `translateY(${deltaY}px)`;
+          // Hit-test at the bar's original X, not the live pointer X --
+          // horizontal movement is deliberately ignored so a wobbly drag
+          // can't be mistaken for picking a different day/column.
+          const hoverEl = document.elementFromPoint(startClientX, e.clientY);
+          const rowEl = hoverEl && hoverEl.closest(".mp-row");
+          if (rowEl !== targetRowEl) {
+            if (targetRowEl) targetRowEl.classList.remove("mp-row-drop-target");
+            targetRowEl = rowEl;
+            if (targetRowEl) targetRowEl.classList.add("mp-row-drop-target");
+          }
+        });
+        barEl.addEventListener("pointerup", async () => {
+          if (!dragging) return;
+          dragging = false;
+          barEl.classList.remove("dragging");
+          barEl.style.pointerEvents = "";
+          barEl.style.transform = "";
+          if (targetRowEl) targetRowEl.classList.remove("mp-row-drop-target");
+          if (wasDragged && targetRowEl) {
+            const targetPerson = personForRow(targetRowEl);
+            if (targetPerson) {
+              const newName = targetPerson.isUnassignedBucket ? "" : targetPerson.name;
+              const changed = await reassignTask(it, newName);
+              if (changed) { renderManpowerGantt(); return; }
+            }
+          }
+        });
+      }
+
       barEl.addEventListener("click", (e) => {
         // Any click landing inside the already-open popover (the assign
         // label/padding, not just the input/goto button) must not fall
         // through to the toggle below -- it was closing the popover out
         // from under anyone trying to reach the "Assign to" field.
         if (e.target.closest("[data-mp-popover]")) return;
+        if (wasDragged) { wasDragged = false; return; }
         e.stopPropagation();
-        const popover = barEl.querySelector("[data-mp-popover]");
         const wasOpen = popover.classList.contains("open");
         body.querySelectorAll(".mp-bar-popover.open").forEach((p) => p.classList.remove("open"));
         if (!wasOpen) popover.classList.add("open");
