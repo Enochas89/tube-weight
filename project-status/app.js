@@ -266,9 +266,9 @@
   // so a plain unfilled strip (just the border) reads better than a solid
   // black block standing in for nothing.
   const DEPARTMENT_COLORS = {
-    "Machine Shop": "#2f4858",
-    "Fab Shop": "#7a4a30",
-    "Engineering/Tech Serv": "#3b6e4f",
+    "Machine Shop": "#c1702e",
+    "Fab Shop": "#3d7a4a",
+    "Engineering/Tech Serv": "#2a5c8a",
   };
   function deptColor(dept) {
     return DEPARTMENT_COLORS[dept] || "transparent";
