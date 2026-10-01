@@ -250,13 +250,13 @@
   // by exact name match (matched by [[project-retubeco-traveler-automation]]'s
   // lesson: no fuzzy matching on identity, fail to "Unassigned" instead of
   // guessing) plus feeds a <datalist> so typed names line up with it.
-  const DEFAULT_DEPARTMENTS = ["Machine Shop", "Fab Shop", "Engineering"];
+  const DEFAULT_DEPARTMENTS = ["Machine Shop", "Fab Shop", "Engineering/Tech Serv"];
   // Shop icons -- only the three default departments have art; a custom
   // department typed in by a user just renders without one.
   const DEPARTMENT_ICONS = {
     "Machine Shop": "assets/icons/machine.png",
     "Fab Shop": "assets/icons/fab.png",
-    "Engineering": "assets/icons/engineering.png",
+    "Engineering/Tech Serv": "assets/icons/engineering.png",
   };
   function deptIconHtml(dept, cls) {
     const src = DEPARTMENT_ICONS[dept];
