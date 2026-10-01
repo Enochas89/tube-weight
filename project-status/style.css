@@ -820,18 +820,18 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 /* Lines the "Name" column header up with the avatar/name text below it,
    which is pushed right by the strip -- this header row has no strip of
    its own (it's not part of any one department). */
-#manpowerGanttView .gantt-full-label-header { padding-left: calc(34px + 12px); }
+#manpowerGanttView .gantt-full-label-header { padding-left: calc(48px + 12px); }
 .mp-dept-group { display: flex; align-items: stretch; }
 .mp-dept-group-rows { flex: 1 1 auto; min-width: 0; }
 .mp-dept-strip {
   flex-shrink: 0;
-  width: 34px;
+  width: 48px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 0;
+  gap: 10px;
+  padding: 10px 0;
   /* background-color comes from the inline style per department */
   border-right: 2px solid var(--brand-yellow);
   box-sizing: border-box;
@@ -839,12 +839,12 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 }
 .mp-dept-strip-icon {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
   background: #fff;
   border-radius: 50%;
-  padding: 3px;
+  padding: 4px;
   box-sizing: border-box;
 }
 .mp-dept-strip-label {
@@ -852,7 +852,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
   transform: rotate(180deg);
   text-orientation: mixed;
   color: #fff;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;

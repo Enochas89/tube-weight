@@ -264,9 +264,9 @@
   // for a status. Unmapped departments (a custom one, or "Unassigned
   // Tasks") fall back to brand black.
   const DEPARTMENT_COLORS = {
-    "Machine Shop": "#3a4f91",
-    "Fab Shop": "#c2561c",
-    "Engineering/Tech Serv": "#1f7a6c",
+    "Machine Shop": "#2f4858",
+    "Fab Shop": "#7a4a30",
+    "Engineering/Tech Serv": "#3b6e4f",
   };
   function deptColor(dept) {
     return DEPARTMENT_COLORS[dept] || "var(--brand-black)";
