@@ -952,14 +952,21 @@
       // task's dates can't be touched this way, only who it's on.
       if (canManage()) {
         let dragging = false;
-        let startY = 0, startClientX = 0, targetRowEl = null;
+        let startY = 0, startClientX = 0, originalRowEl = null, targetRowEl = null;
+        const clearDragVisuals = () => {
+          barEl.classList.remove("dragging");
+          barEl.style.pointerEvents = "";
+          barEl.style.transform = "";
+          if (targetRowEl) targetRowEl.classList.remove("mp-row-drop-target");
+        };
         barEl.addEventListener("pointerdown", (e) => {
           if (e.target.closest("[data-mp-popover]")) return;
           dragging = true;
           wasDragged = false;
           startY = e.clientY;
           startClientX = e.clientX;
-          targetRowEl = barEl.closest(".mp-row");
+          originalRowEl = barEl.closest(".mp-row");
+          targetRowEl = originalRowEl;
           barEl.setPointerCapture(e.pointerId);
           barEl.classList.add("dragging");
           barEl.style.pointerEvents = "none";
@@ -967,7 +974,6 @@
         barEl.addEventListener("pointermove", (e) => {
           if (!dragging) return;
           const deltaY = e.clientY - startY;
-          if (Math.abs(deltaY) > 3) wasDragged = true;
           barEl.style.transform = `translateY(${deltaY}px)`;
           // Hit-test at the bar's original X, not the live pointer X --
           // horizontal movement is deliberately ignored so a wobbly drag
@@ -975,19 +981,24 @@
           const hoverEl = document.elementFromPoint(startClientX, e.clientY);
           const rowEl = hoverEl && hoverEl.closest(".mp-row");
           if (rowEl !== targetRowEl) {
-            if (targetRowEl) targetRowEl.classList.remove("mp-row-drop-target");
+            if (targetRowEl && targetRowEl !== originalRowEl) targetRowEl.classList.remove("mp-row-drop-target");
             targetRowEl = rowEl;
-            if (targetRowEl) targetRowEl.classList.add("mp-row-drop-target");
+            if (targetRowEl && targetRowEl !== originalRowEl) targetRowEl.classList.add("mp-row-drop-target");
           }
         });
         barEl.addEventListener("pointerup", async () => {
           if (!dragging) return;
           dragging = false;
-          barEl.classList.remove("dragging");
-          barEl.style.pointerEvents = "";
-          barEl.style.transform = "";
-          if (targetRowEl) targetRowEl.classList.remove("mp-row-drop-target");
-          if (wasDragged && targetRowEl) {
+          clearDragVisuals();
+          // Whether this was "a drag" (and so should swallow the click
+          // that follows, instead of opening the popover) is decided by
+          // whether the pointer actually ended up over a *different* row
+          // -- not by how many pixels it moved. A pixel threshold was too
+          // eager to mistake an ordinary click's natural jitter (very
+          // common from a trackpad or touchscreen) for a drag, which ate
+          // the click and made the bar seem unclickable.
+          if (targetRowEl && targetRowEl !== originalRowEl) {
+            wasDragged = true;
             const targetPerson = personForRow(targetRowEl);
             if (targetPerson) {
               const newName = targetPerson.isUnassignedBucket ? "" : targetPerson.name;
@@ -999,6 +1010,15 @@
               if (anyChanged) { renderManpowerGantt(); return; }
             }
           }
+        });
+        // If the gesture is cancelled mid-drag (the browser hands it off
+        // to a scroll, a touch gets interrupted, etc.) `pointerup` never
+        // fires -- without this, `pointerEvents` would stay "none" forever
+        // and the bar would silently stop responding to any future click.
+        barEl.addEventListener("pointercancel", () => {
+          if (!dragging) return;
+          dragging = false;
+          clearDragVisuals();
         });
       }
 
