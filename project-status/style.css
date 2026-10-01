@@ -821,6 +821,11 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
    which is pushed right by the strip -- this header row has no strip of
    its own (it's not part of any one department). */
 #manpowerGanttView .gantt-full-label-header { padding-left: calc(48px + 12px); }
+/* A visible seam between one department's strip and the next -- without
+   this, two groups that both fall back to the same color (an unmapped
+   custom department next to the Unassigned Tasks bucket, say) read as one
+   continuous banner instead of two. */
+.mp-dept-group + .mp-dept-group .mp-dept-strip { border-top: 2px solid var(--panel); }
 .mp-dept-group { display: flex; align-items: stretch; }
 .mp-dept-group-rows { flex: 1 1 auto; min-width: 0; }
 .mp-dept-strip {
