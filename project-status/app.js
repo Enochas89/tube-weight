@@ -273,6 +273,17 @@
   function deptColor(dept) {
     return DEPARTMENT_COLORS[dept] || "transparent";
   }
+  // Display-only shortening for the vertical title column -- "Engineering/
+  // Tech Serv" is too long to fit running down a strip next to its (usually
+  // few) people without overlapping itself. The full name is unaffected
+  // everywhere else (grouping, icon/color lookup, the tooltip) and still
+  // shows on hover.
+  const DEPARTMENT_SHORT_LABELS = {
+    "Engineering/Tech Serv": "Engineering",
+  };
+  function deptShortLabel(dept) {
+    return DEPARTMENT_SHORT_LABELS[dept] || dept;
+  }
   function deptIconHtml(dept, cls) {
     const src = DEPARTMENT_ICONS[dept];
     return src ? `<img class="${cls}" src="${src}" alt="" title="${escapeHtml(dept)}">` : "";
@@ -756,7 +767,7 @@
       const icon = src ? `<img class="mp-dept-strip-icon" src="${src}" alt="" title="${escapeHtml(groupDept)}">` : "";
       labelsHtml += `
         <div class="mp-dept-group" style="height:${groupHeight}px">
-          <span class="mp-dept-title" style="height:${groupHeight}px">${escapeHtml(groupDept)}</span>
+          <span class="mp-dept-title" title="${escapeHtml(groupDept)}" style="height:${groupHeight}px">${escapeHtml(deptShortLabel(groupDept))}</span>
           <div class="mp-dept-strip" style="height:${groupHeight}px; background:${deptColor(groupDept)};">
             ${icon}
           </div>
