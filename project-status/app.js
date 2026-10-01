@@ -833,10 +833,11 @@
           const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
           const statusLabel = (TASK_STATUS_OPTIONS.find(([v]) => v === t.status) || [null, t.status])[1];
           const context = isMaster ? `${escapeHtml(it.project.name)} / ${escapeHtml(it.traveler.name)}` : "";
+          const barLabel = isMaster ? `${escapeHtml(it.traveler.name)} — ${escapeHtml(t.name)}` : escapeHtml(t.name);
           return `
             <div class="mp-bar${person.isUnassignedBucket ? " mp-bar-unassigned" : ""}" data-mp-bar data-mp-bar-idx="${barIdx}" style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
                  title="${escapeHtml(t.name)}${context ? " — " + context : ""}">
-              <span class="mp-bar-label">${escapeHtml(t.name)}</span>
+              <span class="mp-bar-label">${barLabel}</span>
               <div class="mp-bar-popover" data-mp-popover>
                 <div class="mp-pop-title">${escapeHtml(t.name)}</div>
                 ${context ? `<div class="mp-pop-meta">${context}</div>` : ""}
@@ -880,10 +881,15 @@
             </button>`;
         }).join("");
         const namesTitle = group.map((it) => it.task.name).join(", ");
+        // Same job numbers can repeat within a group (two overlapping tasks
+        // on the same traveler) -- dedupe so the always-visible label stays
+        // short instead of listing a job number twice.
+        const jobNumbers = isMaster ? Array.from(new Set(group.map((it) => it.traveler.name))) : [];
+        const jobLabel = jobNumbers.length ? `${jobNumbers.map((n) => escapeHtml(n)).join(", ")} — ` : "";
         return `
           <div class="mp-bar mp-bar-combined${person.isUnassignedBucket ? " mp-bar-unassigned" : ""}" data-mp-bar data-mp-bar-idx="${barIdx}" style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
                title="${escapeHtml(namesTitle)}">
-            <span class="mp-bar-label">${group.length} tasks &#9662;</span>
+            <span class="mp-bar-label">${jobLabel}${group.length} tasks &#9662;</span>
             <div class="mp-bar-popover mp-bar-popover-combined" data-mp-popover>
               <div class="mp-pop-title">${group.length} tasks${person.isUnassignedBucket ? "" : " — " + escapeHtml(name)}</div>
               <div class="mp-pop-combined-list">${listHtml}</div>
