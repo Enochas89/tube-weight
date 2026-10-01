@@ -931,6 +931,31 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .mp-avatar-unassigned { background: var(--border) !important; color: var(--text-dim); }
 .mp-bar-unassigned { border: 1px dashed rgba(16, 24, 40, 0.4); opacity: 0.85; }
 
+/* A bar standing in for 2+ overlapping same-person tasks, expanding into a
+   dropdown list instead of stacking into separate lanes. */
+.mp-bar-combined { border-style: double; border-width: 3px; }
+.mp-bar-popover-combined { width: 280px; padding: 10px 0; max-height: 280px; overflow-y: auto; }
+.mp-bar-popover-combined .mp-pop-title { padding: 0 14px 8px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+.mp-pop-combined-list { display: flex; flex-direction: column; }
+.mp-pop-combined-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  padding: 7px 14px;
+}
+.mp-pop-combined-item:hover { background: var(--accent-dim); }
+.mp-pop-combined-dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; }
+.mp-pop-combined-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mp-pop-combined-name { font-weight: 700; font-size: 0.8rem; }
+.mp-pop-combined-ctx, .mp-pop-combined-dates { font-size: 0.7rem; color: var(--text-dim); }
+
 /* ---------- team roster modal ---------- */
 .team-add-row { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
 .team-add-row input, .team-add-row select { flex: 1 1 auto; min-width: 0; }

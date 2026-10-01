@@ -635,18 +635,26 @@
     });
     return rows;
   }
-  // Greedy interval packing: assignments that overlap in time for the same
-  // person get stacked into separate lanes instead of drawn on top of each
-  // other, so double-booking is visible rather than hidden.
-  function layoutLanes(items) {
-    const laneEnds = [];
+  // Groups one person's items into overlap clusters by date range, so
+  // double-booked tasks render as a single combined bar (with a dropdown
+  // listing each one) instead of stacking into separate lanes. `items`
+  // must already be sorted by startDate (the caller does this) -- a single
+  // forward scan tracking the running "furthest end so far" then catches
+  // transitive overlap chains too (A overlapping B overlapping C groups
+  // all three, even where A and C don't directly touch).
+  function groupOverlappingItems(items) {
+    const groups = [];
+    let currentEnd = null;
     items.forEach((item) => {
-      let lane = laneEnds.findIndex((end) => end <= item.task.startDate);
-      if (lane === -1) { lane = laneEnds.length; laneEnds.push(item.task.endDate); }
-      else laneEnds[lane] = item.task.endDate;
-      item.lane = lane;
+      if (groups.length && item.task.startDate <= currentEnd) {
+        groups[groups.length - 1].push(item);
+        if (item.task.endDate > currentEnd) currentEnd = item.task.endDate;
+      } else {
+        groups.push([item]);
+        currentEnd = item.task.endDate;
+      }
     });
-    return laneEnds.length;
+    return groups;
   }
   // Populates the department <select> from the current roster while
   // preserving whatever the user had picked, if it still exists.
@@ -785,8 +793,11 @@
         groupDept = deptLabel;
       }
       const items = person.items.slice().sort((a, b) => a.task.startDate.localeCompare(b.task.startDate));
-      const laneCount = Math.max(1, layoutLanes(items));
-      const rowHeight = laneCount * MP_LANE_HEIGHT + MP_ROW_PAD;
+      const groups = groupOverlappingItems(items);
+      // Overlapping same-person tasks are now always combined into one bar
+      // (below), so no two bars in this row can ever overlap each other --
+      // every row is a single lane, always.
+      const rowHeight = MP_LANE_HEIGHT + MP_ROW_PAD;
       const altClass = idx % 2 === 1 ? " row-alt" : "";
 
       const avatarHtml = person.isUnassignedBucket
@@ -805,34 +816,76 @@
         labelsHtml += rowHtml;
       }
 
-      const barsHtml = items.map((it) => {
-        const t = it.task;
-        const offsetDays = daysBetween(rangeStart, t.startDate);
-        const isMilestone = t.duration === 0;
-        const durDays = taskDuration(t);
-        const barLeft = isMilestone ? (offsetDays * GANTT_DAY_WIDTH + GANTT_DAY_WIDTH / 2 - 10) : (offsetDays * GANTT_DAY_WIDTH);
-        const barWidth = isMilestone ? 20 : Math.max(GANTT_DAY_WIDTH - 2, durDays * GANTT_DAY_WIDTH - 2);
-        const top = MP_ROW_PAD / 2 + it.lane * MP_LANE_HEIGHT;
-        const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
-        const statusLabel = (TASK_STATUS_OPTIONS.find(([v]) => v === t.status) || [null, t.status])[1];
-        const context = isMaster ? `${escapeHtml(it.project.name)} / ${escapeHtml(it.traveler.name)}` : "";
+      const barsHtml = groups.map((group) => {
         const barIdx = barItems.length;
-        barItems.push(it);
+        barItems.push(group);
+        const top = MP_ROW_PAD / 2;
+
+        // A single task on its own -- exactly the old bar/popover, unchanged.
+        if (group.length === 1) {
+          const it = group[0];
+          const t = it.task;
+          const offsetDays = daysBetween(rangeStart, t.startDate);
+          const isMilestone = t.duration === 0;
+          const durDays = taskDuration(t);
+          const barLeft = isMilestone ? (offsetDays * GANTT_DAY_WIDTH + GANTT_DAY_WIDTH / 2 - 10) : (offsetDays * GANTT_DAY_WIDTH);
+          const barWidth = isMilestone ? 20 : Math.max(GANTT_DAY_WIDTH - 2, durDays * GANTT_DAY_WIDTH - 2);
+          const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
+          const statusLabel = (TASK_STATUS_OPTIONS.find(([v]) => v === t.status) || [null, t.status])[1];
+          const context = isMaster ? `${escapeHtml(it.project.name)} / ${escapeHtml(it.traveler.name)}` : "";
+          return `
+            <div class="mp-bar${person.isUnassignedBucket ? " mp-bar-unassigned" : ""}" data-mp-bar data-mp-bar-idx="${barIdx}" style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
+                 title="${escapeHtml(t.name)}${context ? " — " + context : ""}">
+              <span class="mp-bar-label">${escapeHtml(t.name)}</span>
+              <div class="mp-bar-popover" data-mp-popover>
+                <div class="mp-pop-title">${escapeHtml(t.name)}</div>
+                ${context ? `<div class="mp-pop-meta">${context}</div>` : ""}
+                <div class="mp-pop-meta">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)}</div>
+                <div class="mp-pop-meta">${escapeHtml(statusLabel)} &middot; ${t.progress || 0}%</div>
+                ${canManage() ? `
+                <div class="mp-pop-assign">
+                  <label class="mp-pop-assign-label">Assign to</label>
+                  <input type="text" class="mp-pop-assign-input" list="teamNameOptions" placeholder="Unassigned" value="${escapeHtml(it.personName || "")}" data-mp-assign="${barIdx}">
+                </div>` : ""}
+                <button type="button" class="btn-link mp-pop-link" data-mp-goto="${it.project.id}|${it.traveler.id}">Go to traveler &rarr;</button>
+              </div>
+            </div>`;
+        }
+
+        // Two or more tasks on the same person overlapping in time --
+        // one combined bar spanning the whole group's date range, with a
+        // dropdown listing each task instead of stacking separate lanes.
+        const groupStart = group[0].task.startDate;
+        const groupEnd = group.reduce((max, it) => (it.task.endDate > max ? it.task.endDate : max), group[0].task.endDate);
+        const offsetDays = daysBetween(rangeStart, groupStart);
+        const durDays = daysBetween(groupStart, groupEnd) + 1;
+        const barLeft = offsetDays * GANTT_DAY_WIDTH;
+        const barWidth = Math.max(GANTT_DAY_WIDTH - 2, durDays * GANTT_DAY_WIDTH - 2);
+        // Colored by whichever member task is most urgent, so a combined
+        // bar still flags "something here is delayed" at a glance.
+        const worstStatus = ["delayed", "in_progress", "not_started", "complete"].find((s) => group.some((it) => it.task.status === s)) || "not_started";
+        const color = TASK_STATUS_COLOR[worstStatus];
+        const listHtml = group.map((it) => {
+          const t = it.task;
+          const statusLabel = (TASK_STATUS_OPTIONS.find(([v]) => v === t.status) || [null, t.status])[1];
+          const context = isMaster ? `${escapeHtml(it.project.name)} / ${escapeHtml(it.traveler.name)}` : "";
+          return `
+            <button type="button" class="mp-pop-combined-item" data-mp-goto="${it.project.id}|${it.traveler.id}">
+              <span class="mp-pop-combined-dot" style="background:${TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started}"></span>
+              <span class="mp-pop-combined-text">
+                <span class="mp-pop-combined-name">${escapeHtml(t.name)}</span>
+                ${context ? `<span class="mp-pop-combined-ctx">${context}</span>` : ""}
+                <span class="mp-pop-combined-dates">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)} &middot; ${escapeHtml(statusLabel)}</span>
+              </span>
+            </button>`;
+        }).join("");
         return `
-          <div class="mp-bar${person.isUnassignedBucket ? " mp-bar-unassigned" : ""}" data-mp-bar data-mp-bar-idx="${barIdx}" style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
-               title="${escapeHtml(t.name)}${context ? " — " + context : ""}">
-            <span class="mp-bar-label">${escapeHtml(t.name)}</span>
-            <div class="mp-bar-popover" data-mp-popover>
-              <div class="mp-pop-title">${escapeHtml(t.name)}</div>
-              ${context ? `<div class="mp-pop-meta">${context}</div>` : ""}
-              <div class="mp-pop-meta">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)}</div>
-              <div class="mp-pop-meta">${escapeHtml(statusLabel)} &middot; ${t.progress || 0}%</div>
-              ${canManage() ? `
-              <div class="mp-pop-assign">
-                <label class="mp-pop-assign-label">Assign to</label>
-                <input type="text" class="mp-pop-assign-input" list="teamNameOptions" placeholder="Unassigned" value="${escapeHtml(it.personName || "")}" data-mp-assign="${barIdx}">
-              </div>` : ""}
-              <button type="button" class="btn-link mp-pop-link" data-mp-goto="${it.project.id}|${it.traveler.id}">Go to traveler &rarr;</button>
+          <div class="mp-bar mp-bar-combined${person.isUnassignedBucket ? " mp-bar-unassigned" : ""}" data-mp-bar data-mp-bar-idx="${barIdx}" style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
+               title="${group.length} tasks${person.isUnassignedBucket ? "" : " for " + escapeHtml(name)}">
+            <span class="mp-bar-label">${group.length} tasks &#9662;</span>
+            <div class="mp-bar-popover mp-bar-popover-combined" data-mp-popover>
+              <div class="mp-pop-title">${group.length} tasks${person.isUnassignedBucket ? "" : " — " + escapeHtml(name)}</div>
+              <div class="mp-pop-combined-list">${listHtml}</div>
             </div>
           </div>`;
       }).join("");
@@ -879,14 +932,18 @@
 
     body.querySelectorAll("[data-mp-assign]").forEach((input) => {
       input.addEventListener("change", async () => {
-        const it = barItems[Number(input.dataset.mpAssign)];
+        // The assign input only ever renders for a single-task bar (see
+        // above), so this group is always exactly one item.
+        const it = barItems[Number(input.dataset.mpAssign)][0];
         const changed = await reassignTask(it, input.value.trim());
         if (changed) renderManpowerGantt();
       });
     });
 
     body.querySelectorAll("[data-mp-bar]").forEach((barEl) => {
-      const it = barItems[Number(barEl.dataset.mpBarIdx)];
+      // One or more items -- a combined bar drags/reassigns as a block, so
+      // every item in the group moves together.
+      const group = barItems[Number(barEl.dataset.mpBarIdx)];
       const popover = barEl.querySelector("[data-mp-popover]");
       let wasDragged = false;
 
@@ -934,8 +991,12 @@
             const targetPerson = personForRow(targetRowEl);
             if (targetPerson) {
               const newName = targetPerson.isUnassignedBucket ? "" : targetPerson.name;
-              const changed = await reassignTask(it, newName);
-              if (changed) { renderManpowerGantt(); return; }
+              let anyChanged = false;
+              for (const it of group) {
+                const changed = await reassignTask(it, newName);
+                anyChanged = anyChanged || changed;
+              }
+              if (anyChanged) { renderManpowerGantt(); return; }
             }
           }
         });
