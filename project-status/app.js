@@ -566,6 +566,23 @@
     });
     return rows;
   }
+  // Tasks with nobody in their Responsible field at all -- these never show
+  // up in manpowerAssignments (parseNames returns []), so without this they
+  // were simply invisible in the Man Power gantt with no way to assign them
+  // from there. Surfaced as their own "Unassigned Tasks" bucket instead.
+  function unassignedManpowerItems(mode) {
+    const rows = [];
+    const projects = mode.scope === "master" ? state.projects : [mode.project];
+    projects.forEach((p) => {
+      const travelers = mode.scope === "master" ? p.travelers : [mode.traveler];
+      travelers.forEach((trav) => {
+        trav.tasks.forEach((t) => {
+          if (!parseNames(t.responsible).length) rows.push({ personName: null, task: t, project: p, traveler: trav });
+        });
+      });
+    });
+    return rows;
+  }
   // Greedy interval packing: assignments that overlap in time for the same
   // person get stacked into separate lanes instead of drawn on top of each
   // other, so double-booking is visible rather than hidden.
@@ -600,6 +617,7 @@
     ensureTeam();
     const rosterByName = new Map(state.team.map((p) => [p.name, p]));
     const assignments = manpowerAssignments(manpowerGanttMode);
+    const unassignedItems = unassignedManpowerItems(manpowerGanttMode);
 
     const byPerson = new Map();
     assignments.forEach((a) => {
@@ -626,6 +644,12 @@
       if (a.department !== b.department) return a.department.localeCompare(b.department);
       return a.name.localeCompare(b.name);
     });
+    // The "nobody assigned yet" bucket ignores the department filter and
+    // always sits at the bottom -- its whole point is to stay reachable so
+    // these tasks can actually get assigned, not to be filtered away.
+    if (canManage() && unassignedItems.length) {
+      people.push({ name: "Unassigned", department: "__unassigned_bucket__", items: unassignedItems, isUnassignedBucket: true });
+    }
 
     if (!people.length) {
       labels.innerHTML = "";
@@ -635,10 +659,11 @@
     }
 
     let rangeStart, rangeEnd;
-    if (assignments.length) {
-      rangeStart = assignments[0].task.startDate;
-      rangeEnd = assignments[0].task.endDate;
-      assignments.forEach((a) => {
+    if (assignments.length || unassignedItems.length) {
+      const allItems = assignments.concat(unassignedItems);
+      rangeStart = allItems[0].task.startDate;
+      rangeEnd = allItems[0].task.endDate;
+      allItems.forEach((a) => {
         if (a.task.startDate < rangeStart) rangeStart = a.task.startDate;
         if (a.task.endDate > rangeEnd) rangeEnd = a.task.endDate;
       });
@@ -670,10 +695,16 @@
     let labelsHtml = "";
     let rowsHtml = "";
     let lastDept = null;
+    // Flat, render-order list of every bar's backing item, so the handler
+    // wiring pass below can grab the real object (not a re-parsed string) by
+    // index -- needed because a name can hold a comma, so re-deriving "which
+    // assignee is this bar" from stringified data attributes would be fragile.
+    const barItems = [];
     people.forEach((person, idx) => {
       const { name } = person;
-      if (isMaster && person.department !== lastDept) {
-        lastDept = person.department;
+      const deptLabel = person.isUnassignedBucket ? "Unassigned Tasks" : person.department;
+      if (isMaster && deptLabel !== lastDept) {
+        lastDept = deptLabel;
         labelsHtml += `<div class="mp-dept-header">${escapeHtml(lastDept)}</div>`;
         rowsHtml += `<div class="mp-dept-header"></div>`;
       }
@@ -684,7 +715,7 @@
 
       labelsHtml += `
         <div class="mp-label-row${altClass}" style="height:${rowHeight}px">
-          <span class="mp-avatar" style="background:${avatarColor(name)}">${escapeHtml(initials(name))}</span>
+          <span class="mp-avatar${person.isUnassignedBucket ? " mp-avatar-unassigned" : ""}" style="background:${person.isUnassignedBucket ? "" : avatarColor(name)}">${person.isUnassignedBucket ? "?" : escapeHtml(initials(name))}</span>
           <span class="mp-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
           <span class="mp-count">${items.length || ""}</span>
         </div>`;
@@ -700,8 +731,10 @@
         const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.not_started;
         const statusLabel = (TASK_STATUS_OPTIONS.find(([v]) => v === t.status) || [null, t.status])[1];
         const context = isMaster ? `${escapeHtml(it.project.name)} / ${escapeHtml(it.traveler.name)}` : "";
+        const barIdx = barItems.length;
+        barItems.push(it);
         return `
-          <div class="mp-bar" data-mp-bar style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
+          <div class="mp-bar${person.isUnassignedBucket ? " mp-bar-unassigned" : ""}" data-mp-bar style="left:${barLeft}px; top:${top}px; width:${barWidth}px; background:${color};"
                title="${escapeHtml(t.name)}${context ? " — " + context : ""}">
             <span class="mp-bar-label">${escapeHtml(t.name)}</span>
             <div class="mp-bar-popover" data-mp-popover>
@@ -709,6 +742,11 @@
               ${context ? `<div class="mp-pop-meta">${context}</div>` : ""}
               <div class="mp-pop-meta">${fmtDate(t.startDate)} &rarr; ${fmtDate(t.endDate)}</div>
               <div class="mp-pop-meta">${escapeHtml(statusLabel)} &middot; ${t.progress || 0}%</div>
+              ${canManage() ? `
+              <div class="mp-pop-assign">
+                <label class="mp-pop-assign-label">Assign to</label>
+                <input type="text" class="mp-pop-assign-input" list="teamNameOptions" placeholder="Unassigned" value="${escapeHtml(it.personName || "")}" data-mp-assign="${barIdx}">
+              </div>` : ""}
               <button type="button" class="btn-link mp-pop-link" data-mp-goto="${it.project.id}|${it.traveler.id}">Go to traveler &rarr;</button>
             </div>
           </div>`;
@@ -720,9 +758,28 @@
     labels.innerHTML = labelsHtml;
     body.innerHTML = `<div class="gantt-full-body-inner" style="width:${totalWidth}px">${rowsHtml}</div>`;
 
+    body.querySelectorAll("[data-mp-assign]").forEach((input) => {
+      input.addEventListener("click", (e) => e.stopPropagation());
+      input.addEventListener("change", async () => {
+        const it = barItems[Number(input.dataset.mpAssign)];
+        const task = it.task;
+        const newVal = input.value.trim();
+        const oldVal = it.personName;
+        if (newVal === (oldVal || "")) return;
+        const prev = task.responsible;
+        const names = parseNames(task.responsible);
+        const filtered = oldVal ? names.filter((n) => n !== oldVal) : names.slice();
+        if (newVal && !filtered.includes(newVal)) filtered.push(newVal);
+        task.responsible = filtered.join(", ");
+        const ok = await saveRemote();
+        if (!ok) task.responsible = prev;
+        renderManpowerGantt();
+      });
+    });
+
     body.querySelectorAll("[data-mp-bar]").forEach((barEl) => {
       barEl.addEventListener("click", (e) => {
-        if (e.target.closest("[data-mp-goto]")) return;
+        if (e.target.closest("[data-mp-goto], [data-mp-assign]")) return;
         e.stopPropagation();
         const popover = barEl.querySelector("[data-mp-popover]");
         const wasOpen = popover.classList.contains("open");

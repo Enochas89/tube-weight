@@ -772,7 +772,7 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .gantt-traveler-item-pct { flex-shrink: 0; font-weight: 700; font-size: 0.72rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .gantt-mini-popover select { width: 100%; font: inherit; font-size: 0.76rem; padding: 5px 6px; border: 1px solid var(--border); border-radius: 5px; margin-top: 4px; }
 
-/* ---------- man power gantt (read-only, one row per person) ---------- */
+/* ---------- man power gantt (one row per person, plus an assignable "Unassigned Tasks" bucket) ---------- */
 .mp-label-row {
   display: flex;
   align-items: center;
@@ -856,8 +856,13 @@ main { max-width: 1200px; margin: 24px auto; padding: 0 20px 60px; }
 .mp-bar-popover.open { display: block; }
 .mp-pop-title { font-weight: 700; margin-bottom: 6px; }
 .mp-pop-meta { color: var(--text-dim); margin-bottom: 3px; }
+.mp-pop-assign { margin: 8px 0; }
+.mp-pop-assign-label { display: block; font-size: 0.68rem; color: var(--text-dim); margin-bottom: 3px; }
+.mp-pop-assign-input { width: 100%; font: inherit; font-size: 0.8rem; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; box-sizing: border-box; }
 .mp-pop-link { margin-top: 6px; }
 .mp-empty { padding: 40px; text-align: center; color: var(--text-dim); }
+.mp-avatar-unassigned { background: var(--border) !important; color: var(--text-dim); }
+.mp-bar-unassigned { border: 1px dashed rgba(16, 24, 40, 0.4); opacity: 0.85; }
 
 /* ---------- team roster modal ---------- */
 .team-add-row { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
