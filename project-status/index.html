@@ -37,9 +37,10 @@
   <!-- ===================== PROJECT LIST VIEW ===================== -->
   <section id="listView" class="view">
     <div class="panel-header-row">
-      <h2>Projects</h2>
+      <h2 id="projectListTitle">Projects</h2>
       <div class="header-row-actions">
         <button class="btn-icon btn-share" id="shareListBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
+        <button class="btn-secondary hidden" id="toggleArchivedBtn">Archived</button>
         <button class="btn-secondary" id="openManHoursBtn">Man Hours</button>
         <button class="btn-secondary editor-only hidden" id="openProjectGanttBtn">Project Overview</button>
         <button class="btn-secondary editor-only hidden" id="openMasterManpowerBtn">Man Power Overview</button>
@@ -73,11 +74,13 @@
           <button class="btn-icon btn-share" id="shareProjectListBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
           <button class="btn-secondary" id="openProjectHoursBtn">Man Hours</button>
           <button class="btn-secondary editor-only hidden" id="editProjectFromListBtn">Edit Project</button>
+          <button class="btn-secondary editor-only hidden" id="archiveProjectBtn">Archive</button>
           <span class="action-divider editor-only hidden"></span>
           <button class="btn-danger editor-only hidden" id="deleteProjectFromListBtn">Delete</button>
         </div>
       </div>
       <p id="travelerListProjectDescription" class="detail-description"></p>
+      <p id="travelerListArchivedBanner" class="archived-banner hidden"></p>
     </div>
 
     <div class="panel-header-row">

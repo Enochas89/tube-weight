@@ -166,6 +166,7 @@
     const q = query.trim().toLowerCase();
     const matches = [];
     (data.projects || []).forEach((p) => {
+      if (p.archived) return;
       (p.travelers || []).forEach((t) => {
         if (t.status !== "on_hold") return;
         if (q && !t.name.toLowerCase().includes(q)) return;

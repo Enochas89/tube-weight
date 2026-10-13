@@ -1242,3 +1242,12 @@ footer a:hover { text-decoration: underline; }
   .hours-split { grid-template-columns: 1fr; }
   .hours-stat-value { font-size: 1.3rem; }
 }
+
+/* ---------- archived projects ---------- */
+.project-card-archived { background: var(--bg); border-style: dashed; }
+.project-card-archived h3 { color: var(--text-dim); }
+.archived-note { margin: 0; font-size: 0.74rem; font-weight: 600; color: var(--status-on_hold); text-transform: uppercase; letter-spacing: 0.03em; }
+.archived-banner { margin: 12px 0 0; padding: 8px 12px; font-size: 0.85rem; color: var(--status-on_hold); background: var(--status-on_hold-bg); border-radius: 6px; }
+.archived-tag { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--status-on_hold); background: var(--status-on_hold-bg); padding: 1px 6px; border-radius: 8px; margin-left: 4px; white-space: nowrap; }
+/* Project with no end date: dashed right edge instead of a real finish. */
+.gantt-bar.open-ended { border-right: 3px dashed rgba(0, 0, 0, 0.45); border-top-right-radius: 0; border-bottom-right-radius: 0; }

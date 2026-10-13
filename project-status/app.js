@@ -83,6 +83,9 @@
     return div.innerHTML;
   }
   function getProject(id) { return state.projects.find((p) => p.id === id); }
+  // Projects not archived -- what the working views (grid, overviews, man
+  // power, man hours, shop TV) show.
+  function activeProjects() { return state.projects.filter((p) => !p.archived); }
   function getTraveler(project, id) { return project ? project.travelers.find((t) => t.id === id) : null; }
   function allTasks(project) { return project.travelers.flatMap((t) => t.tasks); }
 
@@ -222,6 +225,28 @@
   function successorsOfProject(projectId) {
     return state.projects.filter((p) => (p.predecessors || []).includes(projectId));
   }
+  // A project's dates can be blank -- an open-ended job with no target end
+  // date. Date math on "" throws ("Invalid time value"), so project-level
+  // scheduling only ever does arithmetic on real dates.
+  function isDateStr(s) {
+    return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s + "T00:00:00").getTime());
+  }
+  // Moves a project to start the day after its latest-finishing predecessor,
+  // keeping its length. A predecessor with no end date has no finish to wait
+  // for, so it's skipped; an open-ended project stays open-ended. Returns
+  // true if the dates changed.
+  function scheduleAfterPredecessors(p, preds) {
+    const ends = preds.map((pr) => pr.endDate).filter(isDateStr);
+    if (!ends.length) return false;
+    const newStart = addDays(ends.reduce((a, b) => (a > b ? a : b)), 1);
+    let newEnd = p.endDate;
+    if (isDateStr(p.startDate) && isDateStr(p.endDate)) newEnd = addDays(newStart, daysBetween(p.startDate, p.endDate));
+    else if (isDateStr(p.endDate) && p.endDate < newStart) newEnd = newStart;
+    if (p.startDate === newStart && p.endDate === newEnd) return false;
+    p.startDate = newStart;
+    p.endDate = newEnd;
+    return true;
+  }
   function recalcProjectSchedule() {
     const byId = {};
     state.projects.forEach((p) => { byId[p.id] = p; });
@@ -229,16 +254,7 @@
       let changed = false;
       state.projects.forEach((p) => {
         const preds = (p.predecessors || []).map((id) => byId[id]).filter(Boolean);
-        if (!preds.length) return;
-        const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
-        const newStart = addDays(new Date(latestEnd + 86400000).toISOString().slice(0, 10), 0);
-        const spanDays = daysBetween(p.startDate, p.endDate);
-        const newEnd = addDays(newStart, spanDays);
-        if (p.startDate !== newStart || p.endDate !== newEnd) {
-          p.startDate = newStart;
-          p.endDate = newEnd;
-          changed = true;
-        }
+        if (preds.length && scheduleAfterPredecessors(p, preds)) changed = true;
       });
       if (!changed) break;
     }
@@ -518,6 +534,12 @@
       showTravelerDetail(p, trav);
       return;
     }
+    if (hash === "archived") {
+      currentProjectId = null;
+      currentTravelerId = null;
+      showList();
+      return;
+    }
     const hoursMatch = hash.match(/^hours(?:\/([^/]+))?$/);
     if (hoursMatch) {
       const p = hoursMatch[1] ? getProject(hoursMatch[1]) : null;
@@ -616,7 +638,7 @@
   // "Jane, Sam" in Responsible shows up as one bar on each of their rows.
   function manpowerAssignments(mode) {
     const rows = [];
-    const projects = mode.scope === "master" ? state.projects : [mode.project];
+    const projects = mode.scope === "master" ? activeProjects() : [mode.project];
     projects.forEach((p) => {
       const travelers = mode.scope === "master" ? p.travelers : [mode.traveler];
       travelers.forEach((trav) => {
@@ -635,7 +657,7 @@
   // from there. Surfaced as their own "Unassigned Tasks" bucket instead.
   function unassignedManpowerItems(mode) {
     const rows = [];
-    const projects = mode.scope === "master" ? state.projects : [mode.project];
+    const projects = mode.scope === "master" ? activeProjects() : [mode.project];
     projects.forEach((p) => {
       const travelers = mode.scope === "master" ? p.travelers : [mode.traveler];
       travelers.forEach((trav) => {
@@ -1134,16 +1156,28 @@
 
   function renderList() {
     const grid = document.getElementById("projectGrid");
-    if (state.projects.length === 0) {
-      grid.innerHTML = `<div class="empty-state">No projects yet.${canManage() ? ' Click "+ New Project" to add one.' : " Check back once the project manager has added one."}</div>`;
+    // "#archived" shows the archived projects in the same grid; everywhere
+    // else (and every other caller) gets the active ones.
+    const archivedView = location.hash === "#archived";
+    const archivedCount = state.projects.filter((p) => p.archived).length;
+    document.getElementById("projectListTitle").textContent = archivedView ? "Archived Projects" : "Projects";
+    const toggleBtn = document.getElementById("toggleArchivedBtn");
+    toggleBtn.textContent = archivedView ? "← Active Projects" : `Archived (${archivedCount})`;
+    toggleBtn.classList.toggle("hidden", !archivedView && !archivedCount);
+    document.getElementById("listView").classList.toggle("archived-mode", archivedView);
+    const projects = state.projects.filter((p) => !!p.archived === archivedView);
+    if (projects.length === 0) {
+      grid.innerHTML = archivedView
+        ? `<div class="empty-state">No archived projects.</div>`
+        : `<div class="empty-state">No projects yet.${canManage() ? ' Click "+ New Project" to add one.' : " Check back once the project manager has added one."}</div>`;
       return;
     }
-    grid.innerHTML = state.projects.map((p) => {
+    grid.innerHTML = projects.map((p) => {
       const progress = projectProgress(p);
       const taskCount = allTasks(p).length;
       const travelerCount = p.travelers.length;
       return `
-        <div class="project-card" data-id="${p.id}">
+        <div class="project-card${p.archived ? " project-card-archived" : ""}" data-id="${p.id}">
           <div class="project-card-top">
             <div>
               <h3>${escapeHtml(p.name)}</h3>
@@ -1151,6 +1185,7 @@
             </div>
             <span class="status-badge ${p.status}">${STATUS_LABELS[p.status]}</span>
           </div>
+          ${p.archived ? `<p class="archived-note">Archived${p.archivedAt ? " " + fmtDate(p.archivedAt) : ""}</p>` : ""}
           <p class="project-card-dates">${fmtDate(p.startDate)} &rarr; ${fmtDate(p.endDate)}</p>
           <div class="progress-bar"><div class="progress-bar-fill" style="width:${progress}%"></div></div>
           <div class="project-card-meta">
@@ -1238,6 +1273,7 @@
       </div>`;
   }
 
+  let hoursShowArchived = false;
   function showManHours(p) {
     hideAllViews();
     document.getElementById("manhoursView").classList.remove("hidden");
@@ -1279,7 +1315,9 @@
     back.onclick = () => { location.hash = ""; };
     renderHoursActions(null);
 
-    const rows = sortedByJob(state.projects).map((p) => ({ p, s: projectHours(p), budget: num(p.budgetHours), job: jobNumberOf(p) }));
+    const archivedCount = state.projects.filter((p) => p.archived).length;
+    const shown = hoursShowArchived ? state.projects : activeProjects();
+    const rows = sortedByJob(shown).map((p) => ({ p, s: projectHours(p), budget: num(p.budgetHours), job: jobNumberOf(p) }));
     const totBudget = rows.reduce((a, r) => a + r.budget, 0);
     const totSpent = rows.reduce((a, r) => a + r.s.total, 0);
     const spentOnBudgeted = rows.filter((r) => r.budget).reduce((a, r) => a + r.s.total, 0);
@@ -1310,7 +1348,7 @@
               const remaining = budget ? budget - s.total : null;
               return `<tr data-hours-row="${p.id}">
                 <td>${job ? escapeHtml(job) : '<span class="dim">—</span>'}</td>
-                <td>${escapeHtml(p.name)}</td>
+                <td>${escapeHtml(p.name)}${p.archived ? ' <span class="archived-tag">Archived</span>' : ""}</td>
                 <td class="num">${budget ? fmtHrs(budget) : '<span class="dim">—</span>'}</td>
                 <td class="num"><span class="hours-spent ${level}">${fmtHrs(s.total)}</span></td>
                 <td class="num">${fmtHrs(s.ot + s.dt)}</td>
@@ -1322,10 +1360,12 @@
           </tbody>
         </table>
       </div>
-      <p class="hours-footnote">Job numbers come from the start of each project name unless set under Edit Budget. ${canManage() ? "Import the weekly vIDix <em>Hours Report</em> or an <em>Hours Consolidated Report</em> PDF to log hours; importing the same period again replaces it rather than adding it twice." : ""}</p>`;
+      <p class="hours-footnote">${archivedCount ? `<button type="button" class="btn-link" id="hoursToggleArchived">${hoursShowArchived ? "Hide" : "Show"} ${archivedCount} archived job${archivedCount === 1 ? "" : "s"}</button> · ` : ""}Job numbers come from the start of each project name unless set under Edit Budget. ${canManage() ? "Import the weekly vIDix <em>Hours Report</em> or an <em>Hours Consolidated Report</em> PDF to log hours; importing the same period again replaces it rather than adding it twice." : ""}</p>`;
     body.querySelectorAll("[data-hours-row]").forEach((tr) => {
       tr.addEventListener("click", () => { location.hash = "hours/" + tr.dataset.hoursRow; });
     });
+    const toggle = document.getElementById("hoursToggleArchived");
+    if (toggle) toggle.addEventListener("click", () => { hoursShowArchived = !hoursShowArchived; renderHoursOverview(); });
   }
 
   function hoursStatHtml(label, value, sub, level) {
@@ -1573,7 +1613,7 @@
       <div class="hours-table-wrap"><table class="hours-table">
         <thead><tr><th>Job</th><th>Project</th><th class="num">Hours</th><th>Result</th></tr></thead>
         <tbody>${plan.items.map((i) => `<tr>
-          <td>${escapeHtml(jobNumberOf(i.p))}</td><td>${escapeHtml(i.p.name)}</td><td class="num">${fmtHrs(i.hrs)}</td>
+          <td>${escapeHtml(jobNumberOf(i.p))}</td><td>${escapeHtml(i.p.name)}${i.p.archived ? ' <span class="archived-tag">Archived</span>' : ""}</td><td class="num">${fmtHrs(i.hrs)}</td>
           <td>${i.skip ? `<span class="hours-over-text">Skipped — ${escapeHtml(i.skip)}</span>` : i.replacedCount ? `Add — replaces ${fmtHrs(i.replaced)} hrs imported earlier for dates in this period` : "Add"}</td>
         </tr>`).join("")}</tbody>
       </table></div>` : `<p>None of the jobs in this report match a project here. Set job numbers under Man Hours → Edit Budget.</p>`}
@@ -1946,6 +1986,13 @@
     document.getElementById("travelerListProjectName").textContent = p.name;
     document.getElementById("travelerListProjectClient").textContent = p.client || "";
     document.getElementById("travelerListProjectDescription").textContent = p.description || "";
+    const archivedBanner = document.getElementById("travelerListArchivedBanner");
+    archivedBanner.classList.toggle("hidden", !p.archived);
+    archivedBanner.textContent = p.archived
+      ? `Archived${p.archivedAt ? " " + fmtDate(p.archivedAt) : ""} — hidden from Projects, the overviews, Man Hours and the shop TV.${canManage() ? " Restore it to bring it back." : ""}`
+      : "";
+    document.getElementById("archiveProjectBtn").textContent = p.archived ? "Restore" : "Archive";
+    document.getElementById("backToProjectsBtn").innerHTML = p.archived ? "&larr; Archived Projects" : "&larr; All Projects";
 
     const statusSelect = document.getElementById("travelerListProjectStatus");
     const statusBadgeReadonly = document.getElementById("travelerListProjectStatusBadge");
@@ -2040,7 +2087,30 @@
     });
   }
 
-  document.getElementById("backToProjectsBtn").addEventListener("click", () => { location.hash = ""; });
+  document.getElementById("backToProjectsBtn").addEventListener("click", () => {
+    const p = getProject(currentProjectId);
+    location.hash = p && p.archived ? "archived" : "";
+  });
+  // Archiving only hides a project (and its travelers' tasks) from the
+  // working views -- nothing is deleted, hours still import against its job
+  // number, and it can be restored from the Archived list at any time.
+  document.getElementById("archiveProjectBtn").addEventListener("click", async () => {
+    const p = getProject(currentProjectId);
+    if (!p) return;
+    const archiving = !p.archived;
+    if (archiving && !confirm(`Archive "${p.name}"?\n\nIt will be hidden from Projects, Project Overview, Man Power, Man Hours and the shop TV. Nothing is deleted and you can restore it any time from Archived.`)) return;
+    const prev = { archived: p.archived, archivedAt: p.archivedAt };
+    p.archived = archiving;
+    p.archivedAt = archiving ? todayStr() : null;
+    const ok = await saveRemote();
+    if (!ok) { Object.assign(p, prev); return; }
+    showStatus(archiving ? "Project archived" : "Project restored", "success");
+    location.hash = archiving ? "" : "project/" + p.id;
+    route();
+  });
+  document.getElementById("toggleArchivedBtn").addEventListener("click", () => {
+    location.hash = location.hash === "#archived" ? "" : "archived";
+  });
   document.getElementById("editProjectFromListBtn").addEventListener("click", () => openProjectModal(getProject(currentProjectId)));
   document.getElementById("deleteProjectFromListBtn").addEventListener("click", async () => {
     if (!confirm("Delete this project and all its travelers? This can't be undone.")) return;
@@ -3657,11 +3727,7 @@
     const prevStart = targetProject.startDate, prevEnd = targetProject.endDate;
     targetProject.predecessors = [...prevPreds, sourceId];
     const preds = targetProject.predecessors.map((id) => state.projects.find((pp) => pp.id === id)).filter(Boolean);
-    const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
-    const spanDays = daysBetween(targetProject.startDate, targetProject.endDate);
-    const newStart = new Date(latestEnd + 86400000).toISOString().slice(0, 10);
-    targetProject.startDate = newStart;
-    targetProject.endDate = addDays(newStart, spanDays);
+    scheduleAfterPredecessors(targetProject, preds);
     recalcProjectSchedule();
     const ok = await saveRemote();
     if (!ok) { targetProject.predecessors = prevPreds; targetProject.startDate = prevStart; targetProject.endDate = prevEnd; recalcProjectSchedule(); }
@@ -3674,25 +3740,28 @@
     const body = document.getElementById("projectGanttBody");
     const scrollEl = document.querySelector("#projectGanttView .gantt-full-scroll");
 
-    if (!state.projects.length) {
+    // Archived projects stay out of the overview; row numbers (used for
+    // predecessor entry) count only the projects shown here.
+    const projects = activeProjects();
+    if (!projects.length) {
       labels.innerHTML = "";
       header.innerHTML = "";
-      body.innerHTML = `<div class="empty-state">No projects yet. Click "+ Add Project" to get started.</div>`;
+      body.innerHTML = `<div class="empty-state">No active projects. Click "+ Add Project" to get started.</div>`;
       return;
     }
 
     // ---- labels: name, client, manpower/traveler mini-popovers, predecessors ----
-    labels.innerHTML = state.projects.map((p, idx) => {
+    labels.innerHTML = projects.map((p, idx) => {
       const predNums = (p.predecessors || [])
-        .map((id) => state.projects.findIndex((pp) => pp.id === id))
+        .map((id) => projects.findIndex((pp) => pp.id === id))
         .filter((i) => i !== -1)
         .map((i) => i + 1);
       const succNums = successorsOfProject(p.id)
-        .map((s) => state.projects.findIndex((pp) => pp.id === s.id))
+        .map((s) => projects.findIndex((pp) => pp.id === s.id))
         .filter((i) => i !== -1)
         .map((i) => i + 1);
       const manpower = projectManpower(p);
-      const otherTravelerOptions = state.projects.filter((pp) => pp.id !== p.id)
+      const otherTravelerOptions = projects.filter((pp) => pp.id !== p.id)
         .flatMap((pp) => pp.travelers.map((t) => `<option value="${pp.id}::${t.id}">${escapeHtml(t.name)} — ${escapeHtml(pp.name)}</option>`))
         .join("");
       return `
@@ -3721,23 +3790,20 @@
         <span class="gantt-col-succ"><span class="gantt-succ-display" title="Row numbers that start after this project">${succNums.join(", ") || "—"}</span></span>
         <button class="gantt-row-del gantt-col-del" data-del-project title="Delete project">&times;</button>
       </div>`;
-    }).join("") + Array.from({ length: Math.max(0, PROJECT_GANTT_MIN_ROWS - state.projects.length) })
-      .map((_, i) => `<div class="gantt-full-label-row gantt-empty-row${(state.projects.length + i) % 2 === 1 ? " row-alt" : ""}"></div>`)
+    }).join("") + Array.from({ length: Math.max(0, PROJECT_GANTT_MIN_ROWS - projects.length) })
+      .map((_, i) => `<div class="gantt-full-label-row gantt-empty-row${(projects.length + i) % 2 === 1 ? " row-alt" : ""}"></div>`)
       .join("");
 
     // ---- date scale: month bands rather than individual days, since a
     // project's own span usually runs weeks-to-months, not days ----
-    let rangeStart = state.projects[0].startDate;
-    let rangeEnd = state.projects[0].endDate;
-    state.projects.forEach((p) => {
-      if (p.startDate < rangeStart) rangeStart = p.startDate;
-      if (p.endDate > rangeEnd) rangeEnd = p.endDate;
-    });
+    const knownDates = projects.flatMap((p) => [p.startDate, p.endDate]).filter(isDateStr);
+    let rangeStart = knownDates.length ? knownDates.reduce((a, b) => (a < b ? a : b)) : todayStr();
+    let rangeEnd = knownDates.length ? knownDates.reduce((a, b) => (a > b ? a : b)) : todayStr();
     rangeStart = addDays(rangeStart, -7);
     rangeEnd = addDays(rangeEnd, 7);
     const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
     const totalWidth = totalDays * projectGanttDayWidth;
-    const rowSlotCount = Math.max(state.projects.length, PROJECT_GANTT_MIN_ROWS);
+    const rowSlotCount = Math.max(projects.length, PROJECT_GANTT_MIN_ROWS);
     const totalHeight = rowSlotCount * GANTT_ROW_HEIGHT;
     const today = todayStr();
 
@@ -3773,25 +3839,30 @@
 
     // ---- bars ----
     const layout = {};
-    const barsHtml = state.projects.map((p, idx) => {
-      const offsetDays = daysBetween(rangeStart, p.startDate);
-      const spanDays = daysBetween(p.startDate, p.endDate) + 1;
+    const barsHtml = projects.map((p, idx) => {
+      // Open-ended (no end date) or undated projects still get a bar: from
+      // their start (or today) at the minimum width, marked as open-ended.
+      const barStart = isDateStr(p.startDate) ? p.startDate : today;
+      const openEnded = !isDateStr(p.endDate) || p.endDate < barStart;
+      const barEnd = openEnded ? barStart : p.endDate;
+      const offsetDays = daysBetween(rangeStart, barStart);
+      const spanDays = daysBetween(barStart, barEnd) + 1;
       const barLeft = offsetDays * projectGanttDayWidth;
       const barWidth = Math.max(projectGanttDayWidth * 2 - 2, spanDays * projectGanttDayWidth - 2);
       layout[p.id] = { idx, left: barLeft, width: barWidth };
       const color = `var(--status-${p.status})`;
       const locked = (p.predecessors || []).length > 0;
       const blocked = descendantsOfProject(p.id);
-      const predCandidates = state.projects.filter((pp) => pp.id !== p.id && !blocked.has(pp.id));
+      const predCandidates = projects.filter((pp) => pp.id !== p.id && !blocked.has(pp.id));
       const predCheckboxes = predCandidates.length
         ? predCandidates.map((pp) => `<label class="checkbox-row"><input type="checkbox" class="gantt-pred-cb" value="${pp.id}" ${(p.predecessors || []).includes(pp.id) ? "checked" : ""}> ${escapeHtml(pp.name)}</label>`).join("")
         : `<p class="modal-hint">No other projects to depend on yet.</p>`;
       const showLabelOutside = barWidth < 70;
       return `
         <div class="gantt-full-row${idx % 2 === 1 ? " row-alt" : ""}">
-          <div class="gantt-bar${locked ? " locked" : ""}" data-gantt-project="${p.id}"
+          <div class="gantt-bar${locked ? " locked" : ""}${openEnded ? " open-ended" : ""}" data-gantt-project="${p.id}"
                style="left:${barLeft}px; width:${barWidth}px; background:${color};"
-               title="${escapeHtml(p.name)} — ${fmtDate(p.startDate)} → ${fmtDate(p.endDate)}${locked ? " (auto-scheduled from a predecessor — drag to detach)" : ""}">
+               title="${escapeHtml(p.name)} — ${fmtDate(p.startDate)} → ${openEnded ? "no end date" : fmtDate(p.endDate)}${locked ? " (auto-scheduled from a predecessor — drag to detach)" : ""}">
             <span class="gantt-bar-label${showLabelOutside ? " outside" : ""}">${escapeHtml(p.name)}</span>
             <div class="gantt-bar-resize" title="Drag to change duration"></div>
             <div class="gantt-link-handle" title="Drag to link this project to another (it becomes that project's predecessor)"></div>
@@ -3808,13 +3879,13 @@
             </div>
           </div>
         </div>`;
-    }).join("") + Array.from({ length: rowSlotCount - state.projects.length })
-      .map((_, i) => `<div class="gantt-full-row gantt-empty-row${(state.projects.length + i) % 2 === 1 ? " row-alt" : ""}"></div>`)
+    }).join("") + Array.from({ length: rowSlotCount - projects.length })
+      .map((_, i) => `<div class="gantt-full-row gantt-empty-row${(projects.length + i) % 2 === 1 ? " row-alt" : ""}"></div>`)
       .join("");
 
     // ---- dependency arrows ----
     const linkPaths = [];
-    state.projects.forEach((p) => {
+    projects.forEach((p) => {
       const succLayout = layout[p.id];
       (p.predecessors || []).forEach((predId) => {
         const predLayout = layout[predId];
@@ -3877,23 +3948,22 @@
         const prevStart = project.startDate, prevEnd = project.endDate;
         const nums = predInput.value.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean).map((s) => parseInt(s, 10));
         const blockedIds = descendantsOfProject(project.id);
-        const rowIdx = state.projects.indexOf(project);
+        const rowIdx = projects.indexOf(project);
         const resolvedIds = [];
         const invalid = [];
         nums.forEach((n) => {
-          if (!Number.isFinite(n) || n < 1 || n > state.projects.length || (n - 1) === rowIdx) { invalid.push(n); return; }
-          const candidate = state.projects[n - 1];
+          if (!Number.isFinite(n) || n < 1 || n > projects.length || (n - 1) === rowIdx) { invalid.push(n); return; }
+          const candidate = projects[n - 1];
           if (blockedIds.has(candidate.id)) { invalid.push(n); return; }
           if (!resolvedIds.includes(candidate.id)) resolvedIds.push(candidate.id);
         });
+        // Links to archived projects aren't shown as row numbers, so keep them
+        // rather than silently dropping them on this edit.
+        resolvedIds.push(...prevPreds.filter((id) => { const pp = getProject(id); return pp && pp.archived && !resolvedIds.includes(id); }));
         project.predecessors = resolvedIds;
         if (resolvedIds.length) {
-          const preds = resolvedIds.map((id) => state.projects.find((pp) => pp.id === id));
-          const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
-          const spanDays = daysBetween(project.startDate, project.endDate);
-          const newStart = new Date(latestEnd + 86400000).toISOString().slice(0, 10);
-          project.startDate = newStart;
-          project.endDate = addDays(newStart, spanDays);
+          const preds = resolvedIds.map((id) => state.projects.find((pp) => pp.id === id)).filter(Boolean);
+          scheduleAfterPredecessors(project, preds);
         }
         recalcProjectSchedule();
         const ok = await saveRemote();
@@ -3983,11 +4053,7 @@
           project.predecessors = selected;
           if (selected.length) {
             const preds = selected.map((id) => state.projects.find((pp) => pp.id === id)).filter(Boolean);
-            const latestEnd = Math.max(...preds.map((pr) => new Date(pr.endDate + "T00:00:00").getTime()));
-            const spanDays = daysBetween(project.startDate, project.endDate);
-            const newStart = new Date(latestEnd + 86400000).toISOString().slice(0, 10);
-            project.startDate = newStart;
-            project.endDate = addDays(newStart, spanDays);
+            scheduleAfterPredecessors(project, preds);
           }
           recalcProjectSchedule();
           const ok = await saveRemote();
@@ -4045,8 +4111,8 @@
             const prevSuccessorPreds = affectedSuccessors.map((pp) => [...pp.predecessors]);
             project.predecessors = [];
             affectedSuccessors.forEach((pp) => { pp.predecessors = pp.predecessors.filter((id) => id !== projectId); });
-            project.startDate = addDays(project.startDate, deltaDays);
-            project.endDate = addDays(project.endDate, deltaDays);
+            project.startDate = addDays(isDateStr(project.startDate) ? project.startDate : todayStr(), deltaDays);
+            if (isDateStr(project.endDate)) project.endDate = addDays(project.endDate, deltaDays);
             recalcProjectSchedule();
             const ok = await saveRemote();
             if (!ok) {
@@ -4101,11 +4167,13 @@
           barEl.classList.remove("dragging");
           if (resizeChanged) {
             const prevEnd = project.endDate;
-            const spanDays = Math.max(0, daysBetween(project.startDate, project.endDate) + resizeDeltaDays);
-            project.endDate = addDays(project.startDate, spanDays);
+            const prevStart = project.startDate;
+            if (!isDateStr(project.startDate)) project.startDate = todayStr();
+            const baseSpan = isDateStr(project.endDate) && project.endDate >= project.startDate ? daysBetween(project.startDate, project.endDate) : 0;
+            project.endDate = addDays(project.startDate, Math.max(0, baseSpan + resizeDeltaDays));
             recalcProjectSchedule();
             const ok = await saveRemote();
-            if (!ok) { project.endDate = prevEnd; recalcProjectSchedule(); }
+            if (!ok) { project.startDate = prevStart; project.endDate = prevEnd; recalcProjectSchedule(); }
             refreshProjectGanttView();
           }
         });
