@@ -521,9 +521,18 @@
   }
 
   // ---------- routing ----------
+  // Every screen has its own hash so the browser back button, shared links
+  // and the sidebar all work the same way:
+  //   ""  projects  · #archived · #hours[/<projectId>] · #schedule · #manpower
+  //   #project/<id> · #project/<id>/traveler/<id>[/gantt|/manpower]
+  // Schedule, Man Power and the traveler Gantt are Manage-only.
   function route() {
+    routeView();
+    renderChrome();
+  }
+  function routeView() {
     const hash = location.hash.slice(1);
-    const travelerMatch = hash.match(/^project\/([^/]+)\/traveler\/([^/]+)$/);
+    const travelerMatch = hash.match(/^project\/([^/]+)\/traveler\/([^/]+?)(?:\/(gantt|manpower))?$/);
     if ((travelerMatch ? travelerMatch[2] : null) !== currentTravelerId) selectedTaskIds.clear();
     if (travelerMatch) {
       const p = getProject(travelerMatch[1]);
@@ -531,7 +540,18 @@
       if (!p || !trav) { location.hash = p ? "project/" + p.id : ""; return; }
       currentProjectId = p.id;
       currentTravelerId = trav.id;
-      showTravelerDetail(p, trav);
+      const sub = travelerMatch[3];
+      if (sub && !canManage()) { location.hash = `project/${p.id}/traveler/${trav.id}`; return; }
+      if (sub === "gantt") showGanttView(p, trav);
+      else if (sub === "manpower") showManpowerGanttTraveler(p, trav);
+      else showTravelerDetail(p, trav);
+      return;
+    }
+    if (hash === "schedule" || hash === "manpower") {
+      if (!canManage()) { location.hash = ""; return; }
+      currentProjectId = null;
+      currentTravelerId = null;
+      if (hash === "schedule") showProjectGanttView(); else showManpowerGanttMaster();
       return;
     }
     if (hash === "archived") {
@@ -553,6 +573,7 @@
     if (projectMatch) {
       const p = getProject(projectMatch[1]);
       if (!p) { location.hash = ""; return; }
+      if (currentProjectId !== p.id) { projectTab = "travelers"; travelerQuery = ""; }
       currentProjectId = p.id;
       currentTravelerId = null;
       showTravelerList(p);
@@ -562,6 +583,145 @@
     currentTravelerId = null;
     showList();
   }
+
+  // ---------- app chrome: sidebar state, breadcrumbs, counts ----------
+  // Project names carry the job codes up front ("11338-12562-10106 Columbia
+  // Generating Station…"); the UI shows the job number as its own tag and the
+  // rest as the title. The trailing job-type code says who does the work.
+  function projectTitle(p) {
+    const stripped = String(p.name || "").replace(/^\s*\d{4,6}(?:\s*[-–]\s*\d{3,6})*\s*[-–:,]?\s*/, "").trim();
+    return stripped || p.name || "Untitled project";
+  }
+  function projectJobType(p) {
+    const n = String(p.name || "");
+    if (/\bShpX\b|\bShop ?Ex\b/i.test(n)) return "Shop";
+    if (/\bTK\b|turn ?key/i.test(n)) return "Turnkey";
+    if (/T&T|tools ?& ?tech/i.test(n)) return "Tools & tech";
+    return "";
+  }
+  function crumbLabel(p) {
+    const job = jobNumberOf(p);
+    const title = projectTitle(p);
+    return job && title !== p.name ? `${job} · ${title}` : p.name;
+  }
+  function renderChrome() {
+    const hash = location.hash.slice(1);
+    const p = currentProjectId ? getProject(currentProjectId) : null;
+    const trav = p && currentTravelerId ? getTraveler(p, currentTravelerId) : null;
+    let nav = "projects";
+    const crumbs = [];
+    if (hash === "archived") { nav = "archived"; crumbs.push(["Archived"]); }
+    else if (hash.startsWith("hours")) {
+      nav = "hours";
+      crumbs.push(["Man Hours", p ? "#hours" : null]);
+      if (p) crumbs.push([crumbLabel(p)]);
+    }
+    else if (hash === "schedule") { nav = "schedule"; crumbs.push(["Schedule"]); }
+    else if (hash === "manpower") { nav = "manpower"; crumbs.push(["Man Power"]); }
+    else if (p) {
+      nav = p.archived ? "archived" : "projects";
+      crumbs.push([p.archived ? "Archived" : "Projects", p.archived ? "#archived" : "#"]);
+      crumbs.push([crumbLabel(p), trav ? "#project/" + p.id : null]);
+      if (trav) {
+        const sub = hash.match(/\/(gantt|manpower)$/);
+        crumbs.push([trav.name, sub ? `#project/${p.id}/traveler/${trav.id}` : null]);
+        if (sub) crumbs.push([sub[1] === "gantt" ? "Gantt" : "Man power"]);
+      }
+    } else crumbs.push(["Projects"]);
+
+    document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("active", a.dataset.nav === nav));
+    document.getElementById("breadcrumbs").innerHTML = crumbs.map(([label, href]) => href
+      ? `<a href="${href}" title="${escapeHtml(label)}">${escapeHtml(label)}</a><svg class="icon crumb-sep"><use href="#i-chev"/></svg>`
+      : `<span class="crumb-current" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`).join("");
+    document.title = crumbs[crumbs.length - 1][0] + " · Traveler Status";
+
+    const active = activeProjects();
+    const archivedCount = state.projects.length - active.length;
+    document.getElementById("navCountProjects").textContent = active.length || "";
+    document.getElementById("navCountArchived").textContent = archivedCount || "";
+    const over = active.filter((x) => num(x.budgetHours) && projectHours(x).total > num(x.budgetHours)).length;
+    const flag = document.getElementById("navFlagHours");
+    flag.textContent = over || "";
+    flag.title = over ? `${over} job${over === 1 ? "" : "s"} over budget` : "";
+    flag.classList.toggle("hidden", !over);
+    closeSidebar();
+  }
+
+  // ---------- global search (jobs, travelers, tasks) ----------
+  const searchInput = document.getElementById("globalSearch");
+  const searchResults = document.getElementById("searchResults");
+  let searchActive = -1;
+  function highlight(text, words) {
+    let out = escapeHtml(text);
+    words.forEach((w) => {
+      if (!w) return;
+      const re = new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig");
+      out = out.replace(re, "<mark>$1</mark>");
+    });
+    return out;
+  }
+  function runSearch() {
+    const q = searchInput.value.trim().toLowerCase();
+    searchActive = -1;
+    if (!q) { searchResults.classList.add("hidden"); return; }
+    const words = q.split(/\s+/);
+    const hit = (hay) => words.every((w) => hay.toLowerCase().includes(w));
+    const projects = [], travelers = [], tasks = [];
+    state.projects.forEach((p) => {
+      if (hit([p.name, p.client, jobNumberOf(p)].join(" "))) projects.push(p);
+      p.travelers.forEach((t) => {
+        if (hit([t.name, t.description, jobNumberOf(p)].join(" "))) travelers.push({ p, t });
+        t.tasks.forEach((k) => { if (hit([k.name, k.responsible].join(" "))) tasks.push({ p, t, k }); });
+      });
+    });
+    const groups = [];
+    if (projects.length) groups.push(`<div class="search-group-label">Projects</div>` + projects.slice(0, 6).map((p) =>
+      `<a class="search-result" href="#project/${p.id}"><div class="search-result-main"><div class="search-result-title">${jobNumberOf(p) ? `<span class="job-tag">${escapeHtml(jobNumberOf(p))}</span> ` : ""}${highlight(projectTitle(p), words)}</div><div class="search-result-sub">${escapeHtml(p.client || "")}${p.archived ? " · Archived" : ""}</div></div><span class="status-badge ${p.status}">${STATUS_LABELS[p.status]}</span></a>`).join(""));
+    if (travelers.length) groups.push(`<div class="search-group-label">Travelers</div>` + travelers.slice(0, 6).map(({ p, t }) =>
+      `<a class="search-result" href="#project/${p.id}/traveler/${t.id}"><div class="search-result-main"><div class="search-result-title">${highlight(t.name, words)}</div><div class="search-result-sub">${escapeHtml(crumbLabel(p))} · ${travelerProgress(t)}%</div></div><span class="status-badge ${t.status}">${STATUS_LABELS[t.status]}</span></a>`).join(""));
+    if (tasks.length) groups.push(`<div class="search-group-label">Tasks</div>` + tasks.slice(0, 8).map(({ p, t, k }) =>
+      `<a class="search-result" href="#project/${p.id}/traveler/${t.id}"><div class="search-result-main"><div class="search-result-title">${highlight(k.name, words)}</div><div class="search-result-sub">${escapeHtml(t.name)} · ${escapeHtml(jobNumberOf(p) || projectTitle(p))}${k.responsible ? " · " + highlight(k.responsible, words) : ""}</div></div><span class="dim" style="font-size:.8rem">${k.progress || 0}%</span></a>`).join(""));
+    searchResults.innerHTML = groups.length ? groups.join("") : `<div class="search-empty">Nothing matches “${escapeHtml(searchInput.value.trim())}”.</div>`;
+    searchResults.classList.remove("hidden");
+  }
+  function moveSearch(delta) {
+    const items = Array.from(searchResults.querySelectorAll(".search-result"));
+    if (!items.length) return;
+    searchActive = (searchActive + delta + items.length) % items.length;
+    items.forEach((el, i) => el.classList.toggle("active", i === searchActive));
+    items[searchActive].scrollIntoView({ block: "nearest" });
+  }
+  function closeSearch() { searchResults.classList.add("hidden"); }
+  searchInput.addEventListener("input", runSearch);
+  searchInput.addEventListener("focus", () => { if (searchInput.value.trim()) runSearch(); });
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); moveSearch(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); moveSearch(-1); }
+    else if (e.key === "Enter") {
+      const items = searchResults.querySelectorAll(".search-result");
+      const target = items[searchActive >= 0 ? searchActive : 0];
+      if (target) { location.hash = target.getAttribute("href").slice(1); searchInput.value = ""; closeSearch(); searchInput.blur(); }
+    } else if (e.key === "Escape") { searchInput.value = ""; closeSearch(); searchInput.blur(); }
+  });
+  searchResults.addEventListener("click", (e) => {
+    if (e.target.closest(".search-result")) { searchInput.value = ""; closeSearch(); }
+  });
+  document.addEventListener("click", (e) => { if (!e.target.closest("#globalSearchWrap")) closeSearch(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (document.activeElement && document.activeElement.tagName) || "";
+    if (/INPUT|TEXTAREA|SELECT/.test(tag) || !modalBackdrop.classList.contains("hidden")) return;
+    e.preventDefault();
+    searchInput.focus();
+  });
+
+  const sidebarEl = document.getElementById("sidebar");
+  const sidebarScrim = document.getElementById("sidebarScrim");
+  function openSidebar() { sidebarEl.classList.add("open"); sidebarScrim.classList.remove("hidden"); }
+  function closeSidebar() { sidebarEl.classList.remove("open"); sidebarScrim.classList.add("hidden"); }
+  document.getElementById("sidebarToggle").addEventListener("click", openSidebar);
+  document.getElementById("bottomMenuBtn").addEventListener("click", openSidebar);
+  sidebarScrim.addEventListener("click", closeSidebar);
   window.addEventListener("hashchange", route);
 
   function hideAllViews() {
@@ -1082,9 +1242,7 @@
         const p = getProject(projectId);
         const trav = p && getTraveler(p, travelerId);
         if (!p || !trav) return;
-        currentProjectId = p.id;
-        currentTravelerId = trav.id;
-        showTravelerDetail(p, trav);
+        location.hash = `project/${p.id}/traveler/${trav.id}`;
       });
     });
   }
@@ -1154,60 +1312,242 @@
     }
   }
 
+  // ---------- projects page ----------
+  // Filter / sort / layout choices are a per-viewer convenience, remembered
+  // in this browser only.
+  const LIST_PREFS_KEY = "projectStatus.listPrefs";
+  const listPrefs = (() => {
+    const d = { status: "all", sort: "job", layout: "cards", query: "" };
+    try { return { ...d, ...JSON.parse(localStorage.getItem(LIST_PREFS_KEY) || "{}"), query: "" }; } catch (e) { return d; }
+  })();
+  function saveListPrefs() {
+    try { localStorage.setItem(LIST_PREFS_KEY, JSON.stringify({ status: listPrefs.status, sort: listPrefs.sort, layout: listPrefs.layout })); } catch (e) { /* storage unavailable */ }
+  }
+  const STATUS_ORDER = ["delayed", "at_risk", "on_hold", "on_track", "complete"];
+
+  function daysUntil(dateStr) {
+    if (!isDateStr(dateStr)) return null;
+    return daysBetween(todayStr(), dateStr);
+  }
+  // A short "due" label for cards and tables: overdue / due soon / plain date.
+  function dueInfo(p) {
+    if (p.status === "complete") return { text: "Complete", cls: "" };
+    const d = daysUntil(p.endDate);
+    if (d === null) return { text: "No end date", cls: "" };
+    if (d < 0) return { text: `${-d} day${d === -1 ? "" : "s"} overdue`, cls: "overdue" };
+    if (d === 0) return { text: "Due today", cls: "soon" };
+    if (d <= 14) return { text: `Due in ${d} day${d === 1 ? "" : "s"}`, cls: "soon" };
+    return { text: "Due " + fmtDate(p.endDate), cls: "" };
+  }
+  function projectDelayCount(p) { return p.travelers.reduce((a, t) => a + (t.delays || []).length, 0); }
+  function projectMatchesQuery(p, q) {
+    if (!q) return true;
+    const hay = [p.name, p.client, jobNumberOf(p), ...p.travelers.map((t) => t.name)].join(" ").toLowerCase();
+    return q.toLowerCase().split(/\s+/).every((w) => hay.includes(w));
+  }
+  function sortProjects(list, sort) {
+    const byJob = (a, b) => (jobNumberOf(a) || "zzzz").localeCompare(jobNumberOf(b) || "zzzz", undefined, { numeric: true }) || a.name.localeCompare(b.name);
+    const hoursPct = (p) => (num(p.budgetHours) ? projectHours(p).total / num(p.budgetHours) : -1);
+    const cmp = {
+      job: byJob,
+      due: (a, b) => (isDateStr(a.endDate) ? a.endDate : "9999") .localeCompare(isDateStr(b.endDate) ? b.endDate : "9999") || byJob(a, b),
+      progress: (a, b) => projectProgress(a) - projectProgress(b) || byJob(a, b),
+      hours: (a, b) => hoursPct(b) - hoursPct(a) || byJob(a, b),
+      status: (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || byJob(a, b),
+    }[sort] || byJob;
+    return list.slice().sort(cmp);
+  }
+
   function renderList() {
     const grid = document.getElementById("projectGrid");
-    // "#archived" shows the archived projects in the same grid; everywhere
+    // "#archived" shows the archived projects in the same page; everywhere
     // else (and every other caller) gets the active ones.
     const archivedView = location.hash === "#archived";
-    const archivedCount = state.projects.filter((p) => p.archived).length;
-    document.getElementById("projectListTitle").textContent = archivedView ? "Archived Projects" : "Projects";
-    const toggleBtn = document.getElementById("toggleArchivedBtn");
-    toggleBtn.textContent = archivedView ? "← Active Projects" : `Archived (${archivedCount})`;
-    toggleBtn.classList.toggle("hidden", !archivedView && !archivedCount);
-    document.getElementById("listView").classList.toggle("archived-mode", archivedView);
-    const projects = state.projects.filter((p) => !!p.archived === archivedView);
-    if (projects.length === 0) {
+    document.getElementById("projectListTitle").textContent = archivedView ? "Archived" : "Projects";
+    const base = state.projects.filter((p) => !!p.archived === archivedView);
+    document.getElementById("projectListSub").textContent = archivedView
+      ? "Finished or parked jobs. Open one to restore it."
+      : `${base.length} active project${base.length === 1 ? "" : "s"}`;
+
+    renderProjectKpis(base, archivedView);
+
+    // status chips (counts reflect the text filter)
+    const queried = base.filter((p) => projectMatchesQuery(p, listPrefs.query));
+    const counts = {};
+    queried.forEach((p) => { counts[p.status] = (counts[p.status] || 0) + 1; });
+    const riskCount = (counts.at_risk || 0) + (counts.delayed || 0);
+    if (listPrefs.status === "risk" ? !riskCount : (listPrefs.status !== "all" && !counts[listPrefs.status])) listPrefs.status = "all";
+    const chipStatuses = STATUS_ORDER.filter((s) => counts[s]);
+    document.getElementById("statusChips").innerHTML =
+      `<button type="button" class="chip${listPrefs.status === "all" ? " active" : ""}" data-chip="all">All <span class="chip-count">${queried.length}</span></button>` +
+      (listPrefs.status === "risk" ? `<button type="button" class="chip active" data-chip="risk"><span class="chip-dot" style="background:var(--status-delayed)"></span>At risk + delayed <span class="chip-count">${riskCount}</span></button>` : "") +
+      chipStatuses.map((s) => `<button type="button" class="chip${listPrefs.status === s ? " active" : ""}" data-chip="${s}"><span class="chip-dot" style="background:var(--status-${s})"></span>${STATUS_LABELS[s]} <span class="chip-count">${counts[s]}</span></button>`).join("");
+    document.querySelectorAll("#statusChips [data-chip]").forEach((b) => b.addEventListener("click", () => {
+      listPrefs.status = b.dataset.chip; saveListPrefs(); renderList();
+    }));
+    document.getElementById("projectSort").value = listPrefs.sort;
+    document.getElementById("viewCardsBtn").classList.toggle("active", listPrefs.layout === "cards");
+    document.getElementById("viewTableBtn").classList.toggle("active", listPrefs.layout === "table");
+    const filterInput = document.getElementById("projectFilter");
+    if (document.activeElement !== filterInput) filterInput.value = listPrefs.query;
+
+    if (base.length === 0) {
+      grid.className = "";
       grid.innerHTML = archivedView
-        ? `<div class="empty-state">No archived projects.</div>`
-        : `<div class="empty-state">No projects yet.${canManage() ? ' Click "+ New Project" to add one.' : " Check back once the project manager has added one."}</div>`;
+        ? `<div class="empty-state">Nothing archived yet. Archive a finished project from its page (Manage mode, ⋯ menu).</div>`
+        : `<div class="empty-state">No projects yet.${canManage() ? " Click “New project” to add one." : " Check back once the project manager has added one."}</div>`;
       return;
     }
+    const statusOk = (p) => listPrefs.status === "all" || p.status === listPrefs.status || (listPrefs.status === "risk" && (p.status === "at_risk" || p.status === "delayed"));
+    const projects = sortProjects(queried.filter(statusOk), listPrefs.sort);
+    if (!projects.length) {
+      grid.className = "";
+      grid.innerHTML = `<div class="empty-state">No projects match these filters. <button type="button" class="btn-link" id="clearProjectFilters">Clear filters</button></div>`;
+      document.getElementById("clearProjectFilters").addEventListener("click", () => {
+        listPrefs.status = "all"; listPrefs.query = ""; filterInput.value = ""; saveListPrefs(); renderList();
+      });
+      return;
+    }
+    if (listPrefs.layout === "table") renderProjectTable(grid, projects);
+    else renderProjectCards(grid, projects);
+  }
+
+  function renderProjectKpis(base, archivedView) {
+    const el = document.getElementById("projectKpis");
+    if (archivedView || !base.length) { el.innerHTML = ""; return; }
+    const atRisk = base.filter((p) => p.status === "at_risk" || p.status === "delayed").length;
+    const overdue = base.filter((p) => p.status !== "complete" && (daysUntil(p.endDate) ?? 1) < 0).length;
+    const dueSoon = base.filter((p) => p.status !== "complete" && (() => { const d = daysUntil(p.endDate); return d !== null && d >= 0 && d <= 14; })()).length;
+    const budgeted = base.filter((p) => num(p.budgetHours));
+    const budget = budgeted.reduce((a, p) => a + num(p.budgetHours), 0);
+    const spent = budgeted.reduce((a, p) => a + projectHours(p).total, 0);
+    const overBudget = budgeted.filter((p) => projectHours(p).total > num(p.budgetHours)).length;
+    const openTasks = base.reduce((a, p) => a + allTasks(p).filter((t) => t.status !== "complete").length, 0);
+    el.innerHTML = `
+      <button type="button" class="kpi kpi-button" data-kpi="all">
+        <div class="kpi-label">Active projects</div>
+        <div class="kpi-value">${base.length}</div>
+        <div class="kpi-sub">${openTasks} open task${openTasks === 1 ? "" : "s"}</div>
+      </button>
+      <button type="button" class="kpi kpi-button" data-kpi="risk">
+        <div class="kpi-label">At risk or delayed</div>
+        <div class="kpi-value ${atRisk ? "bad" : "good"}">${atRisk}</div>
+        <div class="kpi-sub">${atRisk ? "Click to show them" : "Everything on track"}</div>
+      </button>
+      <button type="button" class="kpi kpi-button" data-kpi="due">
+        <div class="kpi-label">Due in 14 days</div>
+        <div class="kpi-value ${overdue ? "bad" : dueSoon ? "warn" : ""}">${dueSoon}</div>
+        <div class="kpi-sub">${overdue ? `${overdue} past due` : "None past due"}</div>
+      </button>
+      <a class="kpi kpi-button" href="#hours" style="text-decoration:none;color:inherit">
+        <div class="kpi-label">Man-hours used</div>
+        <div class="kpi-value ${overBudget ? "bad" : ""}">${budget ? Math.round((spent / budget) * 100) + "%" : "—"}</div>
+        <div class="kpi-sub">${budget ? `${fmtHrs(spent)} of ${fmtHrs(budget)} hrs · ${overBudget} over` : "No budgets set"}</div>
+      </a>`;
+    el.querySelectorAll("[data-kpi]").forEach((k) => k.addEventListener("click", () => {
+      const kind = k.dataset.kpi;
+      if (kind === "all") { listPrefs.status = "all"; }
+      if (kind === "risk") { listPrefs.status = "risk"; }
+      if (kind === "due") { listPrefs.sort = "due"; listPrefs.status = "all"; }
+      saveListPrefs(); renderList();
+    }));
+  }
+
+  function projectEyebrowHtml(p) {
+    const job = jobNumberOf(p);
+    const type = projectJobType(p);
+    return `${job ? `<span class="job-tag">${escapeHtml(job)}</span>` : ""}${type ? `<span>${type}</span>` : ""}`;
+  }
+
+  function renderProjectCards(grid, projects) {
+    grid.className = "project-grid";
     grid.innerHTML = projects.map((p) => {
       const progress = projectProgress(p);
       const taskCount = allTasks(p).length;
       const travelerCount = p.travelers.length;
+      const delays = projectDelayCount(p);
+      const due = dueInfo(p);
       return `
-        <div class="project-card${p.archived ? " project-card-archived" : ""}" data-id="${p.id}">
-          <div class="project-card-top">
-            <div>
-              <h3>${escapeHtml(p.name)}</h3>
-              <p class="client">${escapeHtml(p.client || "—")}</p>
+        <div class="pcard ${p.status}${p.archived ? " pcard-archived" : ""}" data-id="${p.id}" tabindex="0">
+          <div class="pcard-top">
+            <div class="pcard-heading">
+              <div class="eyebrow">${projectEyebrowHtml(p)}</div>
+              <h3 class="pcard-title" title="${escapeHtml(p.name)}">${escapeHtml(projectTitle(p))}</h3>
+              <p class="pcard-client">${escapeHtml(p.client || "No client set")}</p>
             </div>
             <span class="status-badge ${p.status}">${STATUS_LABELS[p.status]}</span>
           </div>
           ${p.archived ? `<p class="archived-note">Archived${p.archivedAt ? " " + fmtDate(p.archivedAt) : ""}</p>` : ""}
-          <p class="project-card-dates">${fmtDate(p.startDate)} &rarr; ${fmtDate(p.endDate)}</p>
-          <div class="progress-bar"><div class="progress-bar-fill" style="width:${progress}%"></div></div>
-          <div class="project-card-meta">
-            <span>${travelerCount} traveler${travelerCount === 1 ? "" : "s"}</span>
-            <span>${taskCount} task${taskCount === 1 ? "" : "s"}</span>
-            <span>${progress}%</span>
+          <div class="pcard-dates">
+            <span>${fmtDate(p.startDate)} &rarr; ${isDateStr(p.endDate) ? fmtDate(p.endDate) : "open"}</span>
+            <span class="due-chip ${due.cls}">${due.text}</span>
+          </div>
+          <div class="pcard-progress">
+            <div class="progress-bar"><div class="progress-bar-fill${progress === 100 ? " done" : ""}" style="width:${progress}%"></div></div>
+            <span class="pcard-pct">${progress}%</span>
+          </div>
+          <div class="pcard-stats">
+            <span><b>${travelerCount}</b> traveler${travelerCount === 1 ? "" : "s"}</span>
+            <span><b>${taskCount}</b> task${taskCount === 1 ? "" : "s"}</span>
+            ${delays ? `<span class="stat-bad"><b>${delays}</b> delay${delays === 1 ? "" : "s"}</span>` : ""}
           </div>
           ${hoursCounterHtml(p)}
         </div>`;
     }).join("");
-    grid.querySelectorAll(".project-card").forEach((card) => {
-      card.addEventListener("click", () => { location.hash = "project/" + card.dataset.id; });
+    wireProjectOpeners(grid, ".pcard");
+  }
+
+  function renderProjectTable(grid, projects) {
+    grid.className = "table-wrap";
+    const sortHead = (key, label, cls) => `<th class="sortable ${cls || ""}" data-sort="${key}">${label}${listPrefs.sort === key ? ' <span class="sort-arrow">&#9662;</span>' : ""}</th>`;
+    grid.innerHTML = `
+      <table class="data-table">
+        <thead><tr>
+          ${sortHead("job", "Job")}<th>Project</th>${sortHead("status", "Status")}${sortHead("due", "Due")}
+          ${sortHead("progress", "Progress")}<th class="num">Travelers</th>${sortHead("hours", "Man-hours")}
+        </tr></thead>
+        <tbody>${projects.map((p) => {
+          const progress = projectProgress(p);
+          const s = projectHours(p);
+          const budget = num(p.budgetHours);
+          const due = dueInfo(p);
+          return `<tr data-id="${p.id}">
+            <td>${jobNumberOf(p) ? `<span class="job-tag">${escapeHtml(jobNumberOf(p))}</span>` : '<span class="dim">—</span>'}</td>
+            <td><div class="cell-title" title="${escapeHtml(p.name)}">${escapeHtml(projectTitle(p))}${p.archived ? ' <span class="archived-tag">Archived</span>' : ""}</div><div class="cell-sub">${escapeHtml(p.client || "")}${projectJobType(p) ? (p.client ? " · " : "") + projectJobType(p) : ""}</div></td>
+            <td><span class="status-badge ${p.status}">${STATUS_LABELS[p.status]}</span></td>
+            <td><span class="due-chip ${due.cls}">${due.text}</span></td>
+            <td><div class="cell-bar"><div class="progress-bar"><div class="progress-bar-fill${progress === 100 ? " done" : ""}" style="width:${progress}%"></div></div><span>${progress}%</span></div></td>
+            <td class="num">${p.travelers.length}</td>
+            <td data-hours-project="${p.id}" title="Open man hours">${budget
+              ? `<div class="cell-bar">${hoursBarHtml(s.total, budget)}<span class="hours-spent ${hoursLevel(s.total, budget)}">${Math.round((s.total / budget) * 100)}%</span></div><div class="cell-sub">${fmtHrs(s.total)} / ${fmtHrs(budget)} hrs</div>`
+              : `<span class="dim">${s.total ? fmtHrs(s.total) + " hrs · no budget" : "—"}</span>`}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>`;
+    grid.querySelectorAll("th[data-sort]").forEach((th) => th.addEventListener("click", () => {
+      listPrefs.sort = th.dataset.sort; saveListPrefs(); renderList();
+    }));
+    wireProjectOpeners(grid, "tr[data-id]");
+  }
+
+  function wireProjectOpeners(root, selector) {
+    root.querySelectorAll(selector).forEach((el) => {
+      el.addEventListener("click", () => { location.hash = "project/" + el.dataset.id; });
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter") location.hash = "project/" + el.dataset.id; });
     });
-    // The man-hour counter opens that job's hours window instead of the
-    // project itself.
-    grid.querySelectorAll("[data-hours-project]").forEach((el) => {
+    // The man-hour counter opens that job's hours instead of the project.
+    root.querySelectorAll("[data-hours-project]").forEach((el) => {
       el.addEventListener("click", (e) => {
         e.stopPropagation();
         location.hash = "hours/" + el.dataset.hoursProject;
       });
     });
   }
+
+  document.getElementById("projectFilter").addEventListener("input", (e) => { listPrefs.query = e.target.value.trim(); renderList(); });
+  document.getElementById("projectSort").addEventListener("change", (e) => { listPrefs.sort = e.target.value; saveListPrefs(); renderList(); });
+  document.getElementById("viewCardsBtn").addEventListener("click", () => { listPrefs.layout = "cards"; saveListPrefs(); renderList(); });
+  document.getElementById("viewTableBtn").addEventListener("click", () => { listPrefs.layout = "table"; saveListPrefs(); renderList(); });
 
   // ---------- man-hours tracking ----------
   // Each project carries a jobNumber (falls back to the leading number in its
@@ -1288,31 +1628,30 @@
     });
   }
 
-  function renderHoursActions(p) {
-    const actions = document.getElementById("manhoursActions");
+  function renderHoursActions(p, actions, embedded) {
+    actions = actions || document.getElementById("manhoursActions");
     const btns = [];
-    if (p) btns.push(`<button class="btn-secondary" type="button" id="hoursOpenProjectBtn">Open Project</button>`);
+    if (p && !embedded) btns.push(`<button class="btn btn-secondary" type="button" data-hours-action="open">Open project</button>`);
     if (canManage()) {
-      btns.push(`<button class="btn-secondary" type="button" id="hoursImportBtn">Import Hours Report</button>`);
+      btns.push(`<button class="btn btn-secondary" type="button" data-hours-action="import"><svg class="icon"><use href="#i-upload"/></svg>Import hours report</button>`);
       if (p) {
-        btns.push(`<button class="btn-secondary" type="button" id="hoursBudgetBtn">Edit Budget</button>`);
-        btns.push(`<button class="btn-primary" type="button" id="hoursAddBtn">+ Add Hours</button>`);
+        btns.push(`<button class="btn btn-secondary" type="button" data-hours-action="budget"><svg class="icon"><use href="#i-edit"/></svg>Edit budget</button>`);
+        btns.push(`<button class="btn btn-primary" type="button" data-hours-action="add"><svg class="icon"><use href="#i-plus"/></svg>Add hours</button>`);
       }
     }
     actions.innerHTML = btns.join("");
-    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
-    on("hoursOpenProjectBtn", () => { location.hash = "project/" + p.id; });
-    on("hoursImportBtn", () => document.getElementById("importHoursInput").click());
-    on("hoursBudgetBtn", () => openHoursBudgetModal(p));
-    on("hoursAddBtn", () => openHoursEntryModal(p));
+    actions.querySelectorAll("[data-hours-action]").forEach((b) => b.addEventListener("click", () => {
+      const a = b.dataset.hoursAction;
+      if (a === "open") location.hash = "project/" + p.id;
+      if (a === "import") document.getElementById("importHoursInput").click();
+      if (a === "budget") openHoursBudgetModal(p);
+      if (a === "add") openHoursEntryModal(p);
+    }));
   }
 
   function renderHoursOverview() {
     document.getElementById("manhoursTitle").textContent = "Man Hours";
     document.getElementById("manhoursSubtitle").textContent = "Budgeted (bid) man-hours vs. hours charged to each job";
-    const back = document.getElementById("backFromManhoursBtn");
-    back.innerHTML = "&larr; All Projects";
-    back.onclick = () => { location.hash = ""; };
     renderHoursActions(null);
 
     const archivedCount = state.projects.filter((p) => p.archived).length;
@@ -1347,8 +1686,8 @@
               const level = hoursLevel(s.total, budget);
               const remaining = budget ? budget - s.total : null;
               return `<tr data-hours-row="${p.id}">
-                <td>${job ? escapeHtml(job) : '<span class="dim">—</span>'}</td>
-                <td>${escapeHtml(p.name)}${p.archived ? ' <span class="archived-tag">Archived</span>' : ""}</td>
+                <td>${job ? `<span class="job-tag">${escapeHtml(job)}</span>` : '<span class="dim">—</span>'}</td>
+                <td><div class="cell-title" title="${escapeHtml(p.name)}">${escapeHtml(projectTitle(p))}${p.archived ? ' <span class="archived-tag">Archived</span>' : ""}</div><div class="cell-sub">${escapeHtml(p.client || "")}</div></td>
                 <td class="num">${budget ? fmtHrs(budget) : '<span class="dim">—</span>'}</td>
                 <td class="num"><span class="hours-spent ${level}">${fmtHrs(s.total)}</span></td>
                 <td class="num">${fmtHrs(s.ot + s.dt)}</td>
@@ -1372,14 +1711,21 @@
     return `<div class="hours-stat"><div class="hours-stat-label">${label}</div><div class="hours-stat-value ${level || ""}">${value}</div><div class="hours-stat-sub">${sub}</div></div>`;
   }
 
-  function renderHoursDetail(p) {
+  // Renders one job's hours into the Man Hours page, or -- with `container`
+  // -- into the Man hours tab of the project page.
+  function renderHoursDetail(p, container) {
     const job = jobNumberOf(p);
-    document.getElementById("manhoursTitle").textContent = (job && !p.name.startsWith(job) ? job + " · " : "") + p.name;
-    document.getElementById("manhoursSubtitle").textContent = "Man hours" + (p.client ? " · " + p.client : "") + (job ? "" : " · no job number set");
-    const back = document.getElementById("backFromManhoursBtn");
-    back.innerHTML = "&larr; All Jobs";
-    back.onclick = () => { location.hash = "hours"; };
-    renderHoursActions(p);
+    let body;
+    if (container) {
+      container.innerHTML = `<div class="hours-panel-actions"></div><div class="hours-panel-body"></div>`;
+      renderHoursActions(p, container.querySelector(".hours-panel-actions"), true);
+      body = container.querySelector(".hours-panel-body");
+    } else {
+      document.getElementById("manhoursTitle").textContent = crumbLabel(p);
+      document.getElementById("manhoursSubtitle").textContent = "Man hours" + (p.client ? " · " + p.client : "") + (job ? "" : " · no job number set");
+      renderHoursActions(p);
+      body = document.getElementById("manhoursBody");
+    }
 
     const s = projectHours(p);
     const budget = num(p.budgetHours);
@@ -1402,7 +1748,6 @@
     });
     const periodRows = Array.from(byPeriod.values()).sort((a, b) => (b.to || b.from || "").localeCompare(a.to || a.from || ""));
 
-    const body = document.getElementById("manhoursBody");
     body.innerHTML = `
       <div class="hours-stats">
         ${hoursStatHtml("Budget", budget ? fmtHrs(budget) : "—", p.budgetNote ? escapeHtml(p.budgetNote) : (budget ? "hrs projected in the bid" : (canManage() ? "Set it with Edit Budget" : "No budget set")))}
@@ -1447,7 +1792,7 @@
         p.hoursLog = p.hoursLog.filter((e) => e.id !== entry.id);
         const ok = await saveRemote();
         if (!ok) p.hoursLog = prev;
-        renderHoursDetail(p);
+        route();
       });
     });
   }
@@ -1476,7 +1821,7 @@
       p.budgetNote = document.getElementById("f-budget-note").value.trim();
       const ok = await saveRemote();
       if (!ok) { Object.assign(p, prev); return false; }
-      renderHoursDetail(p);
+      route();
     });
   }
 
@@ -1509,7 +1854,7 @@
       p.hoursLog.push(entry);
       const ok = await saveRemote();
       if (!ok) { p.hoursLog = p.hoursLog.filter((e) => e !== entry); return false; }
-      renderHoursDetail(p);
+      route();
     });
   }
 
@@ -1632,8 +1977,6 @@
     importHoursFiles(e.target.files);
     e.target.value = "";
   });
-  document.getElementById("openManHoursBtn").addEventListener("click", () => { location.hash = "hours"; });
-  document.getElementById("openProjectHoursBtn").addEventListener("click", () => { location.hash = "hours/" + currentProjectId; });
 
   // Wires an "Import ▾" toggle/menu pair: click to open, click an item or
   // click outside to close. Item buttons keep their own existing listeners.
@@ -1656,11 +1999,10 @@
   });
   wireDropdown("importMenuBtn", "importMenu");
   wireDropdown("importTravelerMenuBtn", "importTravelerMenu");
+  wireDropdown("projectMoreBtn", "projectMoreMenu");
+  wireDropdown("travelerMoreBtn", "travelerMoreMenu");
 
   document.getElementById("newProjectBtn").addEventListener("click", () => openProjectModal());
-  document.getElementById("openProjectGanttBtn").addEventListener("click", () => showProjectGanttView());
-  document.getElementById("backFromProjectGanttBtn").addEventListener("click", () => { showList(); });
-  document.getElementById("openMasterManpowerBtn").addEventListener("click", () => showManpowerGanttMaster());
   document.getElementById("manageTeamBtn").addEventListener("click", () => openTeamModal());
   document.getElementById("manpowerDeptFilter").addEventListener("change", () => renderManpowerGantt());
 
@@ -1982,17 +2324,72 @@
       </span>`;
   }
 
+  // ---------- project page ----------
+  let projectTab = "travelers";
+  let travelerQuery = "";
+  function renderProjectSummary(p) {
+    const progress = projectProgress(p);
+    const tasks = allTasks(p);
+    const done = tasks.filter((t) => t.status === "complete").length;
+    const delays = projectDelayCount(p);
+    const due = dueInfo(p);
+    const s = projectHours(p);
+    const budget = num(p.budgetHours);
+    const level = hoursLevel(s.total, budget);
+    document.getElementById("projectSummary").innerHTML = `
+      <div class="summary-item">
+        <div class="summary-label">Progress</div>
+        <div class="summary-value">${progress}%</div>
+        <div class="progress-bar"><div class="progress-bar-fill${progress === 100 ? " done" : ""}" style="width:${progress}%"></div></div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Schedule</div>
+        <div class="summary-value ${due.cls === "overdue" ? "bad" : due.cls === "soon" ? "warn" : ""}">${due.text}</div>
+        <div class="summary-sub">${fmtDate(p.startDate)} → ${isDateStr(p.endDate) ? fmtDate(p.endDate) : "no end date"}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Tasks</div>
+        <div class="summary-value">${done} / ${tasks.length}</div>
+        <div class="summary-sub">${p.travelers.length} traveler${p.travelers.length === 1 ? "" : "s"}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Delays</div>
+        <div class="summary-value ${delays ? "bad" : "good"}">${delays}</div>
+        <div class="summary-sub">${delays ? "logged on travelers" : "none logged"}</div>
+      </div>
+      <div class="summary-item summary-item-link" data-summary-hours title="Open man hours">
+        <div class="summary-label">Man-hours</div>
+        <div class="summary-value ${level === "over" ? "bad" : level === "warn" ? "warn" : ""}">${fmtHrs(s.total)}${budget ? ` <span class="summary-sub" style="display:inline">/ ${fmtHrs(budget)}</span>` : ""}</div>
+        ${budget ? hoursBarHtml(s.total, budget) : `<div class="summary-sub">no budget set</div>`}
+      </div>`;
+    document.querySelector("[data-summary-hours]").addEventListener("click", () => setProjectTab("hours"));
+  }
+
+  function setProjectTab(tab) {
+    projectTab = tab;
+    const p = getProject(currentProjectId);
+    if (p) renderTravelerList(p);
+  }
+  document.querySelectorAll("#projectTabs [data-ptab]").forEach((b) => b.addEventListener("click", () => setProjectTab(b.dataset.ptab)));
+  document.getElementById("travelerFilter").addEventListener("input", (e) => {
+    travelerQuery = e.target.value.trim();
+    const p = getProject(currentProjectId);
+    if (p) renderTravelerRows(p);
+  });
+
   function renderTravelerList(p) {
-    document.getElementById("travelerListProjectName").textContent = p.name;
+    document.getElementById("travelerListProjectJob").innerHTML = projectEyebrowHtml(p);
+    const nameEl = document.getElementById("travelerListProjectName");
+    nameEl.textContent = projectTitle(p);
+    nameEl.title = p.name;
     document.getElementById("travelerListProjectClient").textContent = p.client || "";
     document.getElementById("travelerListProjectDescription").textContent = p.description || "";
     const archivedBanner = document.getElementById("travelerListArchivedBanner");
     archivedBanner.classList.toggle("hidden", !p.archived);
     archivedBanner.textContent = p.archived
-      ? `Archived${p.archivedAt ? " " + fmtDate(p.archivedAt) : ""} — hidden from Projects, the overviews, Man Hours and the shop TV.${canManage() ? " Restore it to bring it back." : ""}`
+      ? `Archived${p.archivedAt ? " " + fmtDate(p.archivedAt) : ""} — hidden from Projects, Schedule, Man Power, Man Hours and the shop TV.${canManage() ? " Use ⋯ → Restore to bring it back." : ""}`
       : "";
-    document.getElementById("archiveProjectBtn").textContent = p.archived ? "Restore" : "Archive";
-    document.getElementById("backToProjectsBtn").innerHTML = p.archived ? "&larr; Archived Projects" : "&larr; All Projects";
+    document.getElementById("archiveProjectBtn").textContent = p.archived ? "Restore project" : "Archive project";
 
     const statusSelect = document.getElementById("travelerListProjectStatus");
     const statusBadgeReadonly = document.getElementById("travelerListProjectStatusBadge");
@@ -2017,41 +2414,64 @@
       statusBadgeReadonly.className = "status-badge " + p.status;
     }
 
+    renderProjectSummary(p);
+    document.querySelectorAll("#projectTabs [data-ptab]").forEach((b) => b.classList.toggle("active", b.dataset.ptab === projectTab));
+    document.querySelectorAll("#travelerListView [data-ptab-panel]").forEach((el) => el.classList.toggle("hidden", el.dataset.ptabPanel !== projectTab));
+    document.getElementById("ptabTravelersCount").textContent = p.travelers.length || "";
+    if (projectTab === "hours") renderHoursDetail(p, document.getElementById("projectHoursPanel"));
+    const filterInput = document.getElementById("travelerFilter");
+    if (document.activeElement !== filterInput) filterInput.value = travelerQuery;
+    renderTravelerRows(p);
+  }
+
+  function renderTravelerRows(p) {
     const grid = document.getElementById("travelerGrid");
     if (!p.travelers.length) {
-      grid.innerHTML = `<div class="empty-state">No travelers yet.${canManage() ? ' Click "+ New Traveler" to add one, or import from MS Project/Excel.' : ""}</div>`;
-    } else {
-      grid.innerHTML = p.travelers.map((trav) => {
-        const progress = travelerProgress(trav);
-        const deleteBtn = canManage() ? `<button class="btn-icon card-delete-btn" type="button" data-delete-traveler="${trav.id}" title="Delete traveler">&times;</button>` : "";
-        return `
-          <div class="project-card" data-traveler-id="${trav.id}">
-            <div class="project-card-top">
-              <div>
-                <h3>${escapeHtml(trav.name)}</h3>
-                <p class="client">${escapeHtml(trav.description || "—")}</p>
-              </div>
-              <div class="project-card-top-actions">
-                <span class="status-badge ${trav.status}">${STATUS_LABELS[trav.status]}</span>
-                ${deleteBtn}
-              </div>
-            </div>
-            <div class="progress-bar"><div class="progress-bar-fill" style="width:${progress}%"></div></div>
-            <div class="project-card-meta">
-              <span>${trav.tasks.length} task${trav.tasks.length === 1 ? "" : "s"}</span>
-              <span>${trav.delays.length ? trav.delays.length + " delay" + (trav.delays.length === 1 ? "" : "s") : "No delays"}</span>
-              ${notesMetaHtml(trav)}
-              <span>${progress}%</span>
-            </div>
-            <div class="card-actions-row">
-              <button class="btn-secondary card-open-btn" type="button">Open &rarr;</button>
-              ${canManage() ? `<button class="btn-chip" type="button" data-note-traveler="${trav.id}">+ Note</button>` : ""}
-            </div>
-          </div>`;
-      }).join("");
+      grid.innerHTML = `<div class="empty-state">No travelers yet.${canManage() ? " Click “Add traveler”, or import from MS Project or Excel." : ""}</div>`;
+      return;
     }
-    grid.querySelectorAll("[data-traveler-id]").forEach((card) => {
-      card.addEventListener("click", () => { location.hash = "project/" + p.id + "/traveler/" + card.dataset.travelerId; });
+    const q = travelerQuery.toLowerCase();
+    const shown = p.travelers.filter((t) => !q || [t.name, t.description, ...t.tasks.map((k) => k.name)].join(" ").toLowerCase().includes(q));
+    if (!shown.length) {
+      grid.innerHTML = `<div class="empty-state">No travelers match “${escapeHtml(travelerQuery)}”.</div>`;
+      return;
+    }
+    grid.innerHTML = shown.map((trav) => {
+      const progress = travelerProgress(trav);
+      const done = trav.tasks.filter((t) => t.status === "complete").length;
+      const next = trav.tasks.find((t) => t.status !== "complete");
+      const nextOwner = next ? parseNames(next.responsible).join(", ") : "";
+      const nextLine = next
+        ? `Next: <b>${escapeHtml(next.name)}</b>${nextOwner ? " · " + escapeHtml(nextOwner) : ""}${isDateStr(next.endDate) ? " · due " + fmtDate(next.endDate) : ""}`
+        : (trav.tasks.length ? "All tasks complete" : "No tasks yet");
+      const actions = canManage()
+        ? `<button class="btn-chip" type="button" data-note-traveler="${trav.id}">+ Note</button>
+           <button class="btn-icon" type="button" data-delete-traveler="${trav.id}" title="Delete traveler">&times;</button>`
+        : "";
+      return `
+        <div class="trow ${trav.status}" data-traveler-id="${trav.id}" tabindex="0">
+          <div class="trow-main">
+            <div class="trow-title"><span class="trow-name" title="${escapeHtml(trav.name)}">${escapeHtml(trav.name)}</span></div>
+            <div class="trow-sub">
+              <span>${done} / ${trav.tasks.length} tasks done</span>
+              ${trav.delays.length ? `<span class="stat-bad">${trav.delays.length} delay${trav.delays.length === 1 ? "" : "s"}</span>` : ""}
+              ${trav.notes.length ? notesMetaHtml(trav) : ""}
+              ${trav.description ? `<span>${escapeHtml(trav.description)}</span>` : ""}
+            </div>
+            <div class="trow-next">${nextLine}</div>
+          </div>
+          <div class="trow-progress">
+            <div class="progress-bar"><div class="progress-bar-fill${progress === 100 ? " done" : ""}" style="width:${progress}%"></div></div>
+            <span>${progress}%</span>
+          </div>
+          <span class="status-badge trow-status ${trav.status}">${STATUS_LABELS[trav.status]}</span>
+          <div class="trow-actions">${actions}<svg class="icon trow-chev"><use href="#i-chev"/></svg></div>
+        </div>`;
+    }).join("");
+    grid.querySelectorAll("[data-traveler-id]").forEach((row) => {
+      const open = () => { location.hash = "project/" + p.id + "/traveler/" + row.dataset.travelerId; };
+      row.addEventListener("click", open);
+      row.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === row) open(); });
     });
     grid.querySelectorAll("[data-note-traveler]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
@@ -2087,10 +2507,6 @@
     });
   }
 
-  document.getElementById("backToProjectsBtn").addEventListener("click", () => {
-    const p = getProject(currentProjectId);
-    location.hash = p && p.archived ? "archived" : "";
-  });
   // Archiving only hides a project (and its travelers' tasks) from the
   // working views -- nothing is deleted, hours still import against its job
   // number, and it can be restored from the Archived list at any time.
@@ -2098,7 +2514,7 @@
     const p = getProject(currentProjectId);
     if (!p) return;
     const archiving = !p.archived;
-    if (archiving && !confirm(`Archive "${p.name}"?\n\nIt will be hidden from Projects, Project Overview, Man Power, Man Hours and the shop TV. Nothing is deleted and you can restore it any time from Archived.`)) return;
+    if (archiving && !confirm(`Archive "${p.name}"?\n\nIt will be hidden from Projects, Schedule, Man Power, Man Hours and the shop TV. Nothing is deleted and you can restore it any time from Archived.`)) return;
     const prev = { archived: p.archived, archivedAt: p.archivedAt };
     p.archived = archiving;
     p.archivedAt = archiving ? todayStr() : null;
@@ -2107,9 +2523,6 @@
     showStatus(archiving ? "Project archived" : "Project restored", "success");
     location.hash = archiving ? "" : "project/" + p.id;
     route();
-  });
-  document.getElementById("toggleArchivedBtn").addEventListener("click", () => {
-    location.hash = location.hash === "#archived" ? "" : "archived";
   });
   document.getElementById("editProjectFromListBtn").addEventListener("click", () => openProjectModal(getProject(currentProjectId)));
   document.getElementById("deleteProjectFromListBtn").addEventListener("click", async () => {
@@ -2129,10 +2542,53 @@
   document.getElementById("newTravelerBtn").addEventListener("click", () => openTravelerModal(getProject(currentProjectId)));
 
   // ---------- traveler detail view ----------
+  function renderTravelerSummary(p, trav) {
+    const counted = trav.tasks.filter((t) => !t.noScheduleImpact);
+    const progress = travelerProgress(trav);
+    const done = trav.tasks.filter((t) => t.status === "complete").length;
+    const today = todayStr();
+    const current = trav.tasks.filter((t) => t.status !== "complete" && isDateStr(t.startDate) && isDateStr(t.endDate) && t.startDate <= today && t.endDate >= today);
+    const late = trav.tasks.filter((t) => t.status !== "complete" && isDateStr(t.endDate) && t.endDate < today);
+    const starts = trav.tasks.map((t) => t.startDate).filter(isDateStr).sort();
+    const ends = trav.tasks.map((t) => t.endDate).filter(isDateStr).sort();
+    const people = new Set(trav.tasks.flatMap((t) => parseNames(t.responsible)));
+    document.getElementById("travelerSummary").innerHTML = `
+      <div class="summary-item">
+        <div class="summary-label">Progress</div>
+        <div class="summary-value">${progress}%</div>
+        <div class="progress-bar"><div class="progress-bar-fill${progress === 100 ? " done" : ""}" style="width:${progress}%"></div></div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Tasks done</div>
+        <div class="summary-value">${done} / ${trav.tasks.length}</div>
+        <div class="summary-sub">${counted.length !== trav.tasks.length ? `${trav.tasks.length - counted.length} excluded from %` : "all count toward %"}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">In progress today</div>
+        <div class="summary-value">${current.length}</div>
+        <div class="summary-sub">${current[0] ? escapeHtml(current[0].name) : "nothing scheduled today"}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Past due</div>
+        <div class="summary-value ${late.length ? "bad" : "good"}">${late.length}</div>
+        <div class="summary-sub">${late.length ? "open tasks past their end date" : "nothing late"}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Schedule</div>
+        <div class="summary-value" style="font-size:1rem">${starts.length ? fmtDate(starts[0]) : "—"} → ${ends.length ? fmtDate(ends[ends.length - 1]) : "—"}</div>
+        <div class="summary-sub">${people.size} ${people.size === 1 ? "person" : "people"} assigned</div>
+      </div>`;
+  }
   function renderTravelerDetail(p, trav) {
     document.getElementById("detailName").textContent = trav.name;
-    document.getElementById("detailClient").textContent = "Part of " + p.name;
+    const projectLink = document.getElementById("detailClient");
+    projectLink.innerHTML = `<svg class="icon" style="width:14px;height:14px"><use href="#i-back"/></svg>${projectEyebrowHtml(p)}<span>${escapeHtml(projectTitle(p))}</span>`;
+    projectLink.href = "#project/" + p.id;
     document.getElementById("detailDescription").textContent = trav.description || "";
+    renderTravelerSummary(p, trav);
+    document.getElementById("tabCountTasks").textContent = trav.tasks.length || "";
+    document.getElementById("tabCountDelays").textContent = trav.delays.length || "";
+    document.getElementById("tabCountNotes").textContent = trav.notes.length || "";
     updateTabActionVisibility(document.querySelector(".tab-btn.active")?.dataset.tab || "tasks");
     const sourceEl = document.getElementById("detailSource");
     if (trav.sourcePath) {
@@ -2171,25 +2627,12 @@
     renderNotes(p, trav);
   }
 
-  document.getElementById("backToListBtn").addEventListener("click", () => { location.hash = "project/" + currentProjectId; });
-  document.getElementById("detailClient").addEventListener("click", () => { location.hash = "project/" + currentProjectId; });
   document.getElementById("editProjectBtn").addEventListener("click", () => openTravelerModal(getProject(currentProjectId), getTraveler(getProject(currentProjectId), currentTravelerId)));
   document.getElementById("openGanttViewBtn").addEventListener("click", () => {
-    const p = getProject(currentProjectId);
-    showGanttView(p, getTraveler(p, currentTravelerId));
-  });
-  document.getElementById("backFromGanttViewBtn").addEventListener("click", () => {
-    const p = getProject(currentProjectId);
-    showTravelerDetail(p, getTraveler(p, currentTravelerId));
+    location.hash = `project/${currentProjectId}/traveler/${currentTravelerId}/gantt`;
   });
   document.getElementById("openManpowerGanttBtn").addEventListener("click", () => {
-    const p = getProject(currentProjectId);
-    showManpowerGanttTraveler(p, getTraveler(p, currentTravelerId));
-  });
-  document.getElementById("backFromManpowerGanttBtn").addEventListener("click", () => {
-    if (manpowerGanttMode && manpowerGanttMode.scope === "master") { showList(); return; }
-    const p = getProject(currentProjectId);
-    showTravelerDetail(p, getTraveler(p, currentTravelerId));
+    location.hash = `project/${currentProjectId}/traveler/${currentTravelerId}/manpower`;
   });
   document.getElementById("deleteProjectBtn").addEventListener("click", async () => {
     if (!confirm("Delete this traveler? This can't be undone.")) return;

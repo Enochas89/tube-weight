@@ -7,331 +7,409 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="app-header">
-  <a href="../" class="back-to-hub" title="Back to RetubeCo Tools">&larr; Tools</a>
-  <img src="../truck-calculator/logo.png" alt="RetubeCo, Inc." class="app-logo">
-  <div class="app-header-text">
-    <h1>Traveler Status</h1>
-    <p class="subtitle">Schedules, delays, notes, and ownership &mdash; one board per project.</p>
-  </div>
-  <div class="edit-auth">
-    <button id="signInBtn" class="btn-secondary">Sign in to edit</button>
-    <span id="editorBadge" class="editor-badge hidden">
-      <span class="mode-toggle" role="group" aria-label="View or manage">
-        <button type="button" class="mode-toggle-btn" id="modeViewBtn" title="Browse read-only">View</button>
-        <button type="button" class="mode-toggle-btn" id="modeManageBtn" title="Add, edit, and reschedule">Manage</button>
-      </span>
-      <button id="signOutBtn" class="btn-link">Sign out</button>
-    </span>
-  </div>
-  <div class="powered-by">
-    <span class="powered-by-label">Powered by</span>
-    <img src="../truck-calculator/erogn-logo.png" alt="Erogn Tools" class="erogn-logo">
-  </div>
-</header>
 
-<div id="statusToast" class="status-toast hidden"></div>
+<!-- Icon sprite: referenced as <svg class="icon"><use href="#i-name"/></svg> -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-timeline" viewBox="0 0 24 24"><path d="M3 6h9M7 12h11M5 18h8"/><path d="M3 3v18"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.8c1.6.8 2.6 2.5 3 5.2"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-tv" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 17h3v4"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="m13.5 6.5 4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.5 20h19L12 4z"/><path d="M12 10v4.5M12 17.5h.01"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5z"/><path d="M14 4v5h5M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.2h8.4A1.5 1.5 0 0 1 21 8.7V18a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7M6 9.5V20h12V9.5"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+</svg>
 
-<main id="app">
+<div class="app-shell">
 
-  <!-- ===================== PROJECT LIST VIEW ===================== -->
-  <section id="listView" class="view">
-    <div class="panel-header-row">
-      <h2 id="projectListTitle">Projects</h2>
-      <div class="header-row-actions">
-        <button class="btn-icon btn-share" id="shareListBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
-        <button class="btn-secondary hidden" id="toggleArchivedBtn">Archived</button>
-        <button class="btn-secondary" id="openManHoursBtn">Man Hours</button>
-        <button class="btn-secondary editor-only hidden" id="openProjectGanttBtn">Project Overview</button>
-        <button class="btn-secondary editor-only hidden" id="openMasterManpowerBtn">Man Power Overview</button>
-        <div class="dropdown editor-only hidden" id="importMenuWrap">
-          <button type="button" class="btn-secondary" id="importMenuBtn">Import &#9662;</button>
-          <div class="dropdown-menu hidden" id="importMenu">
-            <button type="button" class="dropdown-item" id="importMspBtn">Import from MS Project</button>
-            <button type="button" class="dropdown-item" id="importExcelBtn">Import from Excel</button>
-          </div>
-        </div>
-        <input type="file" id="importFileInput" accept=".xml" class="hidden">
-        <input type="file" id="importExcelInput" accept=".xlsx,.xls" multiple class="hidden">
-        <button class="btn-primary editor-only hidden" id="newProjectBtn">+ New Project</button>
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <div class="sidebar-brand">
+      <img src="../truck-calculator/logo.png" alt="RetubeCo, Inc." class="sidebar-logo">
+      <div class="sidebar-brand-text">
+        <span class="sidebar-app-name">Traveler Status</span>
+        <span class="sidebar-app-sub">Shop schedule &amp; hours</span>
       </div>
     </div>
-    <div id="projectGrid" class="project-grid"></div>
-  </section>
 
-  <!-- ===================== TRAVELER LIST (within a project) ===================== -->
-  <section id="travelerListView" class="view hidden">
-    <div class="detail-header">
-      <button class="btn-link" id="backToProjectsBtn">&larr; All Projects</button>
-      <div class="detail-title-row">
-        <div>
-          <h2 id="travelerListProjectName">Project Name</h2>
-          <p id="travelerListProjectClient" class="detail-client"></p>
-        </div>
-        <div class="detail-actions">
-          <select id="travelerListProjectStatus" class="status-select hidden"></select>
-          <span id="travelerListProjectStatusBadge" class="status-badge hidden"></span>
-          <button class="btn-icon btn-share" id="shareProjectListBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
-          <button class="btn-secondary" id="openProjectHoursBtn">Man Hours</button>
-          <button class="btn-secondary editor-only hidden" id="editProjectFromListBtn">Edit Project</button>
-          <button class="btn-secondary editor-only hidden" id="archiveProjectBtn">Archive</button>
-          <span class="action-divider editor-only hidden"></span>
-          <button class="btn-danger editor-only hidden" id="deleteProjectFromListBtn">Delete</button>
-        </div>
-      </div>
-      <p id="travelerListProjectDescription" class="detail-description"></p>
-      <p id="travelerListArchivedBanner" class="archived-banner hidden"></p>
-    </div>
-
-    <div class="panel-header-row">
-      <h3>Travelers</h3>
-      <div class="header-row-actions">
-        <div class="dropdown editor-only hidden" id="importTravelerMenuWrap">
-          <button type="button" class="btn-secondary" id="importTravelerMenuBtn">Import &#9662;</button>
-          <div class="dropdown-menu hidden" id="importTravelerMenu">
-            <button type="button" class="dropdown-item" id="importMspTravelerBtn">Import from MS Project</button>
-            <button type="button" class="dropdown-item" id="importExcelTravelerBtn">Import from Excel</button>
-          </div>
-        </div>
-        <input type="file" id="importFileInputTraveler" accept=".xml" class="hidden">
-        <input type="file" id="importExcelInputTraveler" accept=".xlsx,.xls" multiple class="hidden">
-        <button class="btn-primary editor-only hidden" id="newTravelerBtn">+ Add Traveler</button>
-      </div>
-    </div>
-    <div id="travelerGrid" class="project-grid"></div>
-  </section>
-
-  <!-- ===================== TRAVELER DETAIL VIEW ===================== -->
-  <section id="detailView" class="view hidden">
-    <div class="detail-header">
-      <button class="btn-link" id="backToListBtn">&larr; Back to Travelers</button>
-      <div class="detail-title-row">
-        <div>
-          <h2 id="detailName">Traveler Name</h2>
-          <p id="detailClient" class="detail-client detail-client-link" title="Back to Travelers"></p>
-        </div>
-        <div class="detail-actions">
-          <select id="detailStatus" class="status-select hidden"></select>
-          <span id="detailStatusBadge" class="status-badge hidden"></span>
-          <button class="btn-icon btn-share" id="shareProjectBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
-          <button class="btn-secondary editor-only hidden" id="editProjectBtn">Edit Traveler</button>
-          <span class="action-divider editor-only hidden"></span>
-          <button class="btn-danger editor-only hidden" id="deleteProjectBtn">Delete</button>
-        </div>
-      </div>
-      <p id="detailDescription" class="detail-description"></p>
-      <a id="detailSource" class="detail-source" target="_blank" rel="noopener" hidden></a>
-      <div id="detailCompletionRow" class="completion-check-row"></div>
-    </div>
-
-    <nav class="tab-bar">
-      <div class="tab-bar-tabs">
-        <button class="tab-btn active" data-tab="tasks">Tasks</button>
-        <button class="tab-btn" data-tab="delays">Delays</button>
-        <button class="tab-btn" data-tab="notes">Notes</button>
-      </div>
-      <div class="tab-bar-actions">
-        <button class="btn-secondary editor-only hidden" id="openGanttViewBtn" data-tab-visible="tasks">Gantt View</button>
-        <button class="btn-secondary editor-only hidden" id="openManpowerGanttBtn" data-tab-visible="tasks">Man Power</button>
-        <button class="btn-primary editor-only hidden" id="addTaskBtn" data-tab-visible="tasks">+ Add Task</button>
-        <button class="btn-primary editor-only hidden" id="addDelayBtn" data-tab-visible="delays">+ Log Delay</button>
-        <button class="btn-primary editor-only hidden" id="addNoteBtn" data-tab-visible="notes">+ Add Note</button>
-      </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" data-nav="projects" href="#"><svg class="icon"><use href="#i-grid"/></svg><span>Projects</span><span class="nav-count" id="navCountProjects"></span></a>
+      <a class="nav-item" data-nav="hours" href="#hours"><svg class="icon"><use href="#i-clock"/></svg><span>Man Hours</span><span class="nav-flag hidden" id="navFlagHours"></span></a>
+      <a class="nav-item editor-only hidden" data-nav="schedule" href="#schedule"><svg class="icon"><use href="#i-timeline"/></svg><span>Schedule</span></a>
+      <a class="nav-item editor-only hidden" data-nav="manpower" href="#manpower"><svg class="icon"><use href="#i-users"/></svg><span>Man Power</span></a>
+      <a class="nav-item" data-nav="archived" href="#archived"><svg class="icon"><use href="#i-archive"/></svg><span>Archived</span><span class="nav-count" id="navCountArchived"></span></a>
     </nav>
 
-    <!-- Tasks tab -->
-    <div class="tab-panel" data-tab-panel="tasks">
-      <div id="taskBulkBar" class="task-bulk-bar hidden">
-        <span id="taskBulkCount">0 selected</span>
-        <span class="task-bulk-actions">
-          <button class="btn-secondary" id="taskBulkComplete">Mark Complete</button>
-          <button class="btn-secondary" id="taskBulkNotComplete">Mark Not Complete</button>
-          <button class="btn-link" id="taskBulkClear">Clear</button>
-        </span>
-      </div>
-      <div id="taskListWrap" class="task-list"></div>
+    <div class="sidebar-group">
+      <div class="sidebar-group-label">Shop floor</div>
+      <a class="nav-item nav-item-sm" href="quick-add.html"><svg class="icon"><use href="#i-qr"/></svg><span>Quick-add traveler</span></a>
+      <a class="nav-item nav-item-sm" href="tv.html" target="_blank" rel="noopener"><svg class="icon"><use href="#i-tv"/></svg><span>Shop TV display</span></a>
+      <a class="nav-item nav-item-sm" href="../"><svg class="icon"><use href="#i-home"/></svg><span>RetubeCo Tools</span></a>
     </div>
 
-    <!-- Delays tab -->
-    <div class="tab-panel hidden" data-tab-panel="delays">
-      <div id="delaysList" class="log-list"></div>
+    <div class="sidebar-footer">
+      <button id="signInBtn" class="btn btn-ghost btn-block">Sign in to edit</button>
+      <div id="editorBadge" class="editor-badge hidden">
+        <div class="mode-toggle" role="group" aria-label="View or manage">
+          <button type="button" class="mode-toggle-btn" id="modeViewBtn" title="Browse read-only">View</button>
+          <button type="button" class="mode-toggle-btn" id="modeManageBtn" title="Add, edit, and reschedule">Manage</button>
+        </div>
+        <button id="signOutBtn" class="btn-link-dim">Sign out</button>
+      </div>
+      <div class="powered-by">
+        <span>Powered by</span>
+        <img src="../truck-calculator/erogn-logo.png" alt="Erogn Tools" class="erogn-logo">
+      </div>
     </div>
+  </aside>
+  <div class="sidebar-scrim hidden" id="sidebarScrim"></div>
 
-    <!-- Notes tab -->
-    <div class="tab-panel hidden" data-tab-panel="notes">
-      <div id="notesList" class="log-list"></div>
-    </div>
-  </section>
+  <!-- ===================== MAIN COLUMN ===================== -->
+  <div class="main-col">
+    <header class="topbar">
+      <button class="icon-btn topbar-menu" id="sidebarToggle" aria-label="Open menu"><svg class="icon"><use href="#i-menu"/></svg></button>
+      <nav class="breadcrumbs" id="breadcrumbs" aria-label="Breadcrumb"></nav>
+      <div class="global-search" id="globalSearchWrap">
+        <svg class="icon global-search-icon"><use href="#i-search"/></svg>
+        <input type="search" id="globalSearch" placeholder="Search jobs, travelers, tasks…" autocomplete="off" aria-label="Search">
+        <kbd class="global-search-kbd">/</kbd>
+        <div class="search-results hidden" id="searchResults" role="listbox"></div>
+      </div>
+    </header>
 
-  <!-- ===================== GANTT VIEW (fully editable timeline) ===================== -->
-  <section id="ganttView" class="view hidden">
-    <div class="detail-header">
-      <button class="btn-link" id="backFromGanttViewBtn">&larr; Back to Traveler</button>
-      <div class="detail-title-row">
-        <div>
-          <h2 id="ganttViewTravelerName">Traveler Name</h2>
-          <p class="detail-client">Drag a bar to reschedule, drag its right edge to resize, click it to edit status/%/predecessors</p>
-        </div>
-        <div class="detail-actions">
-          <button class="btn-primary" id="ganttAddTaskBtn">+ Add Task</button>
-        </div>
-      </div>
-    </div>
-    <div id="ganttBulkBar" class="task-bulk-bar hidden">
-      <span id="ganttBulkCount">0 selected</span>
-      <span class="task-bulk-actions">
-        <button class="btn-secondary" id="ganttBulkComplete">Mark Complete</button>
-        <button class="btn-secondary" id="ganttBulkNotComplete">Mark Not Complete</button>
-        <button class="btn-secondary" id="ganttBulkNoImpact">No Impact</button>
-        <button class="btn-secondary" id="ganttBulkClearImpact">Clear No Impact</button>
-        <button class="btn-link" id="ganttBulkClearSel">Clear</button>
-      </span>
-    </div>
-    <div class="gantt-full">
-      <div class="gantt-full-labels">
-        <div class="gantt-full-label-header">
-          <span class="gantt-col-check"></span>
-          <span class="gantt-col-num">#</span>
-          <span class="gantt-col-name">Task Name</span>
-          <span class="gantt-col-resp">Resp.</span>
-          <span class="gantt-col-pred" title="Row numbers this task starts after">Pred</span>
-          <span class="gantt-col-succ" title="Row numbers that start after this task">Succ</span>
-          <span class="gantt-col-del"></span>
-        </div>
-        <div id="ganttFullLabels"></div>
-      </div>
-      <div class="gantt-full-right-col">
-        <div class="gantt-full-header-clip">
-          <div id="ganttFullHeader"></div>
-        </div>
-        <div class="gantt-full-scroll">
-          <div id="ganttFullBody"></div>
-        </div>
-      </div>
-    </div>
-  </section>
+    <div id="statusToast" class="status-toast hidden"></div>
 
-  <!-- ===================== PROJECT OVERVIEW (project-level Gantt) ===================== -->
-  <section id="projectGanttView" class="view hidden">
-    <div class="detail-header">
-      <button class="btn-link" id="backFromProjectGanttBtn">&larr; Back to Projects</button>
-      <div class="detail-title-row">
-        <div>
-          <h2>Project Overview</h2>
-          <p class="detail-client">Drag a bar to reschedule, drag its right edge to resize, click it to edit status/manpower/travelers/links</p>
-        </div>
-        <div class="detail-actions">
-          <button class="btn-primary" id="projectGanttAddBtn">+ Add Project</button>
-        </div>
-      </div>
-    </div>
-    <div class="gantt-toolbar-row">
-      <div class="gantt-zoom-controls">
-        <button type="button" class="btn-icon" id="projectGanttZoomOut" title="Zoom out">&minus;</button>
-        <span id="projectGanttZoomLabel">100%</span>
-        <button type="button" class="btn-icon" id="projectGanttZoomIn" title="Zoom in">+</button>
-        <button type="button" class="btn-link" id="projectGanttZoomReset" title="Reset zoom">Reset</button>
-      </div>
-      <button class="btn-secondary" id="projectGanttFullscreenBtn" title="Enter full screen">&#10021; Full Screen</button>
-    </div>
-    <div class="gantt-full">
-      <div class="gantt-full-labels project-gantt-labels">
-        <div class="gantt-full-label-header">
-          <span class="gantt-col-num">#</span>
-          <span class="gantt-col-name">Project</span>
-          <span class="gantt-col-resp">Client</span>
-          <span class="gantt-col-pcount" title="Unique names on Responsible across this project's tasks">Manpower</span>
-          <span class="gantt-col-pcount" title="Travelers in this project">Travelers</span>
-          <span class="gantt-col-pred" title="Row numbers this project starts after">Pred</span>
-          <span class="gantt-col-succ" title="Row numbers that start after this project">Succ</span>
-          <span class="gantt-col-del"></span>
-        </div>
-        <div id="projectGanttLabels"></div>
-      </div>
-      <div class="gantt-full-right-col">
-        <div class="gantt-full-header-clip">
-          <div id="projectGanttHeader"></div>
-        </div>
-        <div class="gantt-full-scroll">
-          <div id="projectGanttBody"></div>
-        </div>
-      </div>
-    </div>
-  </section>
+    <main id="app">
 
-  <!-- ===================== MAN HOURS (budget vs. spent per job) ===================== -->
-  <section id="manhoursView" class="view hidden">
-    <div class="detail-header">
-      <button class="btn-link" id="backFromManhoursBtn">&larr; All Projects</button>
-      <div class="detail-title-row">
-        <div>
-          <h2 id="manhoursTitle">Man Hours</h2>
-          <p id="manhoursSubtitle" class="detail-client"></p>
+      <!-- ===================== PROJECTS ===================== -->
+      <section id="listView" class="view">
+        <div class="page-head">
+          <div class="page-head-main">
+            <h1 id="projectListTitle">Projects</h1>
+            <p class="page-sub" id="projectListSub"></p>
+          </div>
+          <div class="page-actions">
+            <button class="icon-btn" id="shareListBtn" title="Copy link" aria-label="Copy link"><svg class="icon"><use href="#i-link"/></svg></button>
+            <div class="dropdown editor-only hidden" id="importMenuWrap">
+              <button type="button" class="btn btn-secondary" id="importMenuBtn"><svg class="icon"><use href="#i-upload"/></svg>Import</button>
+              <div class="dropdown-menu hidden" id="importMenu">
+                <button type="button" class="dropdown-item" id="importMspBtn">From MS Project (.xml)</button>
+                <button type="button" class="dropdown-item" id="importExcelBtn">From Excel (.xlsx)</button>
+              </div>
+            </div>
+            <input type="file" id="importFileInput" accept=".xml" class="hidden">
+            <input type="file" id="importExcelInput" accept=".xlsx,.xls" multiple class="hidden">
+            <button class="btn btn-primary editor-only hidden" id="newProjectBtn"><svg class="icon"><use href="#i-plus"/></svg>New project</button>
+          </div>
         </div>
-        <div class="detail-actions" id="manhoursActions"></div>
-      </div>
-    </div>
-    <div id="manhoursBody"></div>
-    <input type="file" id="importHoursInput" accept=".pdf,application/pdf" multiple class="hidden">
-  </section>
 
-  <!-- ===================== MAN POWER GANTT (read-only, one row per person) ===================== -->
-  <section id="manpowerGanttView" class="view hidden">
-    <div class="detail-header">
-      <button class="btn-link" id="backFromManpowerGanttBtn">&larr; Back</button>
-      <div class="detail-title-row">
-        <div>
-          <h2 id="manpowerGanttTitle">Man Power</h2>
-          <p class="detail-client">Click a bar to see the task, traveler, and dates behind it</p>
-        </div>
-        <div class="detail-actions">
-          <button class="btn-secondary hidden editor-only" id="manageTeamBtn">Manage Team</button>
-          <button class="btn-secondary" id="manpowerGanttFullscreenBtn" title="Enter full screen">&#10021; Full Screen</button>
-        </div>
-      </div>
-    </div>
-    <div class="gantt-toolbar-row hidden" id="manpowerToolbarRow">
-      <label class="modal-label-hint" for="manpowerDeptFilter">Department</label>
-      <select id="manpowerDeptFilter"></select>
-    </div>
-    <div class="gantt-full">
-      <div class="gantt-full-labels">
-        <div class="gantt-full-label-header">
-          <span class="gantt-col-name">Name</span>
-        </div>
-        <div id="manpowerGanttLabels"></div>
-      </div>
-      <div class="gantt-full-right-col">
-        <div class="gantt-full-header-clip">
-          <div id="manpowerGanttHeader"></div>
-        </div>
-        <div class="gantt-full-scroll">
-          <div id="manpowerGanttBody"></div>
-        </div>
-      </div>
-    </div>
-  </section>
+        <div class="kpi-row" id="projectKpis"></div>
 
-</main>
+        <div class="toolbar">
+          <div class="chip-group" id="statusChips" role="group" aria-label="Filter by status"></div>
+          <div class="toolbar-right">
+            <div class="input-icon">
+              <svg class="icon"><use href="#i-search"/></svg>
+              <input type="search" id="projectFilter" placeholder="Filter projects" aria-label="Filter projects">
+            </div>
+            <select id="projectSort" aria-label="Sort projects">
+              <option value="job">Sort: Job #</option>
+              <option value="due">Sort: Due date</option>
+              <option value="progress">Sort: Progress</option>
+              <option value="hours">Sort: Hours used</option>
+              <option value="status">Sort: Status</option>
+            </select>
+            <div class="segmented" role="group" aria-label="Layout">
+              <button type="button" id="viewCardsBtn" title="Cards" aria-label="Cards"><svg class="icon"><use href="#i-grid"/></svg></button>
+              <button type="button" id="viewTableBtn" title="Table" aria-label="Table"><svg class="icon"><use href="#i-list"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <div id="projectGrid"></div>
+      </section>
+
+      <!-- ===================== PROJECT ===================== -->
+      <section id="travelerListView" class="view hidden">
+        <div class="page-head">
+          <div class="page-head-main">
+            <div class="eyebrow" id="travelerListProjectJob"></div>
+            <h1 id="travelerListProjectName">Project</h1>
+            <p class="page-sub" id="travelerListProjectClient"></p>
+          </div>
+          <div class="page-actions">
+            <select id="travelerListProjectStatus" class="status-select hidden" aria-label="Project status"></select>
+            <span id="travelerListProjectStatusBadge" class="status-badge hidden"></span>
+            <button class="icon-btn" id="shareProjectListBtn" title="Copy link" aria-label="Copy link"><svg class="icon"><use href="#i-link"/></svg></button>
+            <button class="btn btn-secondary editor-only hidden" id="editProjectFromListBtn"><svg class="icon"><use href="#i-edit"/></svg>Edit</button>
+            <div class="dropdown editor-only hidden" id="projectMoreWrap">
+              <button type="button" class="icon-btn" id="projectMoreBtn" title="More" aria-label="More actions"><svg class="icon"><use href="#i-dots"/></svg></button>
+              <div class="dropdown-menu dropdown-menu-right hidden" id="projectMoreMenu">
+                <button type="button" class="dropdown-item" id="archiveProjectBtn">Archive</button>
+                <button type="button" class="dropdown-item dropdown-item-danger" id="deleteProjectFromListBtn">Delete project…</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p id="travelerListArchivedBanner" class="banner banner-muted hidden"></p>
+        <div class="summary-strip" id="projectSummary"></div>
+        <p id="travelerListProjectDescription" class="page-description"></p>
+
+        <div class="tabs" role="tablist" id="projectTabs">
+          <button class="tab active" data-ptab="travelers" role="tab">Travelers <span class="tab-count" id="ptabTravelersCount"></span></button>
+          <button class="tab" data-ptab="hours" role="tab">Man hours</button>
+        </div>
+
+        <div data-ptab-panel="travelers">
+          <div class="section-head">
+            <div class="section-head-left">
+              <div class="input-icon input-icon-sm">
+                <svg class="icon"><use href="#i-search"/></svg>
+                <input type="search" id="travelerFilter" placeholder="Filter travelers" aria-label="Filter travelers">
+              </div>
+            </div>
+            <div class="section-head-actions">
+              <div class="dropdown editor-only hidden" id="importTravelerMenuWrap">
+                <button type="button" class="btn btn-secondary" id="importTravelerMenuBtn"><svg class="icon"><use href="#i-upload"/></svg>Import</button>
+                <div class="dropdown-menu dropdown-menu-right hidden" id="importTravelerMenu">
+                  <button type="button" class="dropdown-item" id="importMspTravelerBtn">From MS Project (.xml)</button>
+                  <button type="button" class="dropdown-item" id="importExcelTravelerBtn">From Excel (.xlsx)</button>
+                </div>
+              </div>
+              <input type="file" id="importFileInputTraveler" accept=".xml" class="hidden">
+              <input type="file" id="importExcelInputTraveler" accept=".xlsx,.xls" multiple class="hidden">
+              <button class="btn btn-primary editor-only hidden" id="newTravelerBtn"><svg class="icon"><use href="#i-plus"/></svg>Add traveler</button>
+            </div>
+          </div>
+          <div id="travelerGrid" class="row-list"></div>
+        </div>
+        <div data-ptab-panel="hours" class="hidden">
+          <div id="projectHoursPanel"></div>
+        </div>
+      </section>
+
+      <!-- ===================== TRAVELER ===================== -->
+      <section id="detailView" class="view hidden">
+        <div class="page-head">
+          <div class="page-head-main">
+            <a class="eyebrow eyebrow-link" id="detailClient" href="#" title="Back to project"></a>
+            <h1 id="detailName">Traveler</h1>
+            <p id="detailDescription" class="page-sub"></p>
+          </div>
+          <div class="page-actions">
+            <select id="detailStatus" class="status-select hidden" aria-label="Traveler status"></select>
+            <span id="detailStatusBadge" class="status-badge hidden"></span>
+            <button class="icon-btn" id="shareProjectBtn" title="Copy link" aria-label="Copy link"><svg class="icon"><use href="#i-link"/></svg></button>
+            <button class="btn btn-secondary editor-only hidden" id="openGanttViewBtn"><svg class="icon"><use href="#i-timeline"/></svg>Gantt</button>
+            <button class="btn btn-secondary editor-only hidden" id="openManpowerGanttBtn"><svg class="icon"><use href="#i-users"/></svg>Man power</button>
+            <button class="btn btn-secondary editor-only hidden" id="editProjectBtn"><svg class="icon"><use href="#i-edit"/></svg>Edit</button>
+            <div class="dropdown editor-only hidden" id="travelerMoreWrap">
+              <button type="button" class="icon-btn" id="travelerMoreBtn" title="More" aria-label="More actions"><svg class="icon"><use href="#i-dots"/></svg></button>
+              <div class="dropdown-menu dropdown-menu-right hidden" id="travelerMoreMenu">
+                <button type="button" class="dropdown-item dropdown-item-danger" id="deleteProjectBtn">Delete traveler…</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="summary-strip" id="travelerSummary"></div>
+        <a id="detailSource" class="source-link" target="_blank" rel="noopener" hidden></a>
+        <div id="detailCompletionRow" class="completion-check-row"></div>
+
+        <div class="tabs-row">
+          <div class="tabs" role="tablist">
+            <button class="tab tab-btn active" data-tab="tasks" role="tab">Tasks <span class="tab-count" id="tabCountTasks"></span></button>
+            <button class="tab tab-btn" data-tab="delays" role="tab">Delays <span class="tab-count" id="tabCountDelays"></span></button>
+            <button class="tab tab-btn" data-tab="notes" role="tab">Notes <span class="tab-count" id="tabCountNotes"></span></button>
+          </div>
+          <div class="tab-bar-actions">
+            <button class="btn btn-primary editor-only hidden" id="addTaskBtn" data-tab-visible="tasks"><svg class="icon"><use href="#i-plus"/></svg>Add task</button>
+            <button class="btn btn-primary editor-only hidden" id="addDelayBtn" data-tab-visible="delays"><svg class="icon"><use href="#i-plus"/></svg>Log delay</button>
+            <button class="btn btn-primary editor-only hidden" id="addNoteBtn" data-tab-visible="notes"><svg class="icon"><use href="#i-plus"/></svg>Add note</button>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-tab-panel="tasks">
+          <div id="taskBulkBar" class="bulk-bar hidden">
+            <span id="taskBulkCount">0 selected</span>
+            <span class="bulk-actions">
+              <button class="btn btn-secondary btn-sm" id="taskBulkComplete">Mark complete</button>
+              <button class="btn btn-secondary btn-sm" id="taskBulkNotComplete">Mark not complete</button>
+              <button class="btn-link" id="taskBulkClear">Clear</button>
+            </span>
+          </div>
+          <div id="taskListWrap" class="task-list"></div>
+        </div>
+        <div class="tab-panel hidden" data-tab-panel="delays"><div id="delaysList" class="log-list"></div></div>
+        <div class="tab-panel hidden" data-tab-panel="notes"><div id="notesList" class="log-list"></div></div>
+      </section>
+
+      <!-- ===================== TRAVELER GANTT ===================== -->
+      <section id="ganttView" class="view hidden">
+        <div class="page-head">
+          <div class="page-head-main">
+            <div class="eyebrow">Gantt</div>
+            <h1 id="ganttViewTravelerName">Traveler</h1>
+            <p class="page-sub">Drag a bar to reschedule, drag its right edge to resize, click it to edit status, % and predecessors.</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" id="ganttAddTaskBtn"><svg class="icon"><use href="#i-plus"/></svg>Add task</button>
+          </div>
+        </div>
+        <div id="ganttBulkBar" class="bulk-bar hidden">
+          <span id="ganttBulkCount">0 selected</span>
+          <span class="bulk-actions">
+            <button class="btn btn-secondary btn-sm" id="ganttBulkComplete">Mark complete</button>
+            <button class="btn btn-secondary btn-sm" id="ganttBulkNotComplete">Mark not complete</button>
+            <button class="btn btn-secondary btn-sm" id="ganttBulkNoImpact">No impact</button>
+            <button class="btn btn-secondary btn-sm" id="ganttBulkClearImpact">Clear no impact</button>
+            <button class="btn-link" id="ganttBulkClearSel">Clear</button>
+          </span>
+        </div>
+        <div class="gantt-full">
+          <div class="gantt-full-labels">
+            <div class="gantt-full-label-header">
+              <span class="gantt-col-check"></span>
+              <span class="gantt-col-num">#</span>
+              <span class="gantt-col-name">Task Name</span>
+              <span class="gantt-col-resp">Resp.</span>
+              <span class="gantt-col-pred" title="Row numbers this task starts after">Pred</span>
+              <span class="gantt-col-succ" title="Row numbers that start after this task">Succ</span>
+              <span class="gantt-col-del"></span>
+            </div>
+            <div id="ganttFullLabels"></div>
+          </div>
+          <div class="gantt-full-right-col">
+            <div class="gantt-full-header-clip"><div id="ganttFullHeader"></div></div>
+            <div class="gantt-full-scroll"><div id="ganttFullBody"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SCHEDULE (project-level Gantt) ===================== -->
+      <section id="projectGanttView" class="view hidden">
+        <div class="page-head">
+          <div class="page-head-main">
+            <h1>Schedule</h1>
+            <p class="page-sub">All active projects on one timeline. Drag to reschedule, drag the right edge to resize, click a bar for status and links.</p>
+          </div>
+          <div class="page-actions">
+            <div class="zoom-controls">
+              <button type="button" class="icon-btn" id="projectGanttZoomOut" title="Zoom out">&minus;</button>
+              <span id="projectGanttZoomLabel">100%</span>
+              <button type="button" class="icon-btn" id="projectGanttZoomIn" title="Zoom in">+</button>
+              <button type="button" class="btn-link" id="projectGanttZoomReset" title="Reset zoom">Reset</button>
+            </div>
+            <button class="btn btn-secondary" id="projectGanttFullscreenBtn" title="Enter full screen"><svg class="icon"><use href="#i-expand"/></svg>Full screen</button>
+            <button class="btn btn-primary" id="projectGanttAddBtn"><svg class="icon"><use href="#i-plus"/></svg>Add project</button>
+          </div>
+        </div>
+        <div class="gantt-full">
+          <div class="gantt-full-labels project-gantt-labels">
+            <div class="gantt-full-label-header">
+              <span class="gantt-col-num">#</span>
+              <span class="gantt-col-name">Project</span>
+              <span class="gantt-col-resp">Client</span>
+              <span class="gantt-col-pcount" title="Unique names on Responsible across this project's tasks">Manpower</span>
+              <span class="gantt-col-pcount" title="Travelers in this project">Travelers</span>
+              <span class="gantt-col-pred" title="Row numbers this project starts after">Pred</span>
+              <span class="gantt-col-succ" title="Row numbers that start after this project">Succ</span>
+              <span class="gantt-col-del"></span>
+            </div>
+            <div id="projectGanttLabels"></div>
+          </div>
+          <div class="gantt-full-right-col">
+            <div class="gantt-full-header-clip"><div id="projectGanttHeader"></div></div>
+            <div class="gantt-full-scroll"><div id="projectGanttBody"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== MAN HOURS ===================== -->
+      <section id="manhoursView" class="view hidden">
+        <div class="page-head">
+          <div class="page-head-main">
+            <h1 id="manhoursTitle">Man Hours</h1>
+            <p id="manhoursSubtitle" class="page-sub"></p>
+          </div>
+          <div class="page-actions" id="manhoursActions"></div>
+        </div>
+        <div id="manhoursBody"></div>
+        <input type="file" id="importHoursInput" accept=".pdf,application/pdf" multiple class="hidden">
+      </section>
+
+      <!-- ===================== MAN POWER ===================== -->
+      <section id="manpowerGanttView" class="view hidden">
+        <div class="page-head">
+          <div class="page-head-main">
+            <h1 id="manpowerGanttTitle">Man Power</h1>
+            <p class="page-sub">One row per person. Click a bar to see the task, traveler and dates behind it.</p>
+          </div>
+          <div class="page-actions">
+            <div class="toolbar-inline hidden" id="manpowerToolbarRow">
+              <label class="field-label-inline" for="manpowerDeptFilter">Department</label>
+              <select id="manpowerDeptFilter"></select>
+            </div>
+            <button class="btn btn-secondary hidden editor-only" id="manageTeamBtn"><svg class="icon"><use href="#i-users"/></svg>Manage team</button>
+            <button class="btn btn-secondary" id="manpowerGanttFullscreenBtn" title="Enter full screen"><svg class="icon"><use href="#i-expand"/></svg>Full screen</button>
+          </div>
+        </div>
+        <div class="gantt-full">
+          <div class="gantt-full-labels">
+            <div class="gantt-full-label-header"><span class="gantt-col-name">Name</span></div>
+            <div id="manpowerGanttLabels"></div>
+          </div>
+          <div class="gantt-full-right-col">
+            <div class="gantt-full-header-clip"><div id="manpowerGanttHeader"></div></div>
+            <div class="gantt-full-scroll"><div id="manpowerGanttBody"></div></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="app-footer">Anyone with this link can view these projects. Only signed-in managers can edit.</footer>
+  </div>
+</div>
+
+<!-- Mobile bottom navigation -->
+<nav class="bottom-nav" aria-label="Main navigation">
+  <a class="bottom-nav-item" data-nav="projects" href="#"><svg class="icon"><use href="#i-grid"/></svg><span>Projects</span></a>
+  <a class="bottom-nav-item" data-nav="hours" href="#hours"><svg class="icon"><use href="#i-clock"/></svg><span>Hours</span></a>
+  <a class="bottom-nav-item editor-only hidden" data-nav="schedule" href="#schedule"><svg class="icon"><use href="#i-timeline"/></svg><span>Schedule</span></a>
+  <a class="bottom-nav-item" data-nav="archived" href="#archived"><svg class="icon"><use href="#i-archive"/></svg><span>Archived</span></a>
+  <button class="bottom-nav-item" type="button" id="bottomMenuBtn"><svg class="icon"><use href="#i-menu"/></svg><span>More</span></button>
+</nav>
 
 <datalist id="teamNameOptions"></datalist>
 
 <!-- ===================== MODAL ===================== -->
 <div id="modalBackdrop" class="modal-backdrop hidden">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <h3 id="modalTitle">Title</h3>
     <div id="modalBody"></div>
     <div class="modal-actions">
-      <button class="btn-link" id="modalCancelBtn">Cancel</button>
-      <button class="btn-primary" id="modalSaveBtn">Save</button>
+      <button class="btn btn-ghost" id="modalCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="modalSaveBtn">Save</button>
     </div>
   </div>
 </div>
-
-<footer>
-  <p>Anyone with this link can view these projects. Only the signed-in project manager can edit.</p>
-  <p><a href="quick-add.html">Shop floor quick-add</a> &bull; <a href="tv.html">Shop TV display</a></p>
-</footer>
 
 <script src="vendor/xlsx.core.min.js"></script>
 <script src="excel-parser.js"></script>
