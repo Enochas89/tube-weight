@@ -1408,7 +1408,7 @@
       });
       return;
     }
-    if (listPrefs.layout === "table") renderProjectTable(grid, projects);
+    if (listPrefs.layout === "table" && !isMobileView()) renderProjectTable(grid, projects);
     else renderProjectCards(grid, projects);
   }
 
@@ -1548,6 +1548,11 @@
   document.getElementById("projectSort").addEventListener("change", (e) => { listPrefs.sort = e.target.value; saveListPrefs(); renderList(); });
   document.getElementById("viewCardsBtn").addEventListener("click", () => { listPrefs.layout = "cards"; saveListPrefs(); renderList(); });
   document.getElementById("viewTableBtn").addEventListener("click", () => { listPrefs.layout = "table"; saveListPrefs(); renderList(); });
+  // Crossing the phone breakpoint switches the Projects layout (phones
+  // always get cards), so redraw when that happens.
+  window.matchMedia("(max-width: 640px)").addEventListener("change", () => {
+    if (!document.getElementById("listView").classList.contains("hidden")) renderList();
+  });
 
   // ---------- man-hours tracking ----------
   // Each project carries a jobNumber (falls back to the leading number in its
@@ -1571,6 +1576,16 @@
     });
     s.total = s.reg + s.ot + s.dt;
     return s;
+  }
+  // Copies each column header onto its cells as data-label, so on phones the
+  // hours tables can drop the header row and show each row as a labelled card.
+  function labelTableCells(root) {
+    root.querySelectorAll("table.hours-table").forEach((table) => {
+      const heads = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent.trim());
+      table.querySelectorAll("tbody tr").forEach((tr) => {
+        Array.from(tr.children).forEach((td, i) => td.setAttribute("data-label", heads[i] || ""));
+      });
+    });
   }
   function fmtHrs(n) {
     return (Math.round(num(n) * 10) / 10).toLocaleString(undefined, { maximumFractionDigits: 1 });
@@ -1700,6 +1715,7 @@
         </table>
       </div>
       <p class="hours-footnote">${archivedCount ? `<button type="button" class="btn-link" id="hoursToggleArchived">${hoursShowArchived ? "Hide" : "Show"} ${archivedCount} archived job${archivedCount === 1 ? "" : "s"}</button> · ` : ""}Job numbers come from the start of each project name unless set under Edit Budget. ${canManage() ? "Import the weekly vIDix <em>Hours Report</em> or an <em>Hours Consolidated Report</em> PDF to log hours; importing the same period again replaces it rather than adding it twice." : ""}</p>`;
+    labelTableCells(body);
     body.querySelectorAll("[data-hours-row]").forEach((tr) => {
       tr.addEventListener("click", () => { location.hash = "hours/" + tr.dataset.hoursRow; });
     });
@@ -1784,6 +1800,7 @@
           ${canManage() ? `<td><button class="btn-icon" type="button" data-delete-hours="${e.id}" title="Delete entry">&times;</button></td>` : ""}
         </tr>`).join("")}</tbody>
       </table></div>` : `<div class="empty-state">No hours logged for this job yet.${canManage() ? " Import a vIDix Hours Report PDF or click “+ Add Hours”." : ""}</div>`}`;
+    labelTableCells(body);
     body.querySelectorAll("[data-delete-hours]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const entry = p.hoursLog.find((e) => e.id === btn.dataset.deleteHours);
@@ -3090,6 +3107,7 @@
   function openModal(title, bodyHtml, onSave) {
     modalTitle.textContent = title;
     modalBody.innerHTML = bodyHtml;
+    labelTableCells(modalBody);
     modalSaveBtn.classList.remove("hidden");
     modalCancelBtn.textContent = "Cancel";
     modalBackdrop.classList.remove("hidden");

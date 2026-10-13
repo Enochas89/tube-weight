@@ -108,7 +108,7 @@
           <div class="page-actions">
             <button class="icon-btn" id="shareListBtn" title="Copy link" aria-label="Copy link"><svg class="icon"><use href="#i-link"/></svg></button>
             <div class="dropdown editor-only hidden" id="importMenuWrap">
-              <button type="button" class="btn btn-secondary" id="importMenuBtn"><svg class="icon"><use href="#i-upload"/></svg>Import</button>
+              <button type="button" class="btn btn-secondary btn-collapse" id="importMenuBtn" title="Import"><svg class="icon"><use href="#i-upload"/></svg><span class="btn-label">Import</span></button>
               <div class="dropdown-menu hidden" id="importMenu">
                 <button type="button" class="dropdown-item" id="importMspBtn">From MS Project (.xml)</button>
                 <button type="button" class="dropdown-item" id="importExcelBtn">From Excel (.xlsx)</button>
@@ -158,7 +158,7 @@
             <select id="travelerListProjectStatus" class="status-select hidden" aria-label="Project status"></select>
             <span id="travelerListProjectStatusBadge" class="status-badge hidden"></span>
             <button class="icon-btn" id="shareProjectListBtn" title="Copy link" aria-label="Copy link"><svg class="icon"><use href="#i-link"/></svg></button>
-            <button class="btn btn-secondary editor-only hidden" id="editProjectFromListBtn"><svg class="icon"><use href="#i-edit"/></svg>Edit</button>
+            <button class="btn btn-secondary btn-collapse editor-only hidden" id="editProjectFromListBtn" title="Edit project"><svg class="icon"><use href="#i-edit"/></svg><span class="btn-label">Edit</span></button>
             <div class="dropdown editor-only hidden" id="projectMoreWrap">
               <button type="button" class="icon-btn" id="projectMoreBtn" title="More" aria-label="More actions"><svg class="icon"><use href="#i-dots"/></svg></button>
               <div class="dropdown-menu dropdown-menu-right hidden" id="projectMoreMenu">
@@ -187,7 +187,7 @@
             </div>
             <div class="section-head-actions">
               <div class="dropdown editor-only hidden" id="importTravelerMenuWrap">
-                <button type="button" class="btn btn-secondary" id="importTravelerMenuBtn"><svg class="icon"><use href="#i-upload"/></svg>Import</button>
+                <button type="button" class="btn btn-secondary btn-collapse" id="importTravelerMenuBtn" title="Import"><svg class="icon"><use href="#i-upload"/></svg><span class="btn-label">Import</span></button>
                 <div class="dropdown-menu dropdown-menu-right hidden" id="importTravelerMenu">
                   <button type="button" class="dropdown-item" id="importMspTravelerBtn">From MS Project (.xml)</button>
                   <button type="button" class="dropdown-item" id="importExcelTravelerBtn">From Excel (.xlsx)</button>
@@ -217,9 +217,9 @@
             <select id="detailStatus" class="status-select hidden" aria-label="Traveler status"></select>
             <span id="detailStatusBadge" class="status-badge hidden"></span>
             <button class="icon-btn" id="shareProjectBtn" title="Copy link" aria-label="Copy link"><svg class="icon"><use href="#i-link"/></svg></button>
-            <button class="btn btn-secondary editor-only hidden" id="openGanttViewBtn"><svg class="icon"><use href="#i-timeline"/></svg>Gantt</button>
-            <button class="btn btn-secondary editor-only hidden" id="openManpowerGanttBtn"><svg class="icon"><use href="#i-users"/></svg>Man power</button>
-            <button class="btn btn-secondary editor-only hidden" id="editProjectBtn"><svg class="icon"><use href="#i-edit"/></svg>Edit</button>
+            <button class="btn btn-secondary btn-collapse editor-only hidden" id="openGanttViewBtn" title="Gantt"><svg class="icon"><use href="#i-timeline"/></svg><span class="btn-label">Gantt</span></button>
+            <button class="btn btn-secondary btn-collapse editor-only hidden" id="openManpowerGanttBtn" title="Man power"><svg class="icon"><use href="#i-users"/></svg><span class="btn-label">Man power</span></button>
+            <button class="btn btn-secondary btn-collapse editor-only hidden" id="editProjectBtn" title="Edit traveler"><svg class="icon"><use href="#i-edit"/></svg><span class="btn-label">Edit</span></button>
             <div class="dropdown editor-only hidden" id="travelerMoreWrap">
               <button type="button" class="icon-btn" id="travelerMoreBtn" title="More" aria-label="More actions"><svg class="icon"><use href="#i-dots"/></svg></button>
               <div class="dropdown-menu dropdown-menu-right hidden" id="travelerMoreMenu">
