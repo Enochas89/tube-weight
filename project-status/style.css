@@ -1179,3 +1179,66 @@ footer a:hover { text-decoration: underline; }
     text-align: center;
   }
 }
+
+/* ---------- man hours (budget vs. spent per job) ---------- */
+.hours-counter {
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.hours-counter:hover .hours-counter-label { color: var(--accent); text-decoration: underline; }
+.hours-counter-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.8rem; color: var(--text-dim); }
+.hours-counter-label { font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.7rem; }
+.hours-counter-nums b { color: var(--text); font-variant-numeric: tabular-nums; }
+.hours-counter-foot { font-size: 0.74rem; color: var(--text-dim); }
+.hours-counter-foot.warn { color: var(--status-at_risk); }
+.hours-counter-foot.over { color: var(--status-delayed); font-weight: 600; }
+.hours-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.hours-bar-lg { height: 12px; border-radius: 6px; margin: 4px 0 22px; }
+.hours-bar-fill { height: 100%; background: var(--status-on_track); }
+.hours-bar-fill.warn { background: var(--brand-yellow); }
+.hours-bar-fill.over { background: var(--status-delayed); }
+.hours-spent.warn { color: var(--status-at_risk); }
+.hours-spent.over, .hours-over-text { color: var(--status-delayed); font-weight: 600; }
+
+.hours-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.hours-stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.hours-stat-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); }
+.hours-stat-value { font-size: 1.6rem; font-weight: 700; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+.hours-stat-value.warn { color: var(--status-at_risk); }
+.hours-stat-value.over { color: var(--status-delayed); }
+.hours-stat-sub { font-size: 0.76rem; color: var(--text-dim); overflow-wrap: anywhere; }
+
+.hours-table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 18px; }
+.hours-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.hours-table th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); background: var(--bg); padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.hours-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.hours-table tbody tr:last-child td { border-bottom: none; }
+.hours-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hours-table .dim { color: var(--text-dim); }
+.hours-table-clickable tbody tr { cursor: pointer; }
+.hours-table-clickable tbody tr:hover td { background: var(--accent-dim); }
+.hours-col-bar { min-width: 140px; }
+.hours-bar-cell { display: flex; align-items: center; gap: 8px; }
+.hours-bar-cell .hours-bar { flex: 1; }
+.hours-bar-cell span { font-size: 0.78rem; color: var(--text-dim); font-variant-numeric: tabular-nums; min-width: 38px; text-align: right; }
+.hours-split { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+.hours-section-title { font-size: 0.95rem; margin: 6px 0 8px; }
+.hours-source { font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.hours-source.report { background: var(--accent-dim); color: var(--accent); }
+.hours-source.manual { background: var(--status-at_risk-bg); color: var(--status-at_risk); }
+.hours-note { color: var(--text-dim); font-size: 0.8rem; }
+.hours-footnote { font-size: 0.78rem; color: var(--text-dim); margin: 0 0 10px; }
+.hours-import-report { font-size: 0.85rem; margin: 0 0 10px; }
+.hours-unmatched { font-size: 0.8rem; color: var(--text-dim); }
+.hours-unmatched summary { cursor: pointer; }
+.modal:has(.hours-table) { max-width: 680px; }
+
+@media (max-width: 640px) {
+  .hours-split { grid-template-columns: 1fr; }
+  .hours-stat-value { font-size: 1.3rem; }
+}

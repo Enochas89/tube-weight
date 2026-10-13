@@ -105,6 +105,7 @@
       delete p.notes;
     }
     if (!Array.isArray(p.predecessors)) p.predecessors = [];
+    if (!Array.isArray(p.hoursLog)) p.hoursLog = [];
   }
 
   function addDays(dateStr, n) {
@@ -517,6 +518,15 @@
       showTravelerDetail(p, trav);
       return;
     }
+    const hoursMatch = hash.match(/^hours(?:\/([^/]+))?$/);
+    if (hoursMatch) {
+      const p = hoursMatch[1] ? getProject(hoursMatch[1]) : null;
+      if (hoursMatch[1] && !p) { location.hash = "hours"; return; }
+      currentProjectId = p ? p.id : null;
+      currentTravelerId = null;
+      showManHours(p);
+      return;
+    }
     const projectMatch = hash.match(/^project\/([^/]+)$/);
     if (projectMatch) {
       const p = getProject(projectMatch[1]);
@@ -539,6 +549,7 @@
     document.getElementById("ganttView").classList.add("hidden");
     document.getElementById("projectGanttView").classList.add("hidden");
     document.getElementById("manpowerGanttView").classList.add("hidden");
+    document.getElementById("manhoursView").classList.add("hidden");
   }
   function showList() {
     hideAllViews();
@@ -1147,12 +1158,442 @@
             <span>${taskCount} task${taskCount === 1 ? "" : "s"}</span>
             <span>${progress}%</span>
           </div>
+          ${hoursCounterHtml(p)}
         </div>`;
     }).join("");
     grid.querySelectorAll(".project-card").forEach((card) => {
       card.addEventListener("click", () => { location.hash = "project/" + card.dataset.id; });
     });
+    // The man-hour counter opens that job's hours window instead of the
+    // project itself.
+    grid.querySelectorAll("[data-hours-project]").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        location.hash = "hours/" + el.dataset.hoursProject;
+      });
+    });
   }
+
+  // ---------- man-hours tracking ----------
+  // Each project carries a jobNumber (falls back to the leading number in its
+  // name, e.g. "11352 Georgia Power"), a budgetHours figure (the bid's
+  // projected man-hours) and an hoursLog of spent hours. Log entries are one
+  // per employee per period: { id, from, to, employee, hours (regular), ot,
+  // dt, source: "report" | "manual", note }. "report" entries come from the
+  // vIDix payroll PDFs; re-importing a period replaces what an earlier
+  // import of the same period added, so a report can't be counted twice.
+  function jobNumberOf(p) {
+    if (p.jobNumber) return String(p.jobNumber).trim();
+    const m = String(p.name || "").match(/^\s*(\d{4,6})\b/);
+    return m ? m[1] : "";
+  }
+  function entryTotal(e) { return num(e.hours) + num(e.ot) + num(e.dt); }
+  function projectHours(p) {
+    const s = { reg: 0, ot: 0, dt: 0, total: 0, lastTo: "" };
+    (p.hoursLog || []).forEach((e) => {
+      s.reg += num(e.hours); s.ot += num(e.ot); s.dt += num(e.dt);
+      if ((e.to || e.from || "") > s.lastTo) s.lastTo = e.to || e.from;
+    });
+    s.total = s.reg + s.ot + s.dt;
+    return s;
+  }
+  function fmtHrs(n) {
+    return (Math.round(num(n) * 10) / 10).toLocaleString(undefined, { maximumFractionDigits: 1 });
+  }
+  function fmtPeriod(e) {
+    if (!e.from) return "—";
+    if (!e.to || e.to === e.from) return fmtDate(e.from);
+    return `${fmtDate(e.from)} – ${fmtDate(e.to)}`;
+  }
+  // "ok" under 90% of budget, "warn" from 90% up to budget, "over" past it.
+  function hoursLevel(spent, budget) {
+    if (!budget) return "none";
+    const pct = spent / budget;
+    return pct > 1 ? "over" : pct >= 0.9 ? "warn" : "ok";
+  }
+  function hoursBarHtml(spent, budget, extraClass) {
+    const level = hoursLevel(spent, budget);
+    const width = budget ? Math.min(100, (spent / budget) * 100) : 0;
+    return `<div class="hours-bar ${extraClass || ""}"><div class="hours-bar-fill ${level}" style="width:${width}%"></div></div>`;
+  }
+  function hoursCounterHtml(p) {
+    const s = projectHours(p);
+    const budget = num(p.budgetHours);
+    const level = hoursLevel(s.total, budget);
+    let foot;
+    if (budget) {
+      const left = budget - s.total;
+      foot = left >= 0 ? `${fmtHrs(left)} hrs left` : `${fmtHrs(-left)} hrs over`;
+    } else {
+      foot = "No budget set";
+    }
+    return `
+      <div class="hours-counter" data-hours-project="${p.id}" title="Man-hours spent vs. budgeted — click for detail">
+        <div class="hours-counter-top">
+          <span class="hours-counter-label">Man-hours</span>
+          <span class="hours-counter-nums"><b class="hours-spent ${level}">${fmtHrs(s.total)}</b> spent / <b>${budget ? fmtHrs(budget) : "—"}</b> budget</span>
+        </div>
+        ${hoursBarHtml(s.total, budget)}
+        <div class="hours-counter-foot ${level}">${foot}${budget ? ` · ${Math.round((s.total / budget) * 100)}% used` : ""}</div>
+      </div>`;
+  }
+
+  function showManHours(p) {
+    hideAllViews();
+    document.getElementById("manhoursView").classList.remove("hidden");
+    if (p) renderHoursDetail(p); else renderHoursOverview();
+  }
+
+  function sortedByJob(projects) {
+    return projects.slice().sort((a, b) => {
+      const ja = jobNumberOf(a), jb = jobNumberOf(b);
+      if (!ja !== !jb) return ja ? -1 : 1;
+      return ja.localeCompare(jb, undefined, { numeric: true }) || a.name.localeCompare(b.name);
+    });
+  }
+
+  function renderHoursActions(p) {
+    const actions = document.getElementById("manhoursActions");
+    const btns = [];
+    if (p) btns.push(`<button class="btn-secondary" type="button" id="hoursOpenProjectBtn">Open Project</button>`);
+    if (canManage()) {
+      btns.push(`<button class="btn-secondary" type="button" id="hoursImportBtn">Import Hours Report</button>`);
+      if (p) {
+        btns.push(`<button class="btn-secondary" type="button" id="hoursBudgetBtn">Edit Budget</button>`);
+        btns.push(`<button class="btn-primary" type="button" id="hoursAddBtn">+ Add Hours</button>`);
+      }
+    }
+    actions.innerHTML = btns.join("");
+    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
+    on("hoursOpenProjectBtn", () => { location.hash = "project/" + p.id; });
+    on("hoursImportBtn", () => document.getElementById("importHoursInput").click());
+    on("hoursBudgetBtn", () => openHoursBudgetModal(p));
+    on("hoursAddBtn", () => openHoursEntryModal(p));
+  }
+
+  function renderHoursOverview() {
+    document.getElementById("manhoursTitle").textContent = "Man Hours";
+    document.getElementById("manhoursSubtitle").textContent = "Budgeted (bid) man-hours vs. hours charged to each job";
+    const back = document.getElementById("backFromManhoursBtn");
+    back.innerHTML = "&larr; All Projects";
+    back.onclick = () => { location.hash = ""; };
+    renderHoursActions(null);
+
+    const rows = sortedByJob(state.projects).map((p) => ({ p, s: projectHours(p), budget: num(p.budgetHours), job: jobNumberOf(p) }));
+    const totBudget = rows.reduce((a, r) => a + r.budget, 0);
+    const totSpent = rows.reduce((a, r) => a + r.s.total, 0);
+    const spentOnBudgeted = rows.filter((r) => r.budget).reduce((a, r) => a + r.s.total, 0);
+    const overCount = rows.filter((r) => r.budget && r.s.total > r.budget).length;
+    const body = document.getElementById("manhoursBody");
+    if (!rows.length) {
+      body.innerHTML = `<div class="empty-state">No projects yet.</div>`;
+      return;
+    }
+    body.innerHTML = `
+      <div class="hours-stats">
+        ${hoursStatHtml("Budgeted", fmtHrs(totBudget), "hrs across jobs with a budget")}
+        ${hoursStatHtml("Spent", fmtHrs(totSpent), "hrs logged on all jobs")}
+        ${totBudget - spentOnBudgeted < 0
+          ? hoursStatHtml("Over by", fmtHrs(spentOnBudgeted - totBudget), "hrs past budget, budgeted jobs combined", "over")
+          : hoursStatHtml("Remaining", fmtHrs(totBudget - spentOnBudgeted), "hrs left on budgeted jobs")}
+        ${hoursStatHtml("Over budget", String(overCount), overCount === 1 ? "job" : "jobs", overCount ? "over" : "")}
+      </div>
+      <div class="hours-table-wrap">
+        <table class="hours-table hours-table-clickable">
+          <thead><tr>
+            <th>Job</th><th>Project</th><th class="num">Budget</th><th class="num">Spent</th><th class="num">OT</th>
+            <th class="num">Remaining</th><th class="hours-col-bar">Used</th><th>Last period</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(({ p, s, budget, job }) => {
+              const level = hoursLevel(s.total, budget);
+              const remaining = budget ? budget - s.total : null;
+              return `<tr data-hours-row="${p.id}">
+                <td>${job ? escapeHtml(job) : '<span class="dim">—</span>'}</td>
+                <td>${escapeHtml(p.name)}</td>
+                <td class="num">${budget ? fmtHrs(budget) : '<span class="dim">—</span>'}</td>
+                <td class="num"><span class="hours-spent ${level}">${fmtHrs(s.total)}</span></td>
+                <td class="num">${fmtHrs(s.ot + s.dt)}</td>
+                <td class="num ${remaining !== null && remaining < 0 ? "hours-over-text" : ""}">${remaining === null ? '<span class="dim">—</span>' : fmtHrs(remaining)}</td>
+                <td class="hours-col-bar">${budget ? `<div class="hours-bar-cell">${hoursBarHtml(s.total, budget)}<span>${Math.round((s.total / budget) * 100)}%</span></div>` : '<span class="dim">No budget</span>'}</td>
+                <td>${s.lastTo ? fmtDate(s.lastTo) : '<span class="dim">—</span>'}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+      <p class="hours-footnote">Job numbers come from the start of each project name unless set under Edit Budget. ${canManage() ? "Import the weekly vIDix <em>Hours Report</em> or an <em>Hours Consolidated Report</em> PDF to log hours; importing the same period again replaces it rather than adding it twice." : ""}</p>`;
+    body.querySelectorAll("[data-hours-row]").forEach((tr) => {
+      tr.addEventListener("click", () => { location.hash = "hours/" + tr.dataset.hoursRow; });
+    });
+  }
+
+  function hoursStatHtml(label, value, sub, level) {
+    return `<div class="hours-stat"><div class="hours-stat-label">${label}</div><div class="hours-stat-value ${level || ""}">${value}</div><div class="hours-stat-sub">${sub}</div></div>`;
+  }
+
+  function renderHoursDetail(p) {
+    const job = jobNumberOf(p);
+    document.getElementById("manhoursTitle").textContent = (job && !p.name.startsWith(job) ? job + " · " : "") + p.name;
+    document.getElementById("manhoursSubtitle").textContent = "Man hours" + (p.client ? " · " + p.client : "") + (job ? "" : " · no job number set");
+    const back = document.getElementById("backFromManhoursBtn");
+    back.innerHTML = "&larr; All Jobs";
+    back.onclick = () => { location.hash = "hours"; };
+    renderHoursActions(p);
+
+    const s = projectHours(p);
+    const budget = num(p.budgetHours);
+    const level = hoursLevel(s.total, budget);
+    const remaining = budget - s.total;
+    const log = (p.hoursLog || []).slice().sort((a, b) => (b.to || b.from || "").localeCompare(a.to || a.from || "") || a.employee.localeCompare(b.employee));
+
+    const byEmp = new Map();
+    log.forEach((e) => {
+      const k = e.employee || "(unnamed)";
+      if (!byEmp.has(k)) byEmp.set(k, { reg: 0, ot: 0 });
+      const a = byEmp.get(k); a.reg += num(e.hours); a.ot += num(e.ot) + num(e.dt);
+    });
+    const empRows = Array.from(byEmp.entries()).sort((a, b) => (b[1].reg + b[1].ot) - (a[1].reg + a[1].ot));
+    const byPeriod = new Map();
+    log.forEach((e) => {
+      const k = (e.from || "") + "|" + (e.to || "");
+      if (!byPeriod.has(k)) byPeriod.set(k, { from: e.from, to: e.to, total: 0, people: new Set() });
+      const a = byPeriod.get(k); a.total += entryTotal(e); a.people.add(e.employee);
+    });
+    const periodRows = Array.from(byPeriod.values()).sort((a, b) => (b.to || b.from || "").localeCompare(a.to || a.from || ""));
+
+    const body = document.getElementById("manhoursBody");
+    body.innerHTML = `
+      <div class="hours-stats">
+        ${hoursStatHtml("Budget", budget ? fmtHrs(budget) : "—", p.budgetNote ? escapeHtml(p.budgetNote) : (budget ? "hrs projected in the bid" : (canManage() ? "Set it with Edit Budget" : "No budget set")))}
+        ${hoursStatHtml("Spent", fmtHrs(s.total), `${fmtHrs(s.reg)} regular · ${fmtHrs(s.ot + s.dt)} OT`, level === "over" ? "over" : "")}
+        ${hoursStatHtml(budget && remaining < 0 ? "Over by" : "Remaining", budget ? fmtHrs(Math.abs(remaining)) : "—", "hrs", budget && remaining < 0 ? "over" : "")}
+        ${hoursStatHtml("Used", budget ? Math.round((s.total / budget) * 100) + "%" : "—", s.lastTo ? "through " + fmtDate(s.lastTo) : "no hours logged yet", level === "over" ? "over" : level === "warn" ? "warn" : "")}
+      </div>
+      ${budget ? hoursBarHtml(s.total, budget, "hours-bar-lg") : ""}
+      ${log.length ? `
+      <div class="hours-split">
+        <div>
+          <h3 class="hours-section-title">By employee</h3>
+          <div class="hours-table-wrap"><table class="hours-table">
+            <thead><tr><th>Employee</th><th class="num">Regular</th><th class="num">OT</th><th class="num">Total</th><th class="num">Share</th></tr></thead>
+            <tbody>${empRows.map(([name, a]) => `<tr><td>${escapeHtml(name)}</td><td class="num">${fmtHrs(a.reg)}</td><td class="num">${fmtHrs(a.ot)}</td><td class="num"><b>${fmtHrs(a.reg + a.ot)}</b></td><td class="num">${s.total ? Math.round(((a.reg + a.ot) / s.total) * 100) + "%" : "—"}</td></tr>`).join("")}</tbody>
+          </table></div>
+        </div>
+        <div>
+          <h3 class="hours-section-title">By period</h3>
+          <div class="hours-table-wrap"><table class="hours-table">
+            <thead><tr><th>Period</th><th class="num">People</th><th class="num">Hours</th></tr></thead>
+            <tbody>${periodRows.map((r) => `<tr><td>${fmtPeriod(r)}</td><td class="num">${r.people.size}</td><td class="num"><b>${fmtHrs(r.total)}</b></td></tr>`).join("")}</tbody>
+          </table></div>
+        </div>
+      </div>
+      <h3 class="hours-section-title">Entries</h3>
+      <div class="hours-table-wrap"><table class="hours-table">
+        <thead><tr><th>Period</th><th>Employee</th><th class="num">Regular</th><th class="num">OT</th><th class="num">Total</th><th>Source</th><th>Note</th>${canManage() ? "<th></th>" : ""}</tr></thead>
+        <tbody>${log.map((e) => `<tr>
+          <td>${fmtPeriod(e)}</td><td>${escapeHtml(e.employee || "")}</td>
+          <td class="num">${fmtHrs(e.hours)}</td><td class="num">${fmtHrs(num(e.ot) + num(e.dt))}</td><td class="num"><b>${fmtHrs(entryTotal(e))}</b></td>
+          <td><span class="hours-source ${e.source === "report" ? "report" : "manual"}">${e.source === "report" ? "Payroll report" : "Manual"}</span></td>
+          <td class="hours-note">${escapeHtml(e.note || "")}</td>
+          ${canManage() ? `<td><button class="btn-icon" type="button" data-delete-hours="${e.id}" title="Delete entry">&times;</button></td>` : ""}
+        </tr>`).join("")}</tbody>
+      </table></div>` : `<div class="empty-state">No hours logged for this job yet.${canManage() ? " Import a vIDix Hours Report PDF or click “+ Add Hours”." : ""}</div>`}`;
+    body.querySelectorAll("[data-delete-hours]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const entry = p.hoursLog.find((e) => e.id === btn.dataset.deleteHours);
+        if (!entry || !confirm(`Delete ${fmtHrs(entryTotal(entry))} hrs for ${entry.employee || "this entry"} (${fmtPeriod(entry)})?`)) return;
+        const prev = p.hoursLog.slice();
+        p.hoursLog = p.hoursLog.filter((e) => e.id !== entry.id);
+        const ok = await saveRemote();
+        if (!ok) p.hoursLog = prev;
+        renderHoursDetail(p);
+      });
+    });
+  }
+
+  function openHoursBudgetModal(p) {
+    const body = `
+      <div class="modal-row">
+        <div class="modal-field"><label>Job number</label><input type="text" id="f-job" value="${escapeHtml(jobNumberOf(p))}" placeholder="e.g. 11352"></div>
+        <div class="modal-field"><label>Budgeted man-hours</label><input type="number" id="f-budget" min="0" step="0.5" value="${p.budgetHours ?? ""}"></div>
+      </div>
+      <div class="modal-field"><label>Budget source / note <span class="modal-label-hint">(optional — e.g. which bid revision)</span></label><input type="text" id="f-budget-note" value="${escapeHtml(p.budgetNote || "")}"></div>
+      <p class="modal-label-hint">Payroll imports match hours to this project by job number.</p>
+    `;
+    openModal("Man-Hour Budget", body, async () => {
+      const job = document.getElementById("f-job").value.trim();
+      const raw = document.getElementById("f-budget").value.trim();
+      const budget = raw === "" ? null : num(raw);
+      if (raw !== "" && budget < 0) { alert("Budget can't be negative."); return false; }
+      if (job) {
+        const clash = state.projects.find((o) => o.id !== p.id && jobNumberOf(o) === job);
+        if (clash && !confirm(`"${clash.name}" already uses job number ${job}. Imported hours would go to both. Continue?`)) return false;
+      }
+      const prev = { jobNumber: p.jobNumber, budgetHours: p.budgetHours, budgetNote: p.budgetNote };
+      p.jobNumber = job;
+      p.budgetHours = budget;
+      p.budgetNote = document.getElementById("f-budget-note").value.trim();
+      const ok = await saveRemote();
+      if (!ok) { Object.assign(p, prev); return false; }
+      renderHoursDetail(p);
+    });
+  }
+
+  function openHoursEntryModal(p) {
+    const body = `
+      <div class="modal-field"><label>Employee</label><input type="text" id="f-hrs-emp" list="teamNameOptions" placeholder="Name"></div>
+      <div class="modal-row">
+        <div class="modal-field"><label>From</label><input type="date" id="f-hrs-from" value="${todayStr()}"></div>
+        <div class="modal-field"><label>To <span class="modal-label-hint">(optional)</span></label><input type="date" id="f-hrs-to"></div>
+      </div>
+      <div class="modal-row">
+        <div class="modal-field"><label>Regular hours</label><input type="number" id="f-hrs-reg" min="0" step="0.25"></div>
+        <div class="modal-field"><label>Overtime hours</label><input type="number" id="f-hrs-ot" min="0" step="0.25"></div>
+      </div>
+      <div class="modal-field"><label>Note <span class="modal-label-hint">(optional)</span></label><input type="text" id="f-hrs-note"></div>
+      <p class="modal-label-hint">Manual entries are kept separate from payroll imports — don't also enter hours a payroll report will cover.</p>
+    `;
+    openModal("Add Hours", body, async () => {
+      const employee = document.getElementById("f-hrs-emp").value.trim();
+      const from = document.getElementById("f-hrs-from").value;
+      const to = document.getElementById("f-hrs-to").value || from;
+      const hours = num(document.getElementById("f-hrs-reg").value);
+      const ot = num(document.getElementById("f-hrs-ot").value);
+      if (!employee) { alert("Employee is required."); return false; }
+      if (!from) { alert("Date is required."); return false; }
+      if (to < from) { alert("The To date is before the From date."); return false; }
+      if (hours <= 0 && ot <= 0) { alert("Enter some hours."); return false; }
+      if (hours < 0 || ot < 0) { alert("Hours can't be negative."); return false; }
+      const entry = { id: uid(), from, to, employee, hours, ot, dt: 0, source: "manual", note: document.getElementById("f-hrs-note").value.trim() };
+      p.hoursLog.push(entry);
+      const ok = await saveRemote();
+      if (!ok) { p.hoursLog = p.hoursLog.filter((e) => e !== entry); return false; }
+      renderHoursDetail(p);
+    });
+  }
+
+  // ---- payroll PDF import ----
+  let pdfjsPromise = null;
+  function loadPdfJs() {
+    if (!pdfjsPromise) {
+      pdfjsPromise = import(new URL("vendor/pdfjs/pdf.min.mjs", location.href).href).then((pdfjs) => {
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL("vendor/pdfjs/pdf.worker.min.mjs", location.href).href;
+        return pdfjs;
+      }).catch((e) => { pdfjsPromise = null; throw e; });
+    }
+    return pdfjsPromise;
+  }
+  async function readHoursPdf(file) {
+    const pdfjs = await loadPdfJs();
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++) pages.push(await (await doc.getPage(i)).getTextContent());
+    await doc.destroy();
+    return window.HoursParser.parseHoursReport(window.HoursParser.linesFromPdfTextContent(pages));
+  }
+
+  // Works out, without changing anything, what importing these parsed
+  // reports would do to each project's hoursLog. Reports are applied
+  // earliest-start first (widest first on a tie) so a year-to-date report and
+  // a week inside it, picked together, resolve the same way as importing the
+  // year-to-date one first: the week is then skipped as already covered.
+  function planHoursImport(reports) {
+    const logs = new Map(state.projects.map((p) => [p.id, (p.hoursLog || []).slice()]));
+    const byJob = new Map();
+    state.projects.forEach((p) => {
+      const j = jobNumberOf(p);
+      if (!j) return;
+      if (!byJob.has(j)) byJob.set(j, []);
+      byJob.get(j).push(p);
+    });
+    const ordered = reports.slice().sort((a, b) => (a.from || "").localeCompare(b.from || "") || (b.to || "").localeCompare(a.to || ""));
+    const items = [];
+    const unmatched = new Map();
+    ordered.forEach((rep) => {
+      const jobs = new Map();
+      rep.rows.forEach((r) => {
+        if (!jobs.has(r.job)) jobs.set(r.job, []);
+        jobs.get(r.job).push(r);
+      });
+      jobs.forEach((rows, job) => {
+        const hrs = rows.reduce((a, r) => a + r.hours + r.ot + r.dt, 0);
+        const projects = byJob.get(job);
+        if (!projects) { unmatched.set(job, (unmatched.get(job) || 0) + hrs); return; }
+        projects.forEach((p) => {
+          const log = logs.get(p.id);
+          const fromReports = log.filter((e) => e.source === "report");
+          const covering = fromReports.find((e) => e.from <= rep.from && e.to >= rep.to && !(e.from === rep.from && e.to === rep.to));
+          const partial = fromReports.find((e) => e.from <= rep.to && e.to >= rep.from && !(e.from >= rep.from && e.to <= rep.to) && !(e.from <= rep.from && e.to >= rep.to));
+          if (covering || partial) {
+            const e = covering || partial;
+            items.push({ p, rep, hrs, replaced: 0, skip: `${covering ? "already covered by" : "overlaps"} imported period ${fmtPeriod(e)}` });
+            return;
+          }
+          const replaced = log.filter((e) => e.source === "report" && e.from >= rep.from && e.to <= rep.to);
+          const kept = log.filter((e) => !replaced.includes(e));
+          rows.forEach((r) => kept.push({
+            id: uid(), from: rep.from, to: rep.to, employee: r.employee,
+            hours: r.hours, ot: r.ot, dt: r.dt, source: "report",
+            note: rep.kind === "consolidated" ? "Hours Consolidated Report" : "Hours Report",
+          }));
+          logs.set(p.id, kept);
+          items.push({ p, rep, hrs, replaced: replaced.reduce((a, e) => a + entryTotal(e), 0), replacedCount: replaced.length, skip: null });
+        });
+      });
+    });
+    return { logs, items, unmatched };
+  }
+
+  async function importHoursFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    showStatus("Reading payroll report…", "info", true);
+    const reports = [];
+    const problems = [];
+    for (const f of files) {
+      try {
+        const rep = await readHoursPdf(f);
+        if (!rep.kind || !rep.from || !rep.to) { problems.push(`${f.name}: ${rep.warnings.join(" ") || "not a recognised report"}`); continue; }
+        rep.fileName = f.name;
+        reports.push(rep);
+      } catch (e) {
+        problems.push(`${f.name}: could not read PDF (${e.message || e})`);
+      }
+    }
+    hideStatus();
+    if (!reports.length) { alert("Nothing imported.\n\n" + problems.join("\n")); return; }
+    const plan = planHoursImport(reports);
+    const toApply = plan.items.filter((i) => !i.skip);
+    const unmatchedJobs = Array.from(plan.unmatched.entries()).sort((a, b) => b[1] - a[1]);
+    const body = `
+      ${reports.map((r) => `<p class="hours-import-report"><b>${escapeHtml(r.fileName)}</b><br>${r.kind === "consolidated" ? "Hours Consolidated Report" : "Hours Report"} · ${fmtDate(r.from)} – ${fmtDate(r.to)} · ${fmtHrs(r.rows.reduce((a, x) => a + x.hours + x.ot + x.dt, 0))} hrs on ${new Set(r.rows.map((x) => x.job)).size} job codes</p>`).join("")}
+      ${problems.concat(reports.flatMap((r) => r.warnings.map((w) => r.fileName + ": " + w))).map((w) => `<p class="modal-error">${escapeHtml(w)}</p>`).join("")}
+      ${plan.items.length ? `
+      <div class="hours-table-wrap"><table class="hours-table">
+        <thead><tr><th>Job</th><th>Project</th><th class="num">Hours</th><th>Result</th></tr></thead>
+        <tbody>${plan.items.map((i) => `<tr>
+          <td>${escapeHtml(jobNumberOf(i.p))}</td><td>${escapeHtml(i.p.name)}</td><td class="num">${fmtHrs(i.hrs)}</td>
+          <td>${i.skip ? `<span class="hours-over-text">Skipped — ${escapeHtml(i.skip)}</span>` : i.replacedCount ? `Add — replaces ${fmtHrs(i.replaced)} hrs imported earlier for dates in this period` : "Add"}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>` : `<p>None of the jobs in this report match a project here. Set job numbers under Man Hours → Edit Budget.</p>`}
+      ${unmatchedJobs.length ? `<details class="hours-unmatched"><summary>${unmatchedJobs.length} job code${unmatchedJobs.length === 1 ? "" : "s"} in the report with no matching project (not imported)</summary><p>${unmatchedJobs.map(([j, h]) => `${escapeHtml(j)}: ${fmtHrs(h)}`).join(" · ")}</p></details>` : ""}
+    `;
+    openModal(`Import Hours — ${toApply.length} job${toApply.length === 1 ? "" : "s"}`, body, async () => {
+      if (!toApply.length) return;
+      const prev = new Map(state.projects.map((p) => [p.id, p.hoursLog]));
+      state.projects.forEach((p) => { if (plan.logs.has(p.id)) p.hoursLog = plan.logs.get(p.id); });
+      const ok = await saveRemote();
+      if (!ok) { state.projects.forEach((p) => { if (prev.has(p.id)) p.hoursLog = prev.get(p.id); }); return false; }
+      route();
+    });
+  }
+  document.getElementById("importHoursInput").addEventListener("change", (e) => {
+    importHoursFiles(e.target.files);
+    e.target.value = "";
+  });
+  document.getElementById("openManHoursBtn").addEventListener("click", () => { location.hash = "hours"; });
+  document.getElementById("openProjectHoursBtn").addEventListener("click", () => { location.hash = "hours/" + currentProjectId; });
 
   // Wires an "Import ▾" toggle/menu pair: click to open, click an item or
   // click outside to close. Item buttons keep their own existing listeners.

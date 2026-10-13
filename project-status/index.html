@@ -40,6 +40,7 @@
       <h2>Projects</h2>
       <div class="header-row-actions">
         <button class="btn-icon btn-share" id="shareListBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
+        <button class="btn-secondary" id="openManHoursBtn">Man Hours</button>
         <button class="btn-secondary editor-only hidden" id="openProjectGanttBtn">Project Overview</button>
         <button class="btn-secondary editor-only hidden" id="openMasterManpowerBtn">Man Power Overview</button>
         <div class="dropdown editor-only hidden" id="importMenuWrap">
@@ -70,6 +71,7 @@
           <select id="travelerListProjectStatus" class="status-select hidden"></select>
           <span id="travelerListProjectStatusBadge" class="status-badge hidden"></span>
           <button class="btn-icon btn-share" id="shareProjectListBtn" title="Share Link" aria-label="Share Link">&#128279;</button>
+          <button class="btn-secondary" id="openProjectHoursBtn">Man Hours</button>
           <button class="btn-secondary editor-only hidden" id="editProjectFromListBtn">Edit Project</button>
           <span class="action-divider editor-only hidden"></span>
           <button class="btn-danger editor-only hidden" id="deleteProjectFromListBtn">Delete</button>
@@ -254,6 +256,22 @@
     </div>
   </section>
 
+  <!-- ===================== MAN HOURS (budget vs. spent per job) ===================== -->
+  <section id="manhoursView" class="view hidden">
+    <div class="detail-header">
+      <button class="btn-link" id="backFromManhoursBtn">&larr; All Projects</button>
+      <div class="detail-title-row">
+        <div>
+          <h2 id="manhoursTitle">Man Hours</h2>
+          <p id="manhoursSubtitle" class="detail-client"></p>
+        </div>
+        <div class="detail-actions" id="manhoursActions"></div>
+      </div>
+    </div>
+    <div id="manhoursBody"></div>
+    <input type="file" id="importHoursInput" accept=".pdf,application/pdf" multiple class="hidden">
+  </section>
+
   <!-- ===================== MAN POWER GANTT (read-only, one row per person) ===================== -->
   <section id="manpowerGanttView" class="view hidden">
     <div class="detail-header">
@@ -314,6 +332,7 @@
 
 <script src="vendor/xlsx.core.min.js"></script>
 <script src="excel-parser.js"></script>
+<script src="hours-parser.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
